@@ -20,24 +20,6 @@ export const moduleConfigurations = [
     interfaces: {
       inputs: [
         {
-          id: 'freq_mod',
-          label: '频率调制',
-          dataType: 'CONTROL',
-          controlTarget: 'frequency',
-          multiConnection: false,
-          optional: true,
-          description: '频率调制输入，接受-1到1的控制信号',
-        },
-        {
-          id: 'amp_mod',
-          label: '振幅调制',
-          dataType: 'CONTROL',
-          controlTarget: 'amplitude',
-          multiConnection: false,
-          optional: true,
-          description: '振幅调制输入',
-        },
-        {
           id: 'sync',
           label: '同步',
           dataType: 'TRIGGER',
@@ -161,24 +143,6 @@ export const moduleConfigurations = [
           multiConnection: false,
           optional: false,
           description: '滤波器的音频输入',
-        },
-        {
-          id: 'cutoff_mod',
-          label: '截止频率调制',
-          dataType: 'CONTROL',
-          controlTarget: 'frequency',
-          multiConnection: false,
-          optional: true,
-          description: '截止频率调制输入',
-        },
-        {
-          id: 'q_mod',
-          label: 'Q值调制',
-          dataType: 'CONTROL',
-          controlTarget: 'Q',
-          multiConnection: false,
-          optional: true,
-          description: 'Q值调制输入',
         },
       ],
       outputs: [
