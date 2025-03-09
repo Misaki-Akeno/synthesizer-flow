@@ -1,5 +1,6 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
+import { Slider } from '@mui/material';
 
 const DefaultNode = ({ data }) => {
   const {
@@ -10,7 +11,7 @@ const DefaultNode = ({ data }) => {
     inputs = [],
     outputs = [],
     parameters = {},
-    moduleConfig, // 添加对完整模块配置的引用
+    moduleConfig,
   } = data;
 
   // 从moduleConfig中提取可调制参数信息
@@ -22,6 +23,20 @@ const DefaultNode = ({ data }) => {
 
   // 将输入分为常规输入和调制输入
   const regularInputs = inputs.filter((input) => !input.isModulationInput);
+
+  // 处理滑块值变化
+  const handleSliderChange = (key, newValue) => {
+    if (data.onParameterChange) {
+      data.onParameterChange(key, newValue);
+    }
+  };
+
+  // 处理调制范围滑块值变化
+  const handleModRangeChange = (key, newRange) => {
+    if (data.onModRangeChange) {
+      data.onModRangeChange(key, newRange);
+    }
+  };
 
   return (
     <div
@@ -102,7 +117,7 @@ const DefaultNode = ({ data }) => {
               // 生成唯一的调制输入ID
               const modInputId = `mod_${moduleId}_${key}`;
               return (
-                <div key={key} className="parameter-control mb-4 relative">
+                <div key={key} className="parameter-control relative">
                   {/* 参数标签和当前值 */}
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center">
@@ -181,130 +196,92 @@ const DefaultNode = ({ data }) => {
                         <span className="text-xs">{param.label}</span>
                       </label>
                     ) : (
-                      // 数值类型参数 - 默认单滑块或调制状态下的双滑块
-                      <div className="w-full relative">
-                        {/* 基础滑块轨道 */}
-                        <div className="w-full h-1.5 bg-gray-300 rounded-full"></div>
-
-                        {/* 当未被调制时，显示普通滑块 */}
+                      // 数值类型参数 - 使用 MUI Slider
+                      <div className="w-full relative pt-0 pb-0">
                         {!param.isModulated ? (
-                          <input
-                            type="range"
+                          // 单滑块模式
+                          <Slider
+                            size="small"
                             min={param.min || 0}
                             max={param.max || 100}
                             step={param.step || 1}
                             value={param.value || 0}
-                            onChange={(e) => {
-                              const newValue = parseFloat(e.target.value);
-                              if (data.onParameterChange) {
-                                data.onParameterChange(key, newValue);
-                              }
+                            onChange={(_, newValue) => {
+                              handleSliderChange(key, newValue);
                             }}
-                            className="absolute top-0 w-full h-1.5 opacity-0 cursor-pointer"
-                            style={{ zIndex: 2 }}
+                            aria-label={param.label || key}
+                            sx={{
+                              color: '#3498db',
+                              height: 4,
+                              '& .MuiSlider-thumb': {
+                                width: 12,
+                                height: 12,
+                              },
+                            }}
                           />
                         ) : (
+                          // 双滑块模式 - 调制范围控制
                           <>
-
-                            {/* 调制范围显示 */}
-                            <div
-                              className="absolute top-0 h-2 bg-blue-200 rounded-full pointer-events-none"
-                              style={{
-                                left: `${(((param.modRange ? param.modRange[0] : param.min) - param.min) / (param.max - param.min)) * 100}%`,
-                                width: `${(((param.modRange ? param.modRange[1] : param.max) - (param.modRange ? param.modRange[0] : param.min)) / (param.max - param.min)) * 100}%`,
-                              }}
-                            ></div>
-
-                            {/* 上限滑块 */}
-                            <input
-                              type="range"
+                            {/* 调制范围滑块 */}
+                            <Slider
+                              size="small"
                               min={param.min || 0}
                               max={param.max || 100}
                               step={param.step || 1}
-                              value={
-                                param.modRange ? param.modRange[1] : param.max
-                              }
-                              onChange={(e) => {
-                                const newMax = parseFloat(e.target.value);
-                                const newMin = param.modRange
-                                  ? param.modRange[0]
-                                  : param.min;
-                                if (data.onModRangeChange) {
-                                  data.onModRangeChange(key, [
-                                    Math.min(newMin, newMax),
-                                    newMax,
-                                  ]);
-                                }
+                              value={[
+                                param.modRange ? param.modRange[0] : param.min,
+                                param.modRange ? param.modRange[1] : param.max,
+                              ]}
+                              onChange={(_, newValue) => {
+                                handleModRangeChange(key, newValue);
                               }}
-                              className="absolute top-0 w-full h-1.5 opacity-0 cursor-pointer mod-range-slider"
-                              style={{ zIndex: 3 }}
+                              disableSwap
+                              valueLabelDisplay="auto"
+                              valueLabelFormat={(value) => value.toFixed(1)}
+                              getAriaLabel={() =>
+                                `${param.label || key} modulation range`
+                              }
+                              sx={{
+                                color: '#3498db',
+                                height: 4,
+                                '& .MuiSlider-thumb': {
+                                  width: 12,
+                                  height: 12,
+                                },
+                                '& .MuiSlider-rail': {
+                                  opacity: 0.5,
+                                },
+                                '& .MuiSlider-track': {
+                                  border: 'none',
+                                  backgroundColor: '#90caf9',
+                                  opacity: 0.7,
+                                },
+                                // 添加浮动提示样式
+                                '& .MuiSlider-valueLabel': {
+                                  fontSize: '0.65rem',
+                                  padding: '2px 4px',
+                                  backgroundColor: '#3498db',
+                                },
+                              }}
                             />
 
-                            {/* 下限滑块 */}
-                            <input
-                              type="range"
-                              min={param.min || 0}
-                              max={param.max || 100}
-                              step={param.step || 1}
-                              value={
-                                param.modRange ? param.modRange[0] : param.min
-                              }
-                              onChange={(e) => {
-                                const newMin = parseFloat(e.target.value);
-                                const newMax = param.modRange
-                                  ? param.modRange[1]
-                                  : param.max;
-                                if (data.onModRangeChange) {
-                                  data.onModRangeChange(key, [
-                                    newMin,
-                                    Math.max(newMin, newMax),
-                                  ]);
-                                }
-                              }}
-                              className="absolute top-0 w-full h-1.5 opacity-0 cursor-pointer mod-range-slider"
-                              style={{ zIndex: 3 }}
-                            />
+                            {/* 调制后的当前值指示器（动态） */}
+                            {param.isModulated && param.displayValue && (
+                              <div
+                                className="absolute w-3 h-3 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none mod-display-handle"
+                                style={{
+                                  left: `${((parseFloat(param.displayValue) - param.min) / (param.max - param.min)) * 100}%`,
+                                  top: '50%',
+                                  zIndex: 2,
+                                }}
+                                title={`当前值: ${parseFloat(param.displayValue).toFixed(1)}`}
+                              ></div>
+                            )}
                           </>
-                        )}
-
-                        {/* 滑块手柄 - 当前值位置 */}
-                        <div
-                          className="absolute top-0 w-3 h-3 bg-blue-500 rounded-full transform -translate-x-1/2 -translate-y-1/4 pointer-events-none"
-                          style={{
-                            left: `${((param.value - param.min) / (param.max - param.min)) * 100}%`,
-                          }}
-                        ></div>
-
-                        {/* 被调制时的当前值指示器 */}
-                        {param.isModulated && param.displayValue && (
-                          <div
-                            className="absolute top-0 w-2 h-2 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none mod-display-handle"
-                            style={{
-                              left: `${((parseFloat(param.displayValue) - param.min) / (param.max - param.min)) * 100}%`,
-                            }}
-                          ></div>
                         )}
                       </div>
                     )}
                   </div>
-
-                  {/* 调制范围显示文本 - 仅在被调制的数值参数上显示 */}
-                  {param.isModulated &&
-                    param.type !== 'ENUM' &&
-                    param.type !== 'BOOLEAN' && (
-                      <div className="flex justify-between mt-1 text-xs text-blue-500">
-                        <span>
-                          {param.modRange
-                            ? param.modRange[0].toFixed(1)
-                            : param.min}
-                        </span>
-                        <span>
-                          {param.modRange
-                            ? param.modRange[1].toFixed(1)
-                            : param.max}
-                        </span>
-                      </div>
-                    )}
                 </div>
               );
             })}

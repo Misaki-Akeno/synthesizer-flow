@@ -14,7 +14,8 @@ import {
 import ContextMenu from './flow-context-menu';
 import { createNode } from '../../services/node-factory';
 import { Category } from '../../constants/moduleTypes';
-import modulationService from '../../services/modulationService';
+
+import useModulationStore from '@/store/modulationStore';
 
 import DefaultNode from '@/components/nodes/DefaultNode';
 
@@ -30,34 +31,39 @@ const ReactFlowContent = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [menu, setMenu] = useState(null);
-  const [modulationConnections, setModulationConnections] = useState({});
+
   const reactFlowWrapper = useRef(null);
   const reactFlowInstance = useReactFlow();
 
-  // 初始化调制服务
-  useEffect(() => {
-    modulationService.initialize();
+  // 从 Zustand Store 获取调制相关函数
+  const {
+    initialize,
+    cleanup,
+    addConnection,
+    removeConnection,
+    updateConnectionRange,
+    applyModulationToNodes,
+  } = useModulationStore();
 
-    return () => {
-      modulationService.cleanup();
-    };
-  }, []);
+  // 初始化调制系统
+  useEffect(() => {
+    initialize();
+    return () => cleanup();
+  }, [initialize, cleanup]);
 
   // 创建一个效果来定期应用调制
   useEffect(() => {
-    // 创建一个定时器，定期更新节点以显示调制效果
     const modulationUpdateInterval = setInterval(() => {
-      // 应用调制到节点
-      const updatedNodes = modulationService.applyModulationToNodes(nodes);
+      const updatedNodes = applyModulationToNodes(nodes);
       setNodes(updatedNodes);
     }, 100); // 每100ms更新一次
 
     return () => {
       clearInterval(modulationUpdateInterval);
     };
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, applyModulationToNodes]);
 
-  // 修改的连接处理函数，确保正确设置 isModulated
+  // 修改的连接处理函数，使用 Zustand Store
   const onConnect = useCallback(
     (params) => {
       const { source, sourceHandle, target, targetHandle } = params;
@@ -68,8 +74,8 @@ const ReactFlowContent = () => {
         // 创建调制连接ID
         const connectionId = `${source}:${sourceHandle}->${target}:${targetHandle}`;
 
-        // 将调制连接添加到调制服务
-        modulationService.addModulationConnection(connectionId, {
+        // 将调制连接添加到 Store
+        addConnection(connectionId, {
           source,
           sourceHandle,
           target,
@@ -120,11 +126,10 @@ const ReactFlowContent = () => {
       // 添加连接线
       setEdges((eds) => addEdge(params, eds));
     },
-    [nodes, setNodes, setEdges]
+    [nodes, setNodes, setEdges, addConnection]
   );
 
-  // 修改的边缘删除处理，使用调制服务
-  // 处理边缘删除，确保清除调制状态
+  // 修改的边缘删除处理，使用 Zustand Store
   const onEdgeDelete = useCallback(
     (edge) => {
       const { source, sourceHandle, target, targetHandle } = edge;
@@ -133,8 +138,8 @@ const ReactFlowContent = () => {
         const [_, paramModuleId, paramKey] = targetHandle.split('_');
         const connectionId = `${source}:${sourceHandle}->${target}:${targetHandle}`;
 
-        // 从调制服务中移除连接
-        modulationService.removeModulationConnection(connectionId);
+        // 从 Store 中移除连接
+        removeConnection(connectionId);
 
         // 更新目标节点的参数，清除调制状态
         setNodes((nds) =>
@@ -163,7 +168,7 @@ const ReactFlowContent = () => {
 
       setEdges((eds) => eds.filter((e) => e.id !== edge.id));
     },
-    [setNodes, setEdges]
+    [setNodes, setEdges, removeConnection]
   );
 
   const onContextMenu = useCallback(
@@ -233,16 +238,13 @@ const ReactFlowContent = () => {
         })
       );
 
-      // 如果是调制范围更新，同时更新调制服务
+      // 如果是调制范围更新，同时更新调制 Store
       if (updateData.type === 'MOD_RANGE_CHANGE') {
         const targetParam = `${nodeId}:${updateData.parameterKey}`;
-        modulationService.updateModulationRange(
-          targetParam,
-          updateData.modRange
-        );
+        updateConnectionRange(targetParam, updateData.modRange);
       }
     },
-    [setNodes]
+    [setNodes, updateConnectionRange]
   );
 
   // 修改添加节点的处理函数，传入节点更新回调

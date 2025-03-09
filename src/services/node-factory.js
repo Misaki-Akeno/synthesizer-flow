@@ -71,31 +71,27 @@ export const createNode = (
         onParameterChange:
           additionalData.onParameterChange ||
           ((key, value) => {
-            console.log(`参数 ${key} 已更改为 ${value}`);
-            
             // 调用父组件提供的节点更新函数
             if (onNodeUpdate) {
               onNodeUpdate(nodeId, {
                 parameterKey: key,
                 parameterValue: value,
-                type: 'PARAMETER_CHANGE'
+                type: 'PARAMETER_CHANGE',
               });
             }
           }),
 
         // 添加调制范围更改处理函数
         onModRangeChange: (key, range) => {
-          console.log(`参数 ${key} 调制范围变更为 [${range[0]}, ${range[1]}]`);
-          
           // 调用父组件提供的节点更新函数
           if (onNodeUpdate) {
             onNodeUpdate(nodeId, {
               parameterKey: key,
               modRange: range,
-              type: 'MOD_RANGE_CHANGE'
+              type: 'MOD_RANGE_CHANGE',
             });
           }
-        }
+        },
       };
 
       // 如果指定了预设，加载预设数据
