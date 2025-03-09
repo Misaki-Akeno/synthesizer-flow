@@ -1,14 +1,14 @@
 import { Metadata } from 'next';
 
-// import { Separator } from '@/components/ui/shared/separator';
+import { Separator } from '@/components/ui/shared/separator';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import ReactFlowContent from '@/components/flow/react-flow-content';
 import ModulationDebug from '@/components/ModulationDebug';
 
 export const metadata: Metadata = {
-  title: 'Playground',
-  description: 'The OpenAI Playground built using the components.',
+  title: 'Synthsizer Playground',
+  description: 'A playground for building synthesizers',
 };
 
 export default function PlaygroundPage() {
@@ -18,14 +18,18 @@ export default function PlaygroundPage() {
         <div className="px-6 lg:px-12 flex flex-col items-start justify-between space-y-2 py-4 sm:flex-row sm:items-center sm:space-y-0 md:h-16">
           <h2 className="text-lg font-semibold">Playground</h2>
           <div className="ml-auto flex w-full space-x-2 sm:justify-end"></div>
-          <ModulationDebug />
         </div>
-        {/* TODO:替换 */}
-        {/* <Separator /> */}
+        <Separator />
         <div className="flex-1 overflow-hidden">
           <ReactFlowProvider>
             <ReactFlowContent />
           </ReactFlowProvider>
+
+          <div className="absolute top-4 right-4 z-50">
+            <div className="bg-white/95 shadow-lg rounded-lg border border-gray-200">
+              <ModulationDebug />
+            </div>
+          </div>
         </div>
       </div>
     </div>

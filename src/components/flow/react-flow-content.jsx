@@ -282,6 +282,7 @@ const ReactFlowContent = () => {
         nodeTypes={nodeTypes}
         snapToGrid
         snapGrid={[12, 12]}
+        attributionPosition={null}
         fitView
       >
         <Controls />

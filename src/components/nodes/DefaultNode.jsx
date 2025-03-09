@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Slider } from '@mui/material';
+// 移除 MUI Slider 的导入
+// import { Slider } from '@mui/material';
+// 导入 Shadcn Slider
+import { Slider } from '@/components/ui/shared/slider';
 
 const DefaultNode = ({ data }) => {
   const {
@@ -58,7 +61,7 @@ const DefaultNode = ({ data }) => {
       {/* 内容区域 - 浅白色背景的圆角矩形 */}
       <div className="bg-white bg-opacity-90 rounded-md">
         {/* 顶部输入/输出端口区域 - 显示常规输入输出 */}
-        <div className="px-0 py-2">
+        <div className="px-0 pt-3 pb-1">
           <div className="flex justify-between">
             {/* 左侧常规输入端口 */}
             <div className="flex-1">
@@ -119,13 +122,13 @@ const DefaultNode = ({ data }) => {
               return (
                 <div key={key} className="parameter-control relative">
                   {/* 参数标签和当前值 */}
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-1 pt-1 pb-0">
                     <div className="flex items-center">
                       {/* 调制端口移到最左侧 */}
                       {isModulatable && (
                         <div
                           className="relative flex items-center justify-center mr-1"
-                          style={{ width: '16px', height: '16px' }}
+                          style={{ width: '2px', height: '16px' }}
                         >
                           <Handle
                             type="target"
@@ -140,7 +143,6 @@ const DefaultNode = ({ data }) => {
                               transform: 'translateY(-50%)',
                             }}
                           />
-                          <span className="text-blue-500 text-xs">~</span>
                         </div>
                       )}
 
@@ -196,35 +198,24 @@ const DefaultNode = ({ data }) => {
                         <span className="text-xs">{param.label}</span>
                       </label>
                     ) : (
-                      // 数值类型参数 - 使用 MUI Slider
-                      <div className="w-full relative pt-0 pb-0">
+                      <div className="w-full relative pt-0 pb-1">
                         {!param.isModulated ? (
                           // 单滑块模式
                           <Slider
-                            size="small"
                             min={param.min || 0}
                             max={param.max || 100}
                             step={param.step || 1}
-                            value={param.value || 0}
-                            onChange={(_, newValue) => {
-                              handleSliderChange(key, newValue);
+                            value={[param.value || 0]}
+                            onValueChange={(newValue) => {
+                              handleSliderChange(key, newValue[0]);
                             }}
-                            aria-label={param.label || key}
-                            sx={{
-                              color: '#3498db',
-                              height: 4,
-                              '& .MuiSlider-thumb': {
-                                width: 12,
-                                height: 12,
-                              },
-                            }}
+                            className="h-4" // 确保有足够高度便于交互
                           />
                         ) : (
                           // 双滑块模式 - 调制范围控制
                           <>
                             {/* 调制范围滑块 */}
                             <Slider
-                              size="small"
                               min={param.min || 0}
                               max={param.max || 100}
                               step={param.step || 1}
@@ -232,37 +223,10 @@ const DefaultNode = ({ data }) => {
                                 param.modRange ? param.modRange[0] : param.min,
                                 param.modRange ? param.modRange[1] : param.max,
                               ]}
-                              onChange={(_, newValue) => {
+                              onValueChange={(newValue) => {
                                 handleModRangeChange(key, newValue);
                               }}
-                              disableSwap
-                              valueLabelDisplay="auto"
-                              valueLabelFormat={(value) => value.toFixed(1)}
-                              getAriaLabel={() =>
-                                `${param.label || key} modulation range`
-                              }
-                              sx={{
-                                color: '#3498db',
-                                height: 4,
-                                '& .MuiSlider-thumb': {
-                                  width: 12,
-                                  height: 12,
-                                },
-                                '& .MuiSlider-rail': {
-                                  opacity: 0.5,
-                                },
-                                '& .MuiSlider-track': {
-                                  border: 'none',
-                                  backgroundColor: '#90caf9',
-                                  opacity: 0.7,
-                                },
-                                // 添加浮动提示样式
-                                '& .MuiSlider-valueLabel': {
-                                  fontSize: '0.65rem',
-                                  padding: '2px 4px',
-                                  backgroundColor: '#3498db',
-                                },
-                              }}
+                              className="h-4" // 确保有足够高度便于交互
                             />
 
                             {/* 调制后的当前值指示器（动态） */}
