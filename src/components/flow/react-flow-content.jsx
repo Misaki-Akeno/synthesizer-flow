@@ -12,15 +12,19 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import ContextMenu from './flow-context-menu';
-import { nodeTypes } from '@/constants/nodeTypes';
 import { createNode } from '../../services/node-factory';
+import { Category } from '../../constants/moduleTypes';
+
+import DefaultNode from '@/components/nodes/DefaultNode';
+
+// 定义节点类型映射
+const nodeTypes = {
+  module: DefaultNode,
+};
 
 const ReactFlowContent = () => {
-  const initialNodes = [
-    { id: '1', position: { x: 0, y: 0 }, data: { label: '1' } },
-    { id: '2', position: { x: 0, y: 100 }, data: { label: '2' } },
-  ];
-  const initialEdges = [{ id: 'e1-2', source: '1', target: '2' }];
+  const initialNodes = [];
+  const initialEdges = [];
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -59,13 +63,19 @@ const ReactFlowContent = () => {
   }, []);
 
   const onAddNode = useCallback(
-    (type) => {
+    (nodeConfig) => {
       if (!menu) return;
 
-      // 使用节点工厂创建新节点
-      const newNode = createNode(type, nodes.length + 1, menu.position);
-
+      const { type, moduleId, data } = nodeConfig;
+      const newNode = createNode(
+        type,
+        nodes.length + 1,
+        menu.position,
+        moduleId,
+        data // 传递额外数据到节点
+      );
       setNodes((nds) => nds.concat(newNode));
+
       setMenu(null);
     },
     [nodes, menu, setNodes]
@@ -82,6 +92,8 @@ const ReactFlowContent = () => {
         onContextMenu={onContextMenu}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
+        snapToGrid
+        snapGrid={[12, 12]}
         fitView
       >
         <Controls />
