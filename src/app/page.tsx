@@ -1,7 +1,9 @@
 import { Metadata } from 'next';
 
-import { Separator } from '@/components/ui/separator';
-import ReactFlowWrapper from '../components/flow/react-flow-wrapper';
+import { Separator } from '@/components/ui/shared/separator';
+import { ReactFlowProvider } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import ReactFlowContent from '@/components/flow/react-flow-content';
 
 export const metadata: Metadata = {
   title: 'Playground',
@@ -18,7 +20,9 @@ export default function PlaygroundPage() {
         </div>
         <Separator />
         <div className="flex-1 overflow-hidden">
-          <ReactFlowWrapper />
+          <ReactFlowProvider>
+            <ReactFlowContent />
+          </ReactFlowProvider>
         </div>
       </div>
     </div>

@@ -12,7 +12,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import ContextMenu from './flow-context-menu';
-import { nodeTypes } from './nodes/basic/basic-nodes';
+import { nodeTypes } from '@/constants/nodeTypes';
 import { createNode } from '../../services/node-factory';
 
 const ReactFlowContent = () => {
@@ -35,10 +35,7 @@ const ReactFlowContent = () => {
 
   const onContextMenu = useCallback(
     (event) => {
-      // 阻止原生的上下文菜单
       event.preventDefault();
-
-      // 直接将屏幕坐标转换为流图坐标
       const position = reactFlowInstance.screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
@@ -54,7 +51,6 @@ const ReactFlowContent = () => {
   );
 
   const onPaneClick = useCallback(() => {
-    // 点击背景时关闭菜单
     setMenu(null);
   }, []);
 

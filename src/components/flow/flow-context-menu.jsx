@@ -2,128 +2,50 @@
 
 import * as React from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { ChevronRightIcon } from '@radix-ui/react-icons';
 import { cn } from '@/lib/utils';
+import { MENU_ITEM_TYPES } from '@/constants/menuItemTypes';
+import { MenuSection, MenuItem, SubMenu } from '@/components/ui/menu';
+import { getMenuConfig } from '@/config/menuConfig';
 
+
+
+/**
+ * 流程图右键菜单组件
+ * @param {Object} props
+ * @param {number} props.top - 菜单Y坐标
+ * @param {number} props.left - 菜单X坐标
+ * @param {Function} props.onAddNode - 添加节点回调
+ * @param {Function} props.onClose - 关闭菜单回调
+ */
 const FlowContextMenu = ({ top, left, onAddNode, onClose }) => {
-  // 菜单选项配置
-  const menuStructure = [
-    {
-      id: 'basic-section',
-      type: 'section',
-      label: '基础节点',
-    },
-    {
-      id: 'input',
-      type: 'item',
-      label: '输入节点',
-      onClick: () => onAddNode('input'),
-    },
-    {
-      id: 'output',
-      type: 'item',
-      label: '输出节点',
-      onClick: () => onAddNode('output'),
-    },
-    {
-      id: 'processing-section',
-      type: 'section',
-      label: '处理节点',
-    },
-    {
-      id: 'default',
-      type: 'item',
-      label: '默认节点',
-      onClick: () => onAddNode('default'),
-    },
-    {
-      id: 'advanced',
-      type: 'submenu',
-      label: '高级节点',
-      submenu: [
-        {
-          id: 'custom',
-          type: 'item',
-          label: '自定义节点',
-          onClick: () => onAddNode('custom'),
-        },
-        {
-          id: 'conditional',
-          type: 'item',
-          label: '条件节点',
-          onClick: () => onAddNode('conditional'),
-        },
-        {
-          id: 'loop',
-          type: 'item',
-          label: '循环节点',
-          onClick: () => onAddNode('loop'),
-        },
-      ],
-    },
-  ];
+  // 获取菜单配置
+  const menuStructure = React.useMemo(
+    () => getMenuConfig(onAddNode),
+    [onAddNode]
+  );
 
-  // 渲染不同类型的菜单项
-  const renderMenuItem = (item) => {
-    switch (item.type) {
-      case 'section':
-        return (
-          <ContextMenu.Label
-            key={item.id}
-            className="text-xs font-medium text-slate-500 dark:text-slate-400 pl-4 pt-3 pb-1"
-          >
-            {item.label}
-          </ContextMenu.Label>
-        );
-      case 'item':
-        return (
-          <ContextMenu.Item
-            key={item.id}
-            className={cn(
-              'relative flex cursor-pointer select-none items-center pl-6 pr-2 py-2 my-0.5 text-sm outline-none',
-              'hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm'
-            )}
-            onSelect={(e) => {
-              e.preventDefault();
-              item.onClick();
-              onClose();
-            }}
-          >
-            {item.label}
-          </ContextMenu.Item>
-        );
-      case 'submenu':
-        return (
-          <ContextMenu.Sub key={item.id}>
-            <ContextMenu.SubTrigger
-              className={cn(
-                'relative flex cursor-pointer select-none items-center justify-between pl-6 pr-2 py-2 my-0.5 text-sm outline-none',
-                'hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm'
-              )}
-            >
-              {item.label}
-              <ChevronRightIcon className="h-4 w-4 ml-2" />
-            </ContextMenu.SubTrigger>
-            <ContextMenu.Portal>
-              <ContextMenu.SubContent
-                className={cn(
-                  'bg-white dark:bg-slate-800 min-w-[12rem]',
-                  'overflow-hidden rounded-md border border-slate-200 dark:border-slate-700 shadow-md p-1'
-                )}
-                sideOffset={2}
-                alignOffset={-5}
-              >
-                {item.submenu.map((subItem) => renderMenuItem(subItem))}
-              </ContextMenu.SubContent>
-            </ContextMenu.Portal>
-          </ContextMenu.Sub>
-        );
-      default:
-        return null;
-    }
-  };
+  // 渲染菜单项
+  const renderMenuItem = React.useCallback(
+    (item) => {
+      const { type, id } = item;
 
-  // 创建一个没有默认行为的定位容器
+      switch (type) {
+        case MENU_ITEM_TYPES.SECTION:
+          return <MenuSection key={id} {...item} />;
+
+        case MENU_ITEM_TYPES.ITEM:
+          return <MenuItem key={id} {...item} onClose={onClose} />;
+
+        case MENU_ITEM_TYPES.SUBMENU:
+          return <SubMenu key={id} {...item} renderMenuItem={renderMenuItem} />;
+
+        default:
+          return null;
+      }
+    },
+    [onClose]
+  );
+
   return (
     <div
       className="absolute z-50"
@@ -134,7 +56,7 @@ const FlowContextMenu = ({ top, left, onAddNode, onClose }) => {
         modal={false}
         onOpenChange={(open) => !open && onClose()}
       >
-        {/* 我们使用一个1x1像素的不可见元素作为触发器 */}
+        {/* 触发器元素 - 不可见的1x1像素点 */}
         <div
           style={{
             width: '1px',
@@ -148,7 +70,7 @@ const FlowContextMenu = ({ top, left, onAddNode, onClose }) => {
           <ContextMenu.Trigger />
         </div>
 
-        {/* 强制打开的菜单内容 */}
+        {/* 菜单内容 - 强制显示 */}
         <ContextMenu.Portal forceMount>
           <ContextMenu.Content
             className={cn(
@@ -173,4 +95,4 @@ const FlowContextMenu = ({ top, left, onAddNode, onClose }) => {
   );
 };
 
-export default FlowContextMenu;
+export default React.memo(FlowContextMenu);
