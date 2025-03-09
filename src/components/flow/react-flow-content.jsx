@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import React, { useCallback, useState, useRef } from "react";
+import React, { useCallback, useState, useRef } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -10,21 +10,17 @@ import {
   useEdgesState,
   addEdge,
   useReactFlow,
-  ReactFlowProvider
-} from "@xyflow/react";
-import ContextMenu from './context-menu';
-import { nodeTypes } from './custom-nodes';
-import { createNode } from '../services/node-factory';
+} from '@xyflow/react';
+import ContextMenu from './flow-context-menu';
+import { nodeTypes } from './nodes/basic/basic-nodes';
+import { createNode } from '../../services/node-factory';
 
-import "@xyflow/react/dist/style.css";
-
-// 将 ReactFlow 相关逻辑移到单独的组件
 const ReactFlowContent = () => {
   const initialNodes = [
-    { id: "1", position: { x: 0, y: 0 }, data: { label: "1" } },
-    { id: "2", position: { x: 0, y: 100 }, data: { label: "2" } },
+    { id: '1', position: { x: 0, y: 0 }, data: { label: '1' } },
+    { id: '2', position: { x: 0, y: 100 }, data: { label: '2' } },
   ];
-  const initialEdges = [{ id: "e1-2", source: "1", target: "2" }];
+  const initialEdges = [{ id: 'e1-2', source: '1', target: '2' }];
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -69,14 +65,10 @@ const ReactFlowContent = () => {
   const onAddNode = useCallback(
     (type) => {
       if (!menu) return;
-      
+
       // 使用节点工厂创建新节点
-      const newNode = createNode(
-        type,
-        nodes.length + 1,
-        menu.position
-      );
-      
+      const newNode = createNode(type, nodes.length + 1, menu.position);
+
       setNodes((nds) => nds.concat(newNode));
       setMenu(null);
     },
@@ -84,7 +76,7 @@ const ReactFlowContent = () => {
   );
 
   return (
-    <div style={{ width: "100%", height: "100%" }} ref={reactFlowWrapper}>
+    <div style={{ width: '100%', height: '100%' }} ref={reactFlowWrapper}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -100,7 +92,7 @@ const ReactFlowContent = () => {
         <MiniMap />
         <Background variant="dots" gap={12} size={1} />
       </ReactFlow>
-      
+
       {menu && (
         <ContextMenu
           top={menu.top}
@@ -113,11 +105,4 @@ const ReactFlowContent = () => {
   );
 };
 
-// 主应用组件，用 ReactFlowProvider 包装内容
-export default function App() {
-  return (
-    <ReactFlowProvider>
-      <ReactFlowContent />
-    </ReactFlowProvider>
-  );
-}
+export default ReactFlowContent;

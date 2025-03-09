@@ -9,33 +9,36 @@
 export const createNode = (type, id, position, customData = {}) => {
   // 根据节点类型提供默认数据
   const defaultData = {
-    input: { 
+    input: {
       label: `输入节点 ${id}`,
-      ports: { inputs: [], outputs: ['output'] }
+      ports: { inputs: [], outputs: ['output'] },
     },
-    default: { 
+    default: {
       label: `处理节点 ${id}`,
-      ports: { inputs: ['input'], outputs: ['output'] }
+      ports: { inputs: ['input'], outputs: ['output'] },
     },
-    output: { 
+    output: {
       label: `输出节点 ${id}`,
-      ports: { inputs: ['input'], outputs: [] }
+      ports: { inputs: ['input'], outputs: [] },
     },
-    custom: { 
+    custom: {
       label: `自定义节点 ${id}`,
-      ports: { inputs: ['input1', 'input2'], outputs: ['output1', 'output2'] }
-    }
+      ports: { inputs: ['input1', 'input2'], outputs: ['output1', 'output2'] },
+    },
   };
 
   // 合并默认数据和自定义数据
   const data = {
-    ...defaultData[type] || { label: `节点 ${id}`, ports: { inputs: ['input'], outputs: ['output'] } },
-    ...customData
+    ...(defaultData[type] || {
+      label: `节点 ${id}`,
+      ports: { inputs: ['input'], outputs: ['output'] },
+    }),
+    ...customData,
   };
 
   // 为不同节点类型设置不同样式
   const getNodeStyle = () => {
-    switch(type) {
+    switch (type) {
       case 'input':
         return { borderColor: '#0041d0', backgroundColor: '#f6fafd' };
       case 'output':
@@ -57,7 +60,7 @@ export const createNode = (type, id, position, customData = {}) => {
       border: '1px solid',
       padding: 10,
       borderRadius: 5,
-      ...getNodeStyle()
+      ...getNodeStyle(),
     },
   };
 };
@@ -72,6 +75,6 @@ export const createEdge = (sourceId, targetId) => {
     target: targetId,
     // 可以添加边的样式设置
     type: 'smoothstep', // 使用平滑曲线
-    animated: false,    // 是否有动画效果
+    animated: false, // 是否有动画效果
   };
 };
