@@ -28,3 +28,12 @@ export enum ParameterType {
   OBJECT, // 对象
   COLOR, // 颜色
 }
+
+export const DATA_TYPE_COLORS = {
+  AUDIO: '#e74c3c', // 红色
+  CONTROL: '#3498db', // 蓝色
+  TRIGGER: '#e67e22', // 橙色
+  MIDI: '#9b59b6', // 紫色
+  CLOCK: '#2ecc71', // 绿色
+  CUSTOM: '#95a5a6', // 灰色
+};

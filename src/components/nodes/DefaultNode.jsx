@@ -1,7 +1,12 @@
 import React from 'react';
-import { Handle, Position } from '@xyflow/react';
-import { Slider } from '@/components/ui/shared/slider';
+import { Position } from '@xyflow/react';
 import useRootStore from '@/store/rootStore';
+import {
+  ModuleHeader,
+  PortContainer,
+  ParameterControl,
+  PortHandle,
+} from '@/components/ui/DefaultNodeUI.jsx';
 
 const DefaultNode = ({ data, id }) => {
   const {
@@ -58,10 +63,7 @@ const DefaultNode = ({ data, id }) => {
       }}
     >
       {/* 标题区域 */}
-      <div className="py-1.5 px-2">
-        <div className="font-bold text-sm">{label}</div>
-        <div className="text-xs opacity-80">{category}</div>
-      </div>
+      <ModuleHeader label={label} category={category} />
 
       {/* 内容区域 - 浅白色背景的圆角矩形 */}
       <div className="bg-white bg-opacity-90 rounded-md">
@@ -71,46 +73,32 @@ const DefaultNode = ({ data, id }) => {
             {/* 左侧常规输入端口 */}
             <div className="flex-1">
               {regularInputs.map((input) => (
-                <div
-                  key={input.id}
-                  className="port-container relative mb-2 flex items-center"
-                >
-                  <Handle
+                <PortContainer key={input.id}>
+                  <PortHandle
                     type="target"
                     position={Position.Left}
                     id={input.id}
-                    style={{
-                      background: getPortColor(input.dataType),
-                      width: '12px',
-                      height: '12px',
-                      left: '0px',
-                    }}
+                    dataType={input.dataType}
+                    style={{ left: '0px' }}
                   />
                   <span className="text-xs ml-2 flex-grow">{input.label}</span>
-                </div>
+                </PortContainer>
               ))}
             </div>
 
             {/* 右侧输出端口 */}
             <div className="flex-1">
               {outputs.map((output) => (
-                <div
-                  key={output.id}
-                  className="port-container relative mb-2 text-right flex items-center justify-end"
-                >
+                <PortContainer key={output.id} isOutput={true}>
                   <span className="text-xs mr-2">{output.label}</span>
-                  <Handle
+                  <PortHandle
                     type="source"
                     position={Position.Right}
                     id={output.id}
-                    style={{
-                      background: getPortColor(output.dataType),
-                      width: '12px',
-                      height: '12px',
-                      right: '0px',
-                    }}
+                    dataType={output.dataType}
+                    style={{ right: '0px' }}
                   />
-                </div>
+                </PortContainer>
               ))}
             </div>
           </div>
@@ -124,150 +112,17 @@ const DefaultNode = ({ data, id }) => {
               const isModulatable = modulatableParams.includes(key);
               // 生成唯一的调制输入ID
               const modInputId = `mod_${moduleId}_${key}`;
+
               return (
-                <div key={key} className="parameter-control relative">
-                  {/* 参数标签和当前值 */}
-                  <div className="flex items-center justify-between mb-1 pt-1 pb-0">
-                    <div className="flex items-center">
-                      {/* 调制端口移到最左侧 */}
-                      {isModulatable && (
-                        <div
-                          className="relative flex items-center justify-center mr-1"
-                          style={{ width: '2px', height: '16px' }}
-                        >
-                          <Handle
-                            type="target"
-                            position={Position.Left}
-                            id={modInputId}
-                            style={{
-                              background: '#3498db', // 调制端口颜色
-                              width: '8px',
-                              height: '8px',
-                              left: '-4px',
-                              top: '50%',
-                              transform: 'translateY(-50%)',
-                            }}
-                          />
-                        </div>
-                      )}
-
-                      <label className="text-xs font-medium ml-0">
-                        {param.label || key}:
-                      </label>
-                    </div>
-
-                    <div className="flex items-center">
-                      {/* 参数调制状态指示 */}
-                      {param.isModulated && (
-                        <span className="text-blue-500 mr-1 text-xs">~</span>
-                      )}
-                      <span className="text-xs">
-                        {param.displayValue || param.value || 0}
-                        {param.unit && (
-                          <span className="ml-0.5">{param.unit}</span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 参数控制器 - 基于参数类型 */}
-                  <div className="flex items-center relative">
-                    {param.type === 'ENUM' ? (
-                      <select
-                        value={param.value}
-                        onChange={(e) =>
-                          handleSliderChange(key, e.target.value)
-                        }
-                        className="w-full text-xs p-1 border rounded"
-                      >
-                        {param.options?.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    ) : param.type === 'BOOLEAN' ? (
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={!!param.value}
-                          onChange={(e) =>
-                            handleSliderChange(key, e.target.checked)
-                          }
-                          className="mr-1"
-                        />
-                        <span className="text-xs">{param.label}</span>
-                      </label>
-                    ) : (
-                      <div className="w-full relative pt-0 pb-1">
-                        {!param.isModulated ? (
-                          <Slider
-                            min={param.min || 0}
-                            max={param.max || 100}
-                            step={param.step || 1}
-                            value={[param.value || 0]}
-                            onValueChange={(newValue) =>
-                              handleSliderChange(key, newValue[0])
-                            }
-                            className="h-4"
-                          />
-                        ) : (
-                          <>
-                            <Slider
-                              min={param.min || 0}
-                              max={param.max || 100}
-                              step={param.step || 1}
-                              value={[
-                                param.modRange ? param.modRange[0] : param.min,
-                                param.modRange ? param.modRange[1] : param.max,
-                              ]}
-                              onValueChange={(newValue) =>
-                                handleModRangeChange(key, newValue)
-                              }
-                              className="h-4"
-                            />
-
-                            {param.isModulated && param.displayValue && (
-                              <div
-                                className="ml-2 mr-2 relative"
-                                style={{ transform: 'translateY(-8px)' }}
-                              >
-                                <div
-                                  className="absolute w-3 h-3 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none mod-display-handle"
-                                  style={{
-                                    left: `${((parseFloat(param.displayValue) - param.min) / (param.max - param.min)) * 100}%`,
-                                    zIndex: 2,
-                                  }}
-                                  title={`当前值: ${parseFloat(param.displayValue).toFixed(1)}`}
-                                ></div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                        {/* 调试信息 */}
-                        <div className="text-[9px] text-gray-400 mt-1 bg-gray-100 p-1 rounded">
-                          <details>
-                            <summary className="cursor-pointer">
-                              Debug Info
-                            </summary>
-                            <pre className="whitespace-pre-wrap break-all">
-                              {JSON.stringify(
-                                {
-                                  value: param.value,
-                                  displayValue: param.displayValue,
-                                  modRange: param.modRange,
-                                  isModulated: param.isModulated,
-                                },
-                                null,
-                                2
-                              )}
-                            </pre>
-                          </details>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <ParameterControl
+                  key={key}
+                  paramKey={key}
+                  param={param}
+                  isModulatable={isModulatable}
+                  modInputId={modInputId}
+                  handleSliderChange={handleSliderChange}
+                  handleModRangeChange={handleModRangeChange}
+                />
               );
             })}
           </div>
@@ -275,24 +130,6 @@ const DefaultNode = ({ data, id }) => {
       </div>
     </div>
   );
-};
-
-// 根据数据类型获取端口颜色
-const getPortColor = (dataType) => {
-  switch (dataType) {
-    case 'AUDIO':
-      return '#e74c3c'; // 红色
-    case 'CONTROL':
-      return '#3498db'; // 蓝色
-    case 'TRIGGER':
-      return '#e67e22'; // 橙色
-    case 'MIDI':
-      return '#9b59b6'; // 紫色
-    case 'CLOCK':
-      return '#2ecc71'; // 绿色
-    default:
-      return '#95a5a6'; // 灰色
-  }
 };
 
 export default DefaultNode;
