@@ -13,6 +13,8 @@ import ContextMenu from './flow-context-menu';
 import useRootStore from '@/store/rootStore';
 import DefaultNode from '@/components/nodes/DefaultNode';
 
+import DevTools from './devTools/DevTools';
+
 // 定义节点类型映射
 const nodeTypes = {
   module: DefaultNode,
@@ -156,11 +158,11 @@ const ReactFlowContent = () => {
         nodeTypes={nodeTypes}
         snapToGrid
         snapGrid={[12, 12]}
-        attributionPosition={null}
         fitView
       >
         <Controls />
         <MiniMap />
+        <DevTools />
         <Background variant="dots" gap={12} size={1} />
       </ReactFlow>
 
