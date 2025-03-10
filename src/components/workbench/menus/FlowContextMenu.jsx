@@ -3,13 +3,18 @@
 import * as React from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import { cn } from '@/lib/utils/cn';
-import { MENU_ITEM_TYPES } from '@/lib/constants/menuItemTypes';
 import {
   MenuSection,
   MenuItem,
   SubMenu,
 } from '@/components/workbench/menus/MenuComponents';
 import moduleService from '@/core/services/moduleService';
+
+export const MENU_ITEM_TYPES = {
+  SECTION: 'section',
+  ITEM: 'item',
+  SUBMENU: 'submenu',
+};
 
 /**
  * 从模块服务生成菜单配置
