@@ -232,14 +232,18 @@ const DefaultNode = ({ data }) => {
                             {/* 调制后的当前值指示器（动态） */}
                             {param.isModulated && param.displayValue && (
                               <div
-                                className="absolute w-3 h-3 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none mod-display-handle"
-                                style={{
-                                  left: `${((parseFloat(param.displayValue) - param.min) / (param.max - param.min)) * 100}%`,
-                                  top: '50%',
-                                  zIndex: 2,
-                                }}
-                                title={`当前值: ${parseFloat(param.displayValue).toFixed(1)}`}
-                              ></div>
+                                className="ml-2 mr-2 relative"
+                                style={{ transform: 'translateY(-8px)' }}
+                              >
+                                <div
+                                  className="absolute w-3 h-3 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none mod-display-handle"
+                                  style={{
+                                    left: `${((parseFloat(param.displayValue) - param.min) / (param.max - param.min)) * 100}%`,
+                                    zIndex: 2,
+                                  }}
+                                  title={`当前值: ${parseFloat(param.displayValue).toFixed(1)}`}
+                                ></div>
+                              </div>
                             )}
                           </>
                         )}
