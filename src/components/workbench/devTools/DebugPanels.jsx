@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import useRootStore from '@/store/rootStore';
+import useRootStore from '@/core/store/rootStore';
 
 const ModulationDebug = () => {
   // 从根 store 中获取调制系统状态

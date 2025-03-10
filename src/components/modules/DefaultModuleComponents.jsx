@@ -1,7 +1,7 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Slider } from '@/components/ui/shared/slider';
-import { DATA_TYPE_COLORS } from '@/constants/moduleTypes';
+import { Slider } from '@/components/ui/slider';
+import { DATA_TYPE_COLORS } from '@/lib/constants/moduleTypes';
 
 // 控制端口组件
 export const PortHandle = ({ type, position, id, dataType, style = {} }) => {
@@ -34,7 +34,9 @@ export const ModuleHeader = ({ label, category }) => {
 export const PortContainer = ({ children, isOutput = false }) => {
   const alignment = isOutput ? 'justify-end' : '';
   return (
-    <div className={`port-container relative mb-2 flex items-center ${alignment}`}>
+    <div
+      className={`port-container relative mb-2 flex items-center ${alignment}`}
+    >
       {children}
     </div>
   );
@@ -47,7 +49,7 @@ export const ParameterControl = ({
   isModulatable,
   modInputId,
   handleSliderChange,
-  handleModRangeChange
+  handleModRangeChange,
 }) => {
   return (
     <div className="parameter-control relative">
@@ -94,14 +96,24 @@ export const ParameterControl = ({
 
       {/* 参数控制器 - 基于参数类型 */}
       <div className="flex items-center relative">
-        {renderParameterControl(param, paramKey, handleSliderChange, handleModRangeChange)}
+        {renderParameterControl(
+          param,
+          paramKey,
+          handleSliderChange,
+          handleModRangeChange
+        )}
       </div>
     </div>
   );
 };
 
 // 渲染不同类型的参数控制器
-const renderParameterControl = (param, key, handleSliderChange, handleModRangeChange) => {
+const renderParameterControl = (
+  param,
+  key,
+  handleSliderChange,
+  handleModRangeChange
+) => {
   if (param.type === 'ENUM') {
     return (
       <select

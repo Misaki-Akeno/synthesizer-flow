@@ -1,4 +1,4 @@
-import moduleService from '@/services/moduleService';
+import moduleService from '@/core/services/moduleService';
 
 /**
  * 创建新节点
@@ -94,7 +94,7 @@ export const createNode = (
         },
       };
 
-      // 如果指定了预设，加载预设数据
+      // 如果指定了预设，只存储预设ID并加载预设数据
       if (additionalData.preset) {
         const presetData = moduleService.loadPreset(
           moduleId,
@@ -102,7 +102,8 @@ export const createNode = (
         );
         if (presetData) {
           baseNode.data.presetId = additionalData.preset;
-          // 将预设值应用到每个参数
+
+          // 将预设值应用到各参数
           Object.entries(presetData).forEach(([key, value]) => {
             if (baseNode.data.parameters[key]) {
               baseNode.data.parameters[key].value = value;

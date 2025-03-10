@@ -1,5 +1,5 @@
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils/cn';
 import { ChevronRightIcon } from '@radix-ui/react-icons';
 
 export const MenuSection = ({ id, title, label }) => (

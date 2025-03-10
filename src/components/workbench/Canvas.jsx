@@ -8,19 +8,19 @@ import {
   Background,
   useReactFlow,
 } from '@xyflow/react';
-import ContextMenu from './flow-context-menu';
+import ContextMenu from './menus/FlowContextMenu';
 
-import useRootStore from '@/store/rootStore';
-import DefaultNode from '@/components/nodes/DefaultNode';
+import useRootStore from '@/core/store/rootStore';
+import DefaultModule from '@/components/modules/DefaultModule';
 
 import DevTools from './devTools/DevTools';
 
 // 定义节点类型映射
 const nodeTypes = {
-  module: DefaultNode,
+  module: DefaultModule,
 };
 
-const ReactFlowContent = () => {
+const Canvas = () => {
   const [menu, setMenu] = useState(null);
   const reactFlowWrapper = useRef(null);
   const reactFlowInstance = useReactFlow();
@@ -124,6 +124,17 @@ const ReactFlowContent = () => {
   }, []);
 
   // 处理添加节点
+  // eg:
+  //   onAddNode({
+  //   type: 'module',
+  //   moduleId: module.metadata.id,
+  //   data: {
+  //     label: module.metadata.name,
+  //     moduleType: module.metadata.id,
+  //     color: module.ui?.color || '#cccccc',
+  //     preset: hasPresets ? module.presets[0].id : null,
+  //   },
+  // }),
   const onAddNode = useCallback(
     (nodeConfig) => {
       if (!menu) return;
@@ -178,4 +189,4 @@ const ReactFlowContent = () => {
   );
 };
 
-export default ReactFlowContent;
+export default Canvas;

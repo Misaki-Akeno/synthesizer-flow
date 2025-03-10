@@ -2,12 +2,12 @@
 
 import * as React from 'react';
 import * as SliderPrimitive from '@radix-ui/react-slider';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils/cn';
 import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-} from '@/components/ui/shared/tooltip'; // 假设你已有 Tooltip 组件
+} from '@/components/ui/tooltip'; // 假设你已有 Tooltip 组件
 
 function Slider({
   className,

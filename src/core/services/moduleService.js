@@ -1,4 +1,4 @@
-import { moduleConfigurations } from '../configs/moduleConfigurations';
+import { moduleConfigurations } from '../../modules/moduleMeta';
 import * as Tone from 'tone';
 
 /**

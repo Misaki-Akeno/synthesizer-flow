@@ -1,14 +1,14 @@
 import React from 'react';
 import { Position } from '@xyflow/react';
-import useRootStore from '@/store/rootStore';
+import useRootStore from '@/core/store/rootStore';
 import {
   ModuleHeader,
   PortContainer,
   ParameterControl,
   PortHandle,
-} from '@/components/ui/DefaultNodeUI.jsx';
+} from '@/components/modules/DefaultModuleComponents.jsx';
 
-const DefaultNode = ({ data, id }) => {
+const DefaultModule = ({ data, id }) => {
   const {
     label,
     moduleId,
@@ -132,4 +132,4 @@ const DefaultNode = ({ data, id }) => {
   );
 };
 
-export default DefaultNode;
+export default DefaultModule;
