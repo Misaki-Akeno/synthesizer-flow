@@ -15,7 +15,6 @@ import moduleService from '@/services/moduleService';
 const generateMenuFromModules = (onAddNode) => {
   // 防御性检查：确保 getAllModules() 返回有效对象
   const allModules = Object.values(moduleService.getAllModules() || {});
-  // console.log('生成菜单: 可用模块数量', allModules.length);
 
   // 如果没有模块，返回基本菜单结构
   if (!allModules || allModules.length === 0) {
@@ -32,7 +31,6 @@ const generateMenuFromModules = (onAddNode) => {
   const categories = [
     ...new Set(allModules.map((m) => m.metadata?.category).filter(Boolean)),
   ];
-  // console.log('识别到的类别:', categories);
 
   // 创建顶层菜单结构
   const menuStructure = [

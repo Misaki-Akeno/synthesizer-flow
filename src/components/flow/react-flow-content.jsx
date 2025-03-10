@@ -6,17 +6,11 @@ import {
   MiniMap,
   Controls,
   Background,
-  useNodesState,
-  useEdgesState,
-  addEdge,
   useReactFlow,
 } from '@xyflow/react';
 import ContextMenu from './flow-context-menu';
-import { createNode } from '../../services/node-factory';
-import { Category } from '../../constants/moduleTypes';
 
-import useModulationStore from '@/store/modulationStore';
-
+import useRootStore from '@/store/rootStore';
 import DefaultNode from '@/components/nodes/DefaultNode';
 
 // 定义节点类型映射
@@ -25,155 +19,86 @@ const nodeTypes = {
 };
 
 const ReactFlowContent = () => {
-  const initialNodes = [];
-  const initialEdges = [];
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [menu, setMenu] = useState(null);
-
   const reactFlowWrapper = useRef(null);
   const reactFlowInstance = useReactFlow();
 
-  // 从 Zustand Store 获取调制相关函数
+  // 从根 Store 获取状态和 actions
   const {
+    // 全局状态和 actions
     initialize,
-    cleanup,
-    addConnection,
-    removeConnection,
-    updateConnectionRange,
-    applyModulationToNodes,
-  } = useModulationStore();
+    initialized,
 
-  // 初始化调制系统
+    // 流程图相关
+    nodes,
+    edges,
+    onNodesChange,
+    onEdgesChange,
+    addNode,
+    addEdge,
+    removeEdge,
+
+    // 音频相关
+    startAudio,
+    audioStarted,
+
+    // 调制相关
+    applyModulationToNodes,
+  } = useRootStore();
+
+  // 初始化系统
   useEffect(() => {
     initialize();
-    return () => cleanup();
-  }, [initialize, cleanup]);
 
-  // 创建一个效果来定期应用调制
-  useEffect(() => {
-    const modulationUpdateInterval = setInterval(() => {
-      const updatedNodes = applyModulationToNodes(nodes);
-      setNodes(updatedNodes);
-    }, 100); // 每100ms更新一次
-
+    // 清理函数
     return () => {
-      clearInterval(modulationUpdateInterval);
+      useRootStore.getState().shutdown();
     };
-  }, [nodes, setNodes, applyModulationToNodes]);
+  }, [initialize]);
 
-  // 修改的连接处理函数，使用 Zustand Store
+  // 调制更新效果
+  useEffect(() => {
+    if (!initialized) return;
+
+    // 创建调制更新定时器
+    const intervalId = setInterval(() => {
+      // 强制重新计算调制值
+      useRootStore.getState().updateModulationValues();
+
+      // 应用调制到节点
+      const currentNodes = useRootStore.getState().nodes;
+      const updatedNodes = applyModulationToNodes(currentNodes);
+
+      // 如果有更新，更新store中的节点
+      if (updatedNodes !== currentNodes) {
+        useRootStore.setState({ nodes: updatedNodes });
+      }
+    }, 50); // 每50ms更新一次
+
+    // 清理函数
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [initialized]);
+
+  // 连接处理
   const onConnect = useCallback(
     (params) => {
-      const { source, sourceHandle, target, targetHandle } = params;
-
-      if (targetHandle && targetHandle.startsWith('mod_')) {
-        const [_, paramModuleId, paramKey] = targetHandle.split('_');
-
-        // 创建调制连接ID
-        const connectionId = `${source}:${sourceHandle}->${target}:${targetHandle}`;
-
-        // 将调制连接添加到 Store
-        addConnection(connectionId, {
-          source,
-          sourceHandle,
-          target,
-          targetHandle,
-          paramKey,
-          depth: 1.0,
-          bipolar: true,
-        });
-
-        // 找到目标节点
-        const targetNode = nodes.find((node) => node.id === target);
-        if (!targetNode || !targetNode.data.parameters[paramKey]) return;
-
-        // 获取参数的当前值和范围
-        const param = targetNode.data.parameters[paramKey];
-        const currentValue = param.value;
-        const min = param.min;
-        const max = param.max;
-
-        // 计算默认调制范围（当前值的±20%，但不超出参数范围）
-        let minMod = Math.max(min, currentValue - (max - min) * 0.2);
-        let maxMod = Math.min(max, currentValue + (max - min) * 0.2);
-
-        // 更新节点状态，标记参数为被调制
-        setNodes((nds) =>
-          nds.map((node) => {
-            if (node.id === target) {
-              return {
-                ...node,
-                data: {
-                  ...node.data,
-                  parameters: {
-                    ...node.data.parameters,
-                    [paramKey]: {
-                      ...node.data.parameters[paramKey],
-                      isModulated: true, // 确保设置为 true
-                      modRange: [minMod, maxMod],
-                    },
-                  },
-                },
-              };
-            }
-            return node;
-          })
-        );
-      }
-
-      // 添加连接线
-      setEdges((eds) => addEdge(params, eds));
+      addEdge(params);
     },
-    [nodes, setNodes, setEdges, addConnection]
+    [addEdge]
   );
 
-  // 修改的边缘删除处理，使用 Zustand Store
-  const onEdgeDelete = useCallback(
-    (edge) => {
-      const { source, sourceHandle, target, targetHandle } = edge;
-
-      if (targetHandle && targetHandle.startsWith('mod_')) {
-        const [_, paramModuleId, paramKey] = targetHandle.split('_');
-        const connectionId = `${source}:${sourceHandle}->${target}:${targetHandle}`;
-
-        // 从 Store 中移除连接
-        removeConnection(connectionId);
-
-        // 更新目标节点的参数，清除调制状态
-        setNodes((nds) =>
-          nds.map((node) => {
-            if (node.id === target) {
-              return {
-                ...node,
-                data: {
-                  ...node.data,
-                  parameters: {
-                    ...node.data.parameters,
-                    [paramKey]: {
-                      ...node.data.parameters[paramKey],
-                      isModulated: false,
-                      modRange: null,
-                      displayValue: node.data.parameters[paramKey].value,
-                    },
-                  },
-                },
-              };
-            }
-            return node;
-          })
-        );
-      }
-
-      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
-    },
-    [setNodes, setEdges, removeConnection]
-  );
-
+  // 上下文菜单
   const onContextMenu = useCallback(
     (event) => {
       event.preventDefault();
+
+      if (!audioStarted) {
+        // 首次用户交互时启动音频上下文
+        startAudio();
+      }
+
       const position = reactFlowInstance.screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
@@ -185,7 +110,7 @@ const ReactFlowContent = () => {
         position,
       });
     },
-    [reactFlowInstance]
+    [reactFlowInstance, startAudio, audioStarted]
   );
 
   const onPaneClick = useCallback(() => {
@@ -196,76 +121,25 @@ const ReactFlowContent = () => {
     setMenu(null);
   }, []);
 
-  // 处理节点更新的回调函数
-  const handleNodeUpdate = useCallback(
-    (nodeId, updateData) => {
-      setNodes((nodes) =>
-        nodes.map((node) => {
-          if (node.id === nodeId) {
-            if (updateData.type === 'PARAMETER_CHANGE') {
-              // 处理参数值变更
-              return {
-                ...node,
-                data: {
-                  ...node.data,
-                  parameters: {
-                    ...node.data.parameters,
-                    [updateData.parameterKey]: {
-                      ...node.data.parameters[updateData.parameterKey],
-                      value: updateData.parameterValue,
-                    },
-                  },
-                },
-              };
-            } else if (updateData.type === 'MOD_RANGE_CHANGE') {
-              // 处理调制范围变更
-              return {
-                ...node,
-                data: {
-                  ...node.data,
-                  parameters: {
-                    ...node.data.parameters,
-                    [updateData.parameterKey]: {
-                      ...node.data.parameters[updateData.parameterKey],
-                      modRange: updateData.modRange,
-                    },
-                  },
-                },
-              };
-            }
-          }
-          return node;
-        })
-      );
-
-      // 如果是调制范围更新，同时更新调制 Store
-      if (updateData.type === 'MOD_RANGE_CHANGE') {
-        const targetParam = `${nodeId}:${updateData.parameterKey}`;
-        updateConnectionRange(targetParam, updateData.modRange);
-      }
-    },
-    [setNodes, updateConnectionRange]
-  );
-
-  // 修改添加节点的处理函数，传入节点更新回调
+  // 处理添加节点
   const onAddNode = useCallback(
     (nodeConfig) => {
       if (!menu) return;
 
       const { type, moduleId, data } = nodeConfig;
-      const newNode = createNode(
-        type,
-        nodes.length + 1,
-        menu.position,
-        moduleId,
-        data,
-        handleNodeUpdate // 传入节点更新回调
-      );
-      setNodes((nds) => nds.concat(newNode));
+      addNode(type, menu.position, moduleId, data);
 
       setMenu(null);
     },
-    [nodes, menu, setNodes, handleNodeUpdate]
+    [menu, addNode]
+  );
+
+  // 边删除处理
+  const onEdgesDelete = useCallback(
+    (edgesToDelete) => {
+      edgesToDelete.forEach((edge) => removeEdge(edge.id));
+    },
+    [removeEdge]
   );
 
   return (
@@ -276,7 +150,7 @@ const ReactFlowContent = () => {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onEdgesDelete={(edges) => edges.forEach(onEdgeDelete)}
+        onEdgesDelete={onEdgesDelete}
         onContextMenu={onContextMenu}
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}

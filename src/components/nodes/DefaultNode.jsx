@@ -1,11 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-// 移除 MUI Slider 的导入
-// import { Slider } from '@mui/material';
-// 导入 Shadcn Slider
 import { Slider } from '@/components/ui/shared/slider';
+import useRootStore from '@/store/rootStore';
 
-const DefaultNode = ({ data }) => {
+const DefaultNode = ({ data, id }) => {
   const {
     label,
     moduleId,
@@ -16,6 +14,9 @@ const DefaultNode = ({ data }) => {
     parameters = {},
     moduleConfig,
   } = data;
+
+  // 从 store 获取相关函数
+  const { updateNodeParameter } = useRootStore();
 
   // 从moduleConfig中提取可调制参数信息
   const modulatableParams = moduleConfig
@@ -29,16 +30,20 @@ const DefaultNode = ({ data }) => {
 
   // 处理滑块值变化
   const handleSliderChange = (key, newValue) => {
-    if (data.onParameterChange) {
-      data.onParameterChange(key, newValue);
-    }
+    updateNodeParameter(id, {
+      type: 'PARAMETER_CHANGE',
+      parameterKey: key,
+      parameterValue: newValue,
+    });
   };
 
   // 处理调制范围滑块值变化
   const handleModRangeChange = (key, newRange) => {
-    if (data.onModRangeChange) {
-      data.onModRangeChange(key, newRange);
-    }
+    updateNodeParameter(id, {
+      type: 'MOD_RANGE_CHANGE',
+      parameterKey: key,
+      modRange: newRange,
+    });
   };
 
   return (
@@ -170,11 +175,9 @@ const DefaultNode = ({ data }) => {
                     {param.type === 'ENUM' ? (
                       <select
                         value={param.value}
-                        onChange={(e) => {
-                          if (data.onParameterChange) {
-                            data.onParameterChange(key, e.target.value);
-                          }
-                        }}
+                        onChange={(e) =>
+                          handleSliderChange(key, e.target.value)
+                        }
                         className="w-full text-xs p-1 border rounded"
                       >
                         {param.options?.map((option) => (
@@ -188,11 +191,9 @@ const DefaultNode = ({ data }) => {
                         <input
                           type="checkbox"
                           checked={!!param.value}
-                          onChange={(e) => {
-                            if (data.onParameterChange) {
-                              data.onParameterChange(key, e.target.checked);
-                            }
-                          }}
+                          onChange={(e) =>
+                            handleSliderChange(key, e.target.checked)
+                          }
                           className="mr-1"
                         />
                         <span className="text-xs">{param.label}</span>
@@ -200,21 +201,18 @@ const DefaultNode = ({ data }) => {
                     ) : (
                       <div className="w-full relative pt-0 pb-1">
                         {!param.isModulated ? (
-                          // 单滑块模式
                           <Slider
                             min={param.min || 0}
                             max={param.max || 100}
                             step={param.step || 1}
                             value={[param.value || 0]}
-                            onValueChange={(newValue) => {
-                              handleSliderChange(key, newValue[0]);
-                            }}
-                            className="h-4" // 确保有足够高度便于交互
+                            onValueChange={(newValue) =>
+                              handleSliderChange(key, newValue[0])
+                            }
+                            className="h-4"
                           />
                         ) : (
-                          // 双滑块模式 - 调制范围控制
                           <>
-                            {/* 调制范围滑块 */}
                             <Slider
                               min={param.min || 0}
                               max={param.max || 100}
@@ -223,13 +221,12 @@ const DefaultNode = ({ data }) => {
                                 param.modRange ? param.modRange[0] : param.min,
                                 param.modRange ? param.modRange[1] : param.max,
                               ]}
-                              onValueChange={(newValue) => {
-                                handleModRangeChange(key, newValue);
-                              }}
-                              className="h-4" // 确保有足够高度便于交互
+                              onValueChange={(newValue) =>
+                                handleModRangeChange(key, newValue)
+                              }
+                              className="h-4"
                             />
 
-                            {/* 调制后的当前值指示器（动态） */}
                             {param.isModulated && param.displayValue && (
                               <div
                                 className="ml-2 mr-2 relative"
@@ -247,6 +244,26 @@ const DefaultNode = ({ data }) => {
                             )}
                           </>
                         )}
+                        {/* 调试信息 */}
+                        <div className="text-[9px] text-gray-400 mt-1 bg-gray-100 p-1 rounded">
+                          <details>
+                            <summary className="cursor-pointer">
+                              Debug Info
+                            </summary>
+                            <pre className="whitespace-pre-wrap break-all">
+                              {JSON.stringify(
+                                {
+                                  value: param.value,
+                                  displayValue: param.displayValue,
+                                  modRange: param.modRange,
+                                  isModulated: param.isModulated,
+                                },
+                                null,
+                                2
+                              )}
+                            </pre>
+                          </details>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -268,7 +285,7 @@ const getPortColor = (dataType) => {
     case 'CONTROL':
       return '#3498db'; // 蓝色
     case 'TRIGGER':
-      return '#f39c12'; // 橙色
+      return '#e67e22'; // 橙色
     case 'MIDI':
       return '#9b59b6'; // 紫色
     case 'CLOCK':

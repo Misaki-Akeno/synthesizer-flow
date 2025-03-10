@@ -4,7 +4,7 @@ import { Separator } from '@/components/ui/shared/separator';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import ReactFlowContent from '@/components/flow/react-flow-content';
-import ModulationDebug from '@/components/ModulationDebug';
+import DebugPanels from '@/components/DebugPanels';
 
 export const metadata: Metadata = {
   title: 'Synthsizer Playground',
@@ -27,7 +27,7 @@ export default function PlaygroundPage() {
 
           <div className="absolute top-4 right-4 z-50">
             <div className="bg-white/95 shadow-lg rounded-lg border border-gray-200">
-              <ModulationDebug />
+              <DebugPanels />
             </div>
           </div>
         </div>
