@@ -1,54 +1,54 @@
 import { ParameterValue } from './event';
 
 /**
- * Parameter types supported by the synthesizer
+ * 参数类型枚举
  */
 export enum ParameterType {
-  Float = 'float',
-  Enum = 'enum',
+  NUMBER = 'number',
+  INTEGER = 'integer',
+  STRING = 'string',
+  BOOLEAN = 'boolean',
+  ENUM = 'enum',
+  OBJECT = 'object'
 }
 
 /**
- * Base interface for all parameter types
+ * 参数接口
  */
-export interface ParameterBase {
+export interface Parameter {
+  /** 参数ID */
   id: string;
+  
+  /** 参数名称 */
   name: string;
-  type: ParameterType;
-  unit?: string;
-  description?: string;
-  value: ParameterValue;
-  defaultValue?: ParameterValue;
-  modulationAmount?: number;
-  modulationSource?: string | null;
-}
-
-/**
- * Float parameter type
- */
-export interface FloatParameter extends ParameterBase {
-  type: ParameterType.Float;
-  value: number;
-  defaultValue: number;
-  min: number;
-  max: number;
-  step?: number;
-}
-
-/**
- * Enum parameter type
- */
-export interface EnumParameter extends ParameterBase {
-  type: ParameterType.Enum;
+  
+  /** 参数类型 */
+  type: ParameterType | string;
+  
+  /** 当前值 */
   value: string | number;
-  defaultValue: string | number;
-  options: Array<{
-    label: string;
-    value: string | number;
-  }>;
+  
+  /** 默认值 */
+  defaultValue: ParameterValue;
+  
+  /** 调制量 */
+  modulationAmount: number;
+  
+  /** 调制源 */
+  modulationSource: string | null;
+  
+  /** 最小值（数值类型参数） */
+  min?: number;
+  
+  /** 最大值（数值类型参数） */
+  max?: number;
+  
+  /** 步长（数值类型参数） */
+  step?: number;
+  
+  /** 单位（如Hz、dB等） */
+  unit?: string;
+  
+  /** 可选值列表（枚举类型参数） */
+  options?: Array<string | number>;
 }
-
-/**
- * Union type of all parameter types
- */
-export type Parameter = FloatParameter | EnumParameter;

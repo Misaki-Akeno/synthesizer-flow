@@ -279,3 +279,5 @@ export interface ModuleFactory {
   /** 销毁模块实例 */
   destroy(moduleId: string): Promise<void>;
 }
+
+export { ParameterValue };
