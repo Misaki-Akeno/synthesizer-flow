@@ -10,35 +10,35 @@ import { Position } from '@/types/event';
 
 // 模拟依赖
 vi.mock('nanoid', () => ({
-  nanoid: () => 'mocked-id-12345'
+  nanoid: () => 'mocked-id-12345',
 }));
 
 vi.mock('../../factory/ModuleFactory', () => ({
   moduleFactory: {
     create: vi.fn(),
-    destroy: vi.fn()
-  }
+    destroy: vi.fn(),
+  },
 }));
 
 vi.mock('../../events/EventBus', () => ({
   eventBus: {
     on: vi.fn(),
     emit: vi.fn(),
-    off: vi.fn()
-  }
+    off: vi.fn(),
+  },
 }));
 
 vi.mock('../../store/useModulesStore', () => {
   const mockAddModule = vi.fn();
   const mockGetModule = vi.fn();
-  
+
   return {
     useModulesStore: {
       getState: vi.fn(() => ({
         addModule: mockAddModule,
-        getModule: mockGetModule
-      }))
-    }
+        getModule: mockGetModule,
+      })),
+    },
   };
 });
 
@@ -48,7 +48,7 @@ describe('ModuleService', () => {
     id: 'test-module-id',
     typeId: 'test-type-id',
     connect: vi.fn(),
-    setParameterValue: vi.fn()
+    setParameterValue: vi.fn(),
   };
 
   beforeEach(() => {
@@ -66,12 +66,30 @@ describe('ModuleService', () => {
 
       // 验证事件监听器已正确注册
       expect(eventBus.on).toHaveBeenCalledTimes(6);
-      expect(eventBus.on).toHaveBeenCalledWith('MODULE.CREATE_REQUEST', expect.any(Function));
-      expect(eventBus.on).toHaveBeenCalledWith('MODULE.DESTROY_REQUEST', expect.any(Function));
-      expect(eventBus.on).toHaveBeenCalledWith('MODULE.INSTANTIATE_REQUESTED', expect.any(Function));
-      expect(eventBus.on).toHaveBeenCalledWith('MODULE.DISPOSE_REQUESTED', expect.any(Function));
-      expect(eventBus.on).toHaveBeenCalledWith('CONNECTION.REQUESTED', expect.any(Function));
-      expect(eventBus.on).toHaveBeenCalledWith('PARAMETER.CHANGE_REQUESTED', expect.any(Function));
+      expect(eventBus.on).toHaveBeenCalledWith(
+        'MODULE.CREATE_REQUEST',
+        expect.any(Function)
+      );
+      expect(eventBus.on).toHaveBeenCalledWith(
+        'MODULE.DESTROY_REQUEST',
+        expect.any(Function)
+      );
+      expect(eventBus.on).toHaveBeenCalledWith(
+        'MODULE.INSTANTIATE_REQUESTED',
+        expect.any(Function)
+      );
+      expect(eventBus.on).toHaveBeenCalledWith(
+        'MODULE.DISPOSE_REQUESTED',
+        expect.any(Function)
+      );
+      expect(eventBus.on).toHaveBeenCalledWith(
+        'CONNECTION.REQUESTED',
+        expect.any(Function)
+      );
+      expect(eventBus.on).toHaveBeenCalledWith(
+        'PARAMETER.CHANGE_REQUESTED',
+        expect.any(Function)
+      );
 
       // 验证初始化事件已发出
       expect(eventBus.emit).toHaveBeenCalledWith('MODULE_SERVICE.INITIALIZED', {
@@ -88,31 +106,42 @@ describe('ModuleService', () => {
       const event = {
         typeId: 'test-type-id',
         instanceId: 'test-instance-id',
-        position: { x: 100, y: 200 } as Position
+        position: { x: 100, y: 200 } as Position,
       };
 
       // @ts-ignore - 访问私有方法
       await moduleService['handleModuleCreateRequest'](event);
 
-      expect(moduleFactory.create).toHaveBeenCalledWith('test-type-id', 'test-instance-id');
-      expect(useModulesStore.getState().addModule).toHaveBeenCalledWith(mockModuleBase, event.position);
+      expect(moduleFactory.create).toHaveBeenCalledWith(
+        'test-type-id',
+        'test-instance-id'
+      );
+      expect(useModulesStore.getState().addModule).toHaveBeenCalledWith(
+        mockModuleBase,
+        event.position
+      );
     });
 
     it('should handle errors when creating a module', async () => {
       const error = new Error('Creation failed');
       (moduleFactory.create as any).mockRejectedValue(error);
-      
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
 
       const event = {
         typeId: 'test-type-id',
-        instanceId: 'test-instance-id'
+        instanceId: 'test-instance-id',
       };
 
       // @ts-ignore - 访问私有方法
       await moduleService['handleModuleCreateRequest'](event);
 
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to create module:', error);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to create module:',
+        error
+      );
       consoleSpy.mockRestore();
     });
   });
@@ -132,15 +161,20 @@ describe('ModuleService', () => {
     it('should handle errors when destroying a module', async () => {
       const error = new Error('Destruction failed');
       (moduleFactory.destroy as any).mockRejectedValue(error);
-      
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
 
       const event = { moduleId: 'test-module-id' };
 
       // @ts-ignore - 访问私有方法
       await moduleService['handleModuleDestroyRequest'](event);
 
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to destroy module:', error);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to destroy module:',
+        error
+      );
       consoleSpy.mockRestore();
     });
   });
@@ -149,7 +183,7 @@ describe('ModuleService', () => {
     it('should emit events for module instantiation', async () => {
       const event = {
         moduleTypeId: 'test-type-id',
-        position: { x: 100, y: 200 } as Position
+        position: { x: 100, y: 200 } as Position,
       };
 
       // @ts-ignore - 访问私有方法
@@ -159,14 +193,14 @@ describe('ModuleService', () => {
       expect(eventBus.emit).toHaveBeenCalledWith('MODULE.CREATE_REQUEST', {
         typeId: 'test-type-id',
         instanceId: 'mocked-id-12345',
-        position: event.position
+        position: event.position,
       });
 
       // 验证实例化完成事件已发出
       expect(eventBus.emit).toHaveBeenCalledWith('MODULE.INSTANTIATED', {
         moduleId: 'mocked-id-12345',
         moduleTypeId: 'test-type-id',
-        position: event.position
+        position: event.position,
       });
     });
 
@@ -175,25 +209,33 @@ describe('ModuleService', () => {
       (eventBus.emit as any).mockImplementationOnce(() => {
         throw error;
       });
-      
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
+
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
       const event = {
-        moduleTypeId: 'test-type-id'
+        moduleTypeId: 'test-type-id',
       };
 
       // @ts-ignore - 访问私有方法
       await moduleService['handleModuleInstantiateRequest'](event);
 
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to instantiate module:', error);
-      expect(eventBus.emit).toHaveBeenLastCalledWith('MODULE.INSTANTIATE_FAILED', {
-        moduleTypeId: 'test-type-id',
-        error: {
-          code: 'MODULE_INSTANTIATE_ERROR',
-          message: `Failed to instantiate module: ${error.message}`,
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to instantiate module:',
+        error
+      );
+      expect(eventBus.emit).toHaveBeenLastCalledWith(
+        'MODULE.INSTANTIATE_FAILED',
+        {
+          moduleTypeId: 'test-type-id',
+          error: {
+            code: 'MODULE_INSTANTIATE_ERROR',
+            message: `Failed to instantiate module: ${error.message}`,
+          },
         }
-      });
-      
+      );
+
       consoleSpy.mockRestore();
     });
   });
@@ -206,7 +248,7 @@ describe('ModuleService', () => {
       await moduleService['handleModuleDisposeRequest'](event);
 
       expect(eventBus.emit).toHaveBeenCalledWith('MODULE.DESTROY_REQUEST', {
-        moduleId: 'test-module-id'
+        moduleId: 'test-module-id',
       });
     });
   });
@@ -216,23 +258,30 @@ describe('ModuleService', () => {
       // 设置模拟返回值
       (useModulesStore.getState().getModule as any)
         .mockImplementationOnce(() => ({ ...mockModuleBase }))
-        .mockImplementationOnce(() => ({ ...mockModuleBase, id: 'target-module-id' }));
+        .mockImplementationOnce(() => ({
+          ...mockModuleBase,
+          id: 'target-module-id',
+        }));
 
       const event = {
         source: 'source-id',
         target: 'target-id',
         sourceHandle: 'output1',
-        targetHandle: 'input1'
+        targetHandle: 'input1',
       };
 
       // @ts-ignore - 访问私有方法
       moduleService['handleConnectionRequest'](event);
 
-      expect(useModulesStore.getState().getModule).toHaveBeenCalledWith('source-id');
-      expect(useModulesStore.getState().getModule).toHaveBeenCalledWith('target-id');
+      expect(useModulesStore.getState().getModule).toHaveBeenCalledWith(
+        'source-id'
+      );
+      expect(useModulesStore.getState().getModule).toHaveBeenCalledWith(
+        'target-id'
+      );
       expect(mockModuleBase.connect).toHaveBeenCalledWith(
-        { ...mockModuleBase, id: 'target-module-id' }, 
-        'output1', 
+        { ...mockModuleBase, id: 'target-module-id' },
+        'output1',
         'input1'
       );
     });
@@ -242,12 +291,14 @@ describe('ModuleService', () => {
       (useModulesStore.getState().getModule as any)
         .mockReturnValueOnce(mockModuleBase)
         .mockReturnValueOnce(null);
-      
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
+
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
       const event = {
         source: 'source-id',
-        target: 'target-id'
+        target: 'target-id',
       };
 
       // @ts-ignore - 访问私有方法
@@ -257,7 +308,7 @@ describe('ModuleService', () => {
         'Failed to establish connection:',
         expect.any(Error)
       );
-      
+
       consoleSpy.mockRestore();
     });
   });
@@ -265,31 +316,40 @@ describe('ModuleService', () => {
   describe('handleParameterChangeRequest', () => {
     it('should set parameter value on the module', () => {
       // 设置模拟返回值
-      (useModulesStore.getState().getModule as any).mockReturnValue(mockModuleBase);
+      (useModulesStore.getState().getModule as any).mockReturnValue(
+        mockModuleBase
+      );
 
       const event = {
         moduleId: 'test-module-id',
         parameterId: 'test-param',
-        value: 42
+        value: 42,
       };
 
       // @ts-ignore - 访问私有方法
       moduleService['handleParameterChangeRequest'](event);
 
-      expect(useModulesStore.getState().getModule).toHaveBeenCalledWith('test-module-id');
-      expect(mockModuleBase.setParameterValue).toHaveBeenCalledWith('test-param', 42);
+      expect(useModulesStore.getState().getModule).toHaveBeenCalledWith(
+        'test-module-id'
+      );
+      expect(mockModuleBase.setParameterValue).toHaveBeenCalledWith(
+        'test-param',
+        42
+      );
     });
 
     it('should handle errors when module cannot be found', () => {
       // 设置模拟返回值
       (useModulesStore.getState().getModule as any).mockReturnValue(null);
-      
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      
+
+      const consoleSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+
       const event = {
         moduleId: 'test-module-id',
         parameterId: 'test-param',
-        value: 42
+        value: 42,
       };
 
       // @ts-ignore - 访问私有方法
@@ -299,7 +359,7 @@ describe('ModuleService', () => {
         'Failed to change parameter:',
         expect.any(Error)
       );
-      
+
       consoleSpy.mockRestore();
     });
   });
@@ -308,18 +368,24 @@ describe('ModuleService', () => {
     it('should create and return a module instance', async () => {
       // 设置模拟返回值
       (moduleFactory.create as any).mockResolvedValue(mockModuleBase);
-      
+
       const position = { x: 100, y: 200 } as Position;
       const result = await moduleService.createModule('test-type-id', position);
 
       expect(eventBus.emit).toHaveBeenCalledWith('MODULE.CREATE_REQUEST', {
         typeId: 'test-type-id',
         instanceId: 'mocked-id-12345',
-        position
+        position,
       });
-      
-      expect(moduleFactory.create).toHaveBeenCalledWith('test-type-id', 'mocked-id-12345');
-      expect(useModulesStore.getState().addModule).toHaveBeenCalledWith(mockModuleBase, position);
+
+      expect(moduleFactory.create).toHaveBeenCalledWith(
+        'test-type-id',
+        'mocked-id-12345'
+      );
+      expect(useModulesStore.getState().addModule).toHaveBeenCalledWith(
+        mockModuleBase,
+        position
+      );
       expect(result).toBe(mockModuleBase);
     });
   });

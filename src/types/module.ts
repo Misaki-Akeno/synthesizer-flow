@@ -280,4 +280,4 @@ export interface ModuleFactory {
   destroy(moduleId: string): Promise<void>;
 }
 
-export { ParameterValue };
+export { type ParameterValue };

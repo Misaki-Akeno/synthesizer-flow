@@ -67,31 +67,11 @@ export class ModuleFactory implements IModuleFactory {
       return constructor;
     }
 
-    // 最后尝试通过模块路径动态导入
-    if (config.metadata.moduleClass) {
-      try {
-        const modulePath = config.metadata.moduleClass;
-        const moduleExport = await import(modulePath);
-
-        // 尝试获取导出的模块类
-        const ExportedClass =
-          moduleExport.default || moduleExport[typeId + 'Module'];
-
-        if (ExportedClass && typeof ExportedClass === 'function') {
-          const constructor = ExportedClass as ModuleConstructor;
-          this.moduleClasses[typeId] = constructor;
-          return constructor;
-        }
-
-        throw new Error(`从 ${modulePath} 导入的模块没有提供有效的构造函数`);
-      } catch (error) {
-        console.error(`无法导入模块类 ${typeId}: ${(error as Error).message}`);
-        throw new Error(
-          `无法导入模块类 ${typeId}: ${(error as Error).message}`
-        );
-      }
-    }
-
+    // Next.js 不支持完全动态的导入路径
+    // 我们需要使用预定义的映射关系来加载模块
+    console.warn(
+      `无法动态加载模块 ${typeId}。请确保模块已在moduleConstructor中注册。`
+    );
     throw new Error(`找不到模块类 ${typeId} 的实现`);
   }
 

@@ -5,6 +5,7 @@ import { moduleFactory } from '../factory/ModuleFactory';
 import { eventBus } from '../events/EventBus';
 import { useModulesStore } from '../store/useModulesStore';
 import { Position } from '@/types/event';
+import type { EventBusError } from '@/types/event';
 
 /**
  * 模块服务
@@ -77,7 +78,6 @@ export class ModuleService {
       useModulesStore.getState().addModule(moduleInstance, position);
     } catch (error) {
       console.error('Failed to create module:', error);
-      // 错误已在moduleFactory.create中处理
     }
   }
 
@@ -112,12 +112,15 @@ export class ModuleService {
     const instanceId = nanoid();
 
     try {
-      // 发出创建请求
-      eventBus.emit('MODULE.CREATE_REQUEST', {
-        typeId: moduleTypeId,
-        instanceId,
-        position,
-      });
+      // 直接调用模块创建逻辑，而不是发送事件
+      // 创建模块实例
+      const moduleInstance = await moduleFactory.create(
+        moduleTypeId,
+        instanceId
+      );
+
+      // 将模块添加到状态存储
+      useModulesStore.getState().addModule(moduleInstance, position);
 
       // 创建成功后发出实例化完成事件
       eventBus.emit('MODULE.INSTANTIATED', {
@@ -211,23 +214,68 @@ export class ModuleService {
    * 创建模块实例
    */
   async createModule(typeId: string, position?: Position): Promise<ModuleBase> {
-    // 生成实例ID
-    const instanceId = nanoid();
+    return new Promise((resolve, reject) => {
+      try {
+        // 生成一个唯一的请求ID，用于关联创建请求和响应
+        const requestId = nanoid();
 
-    // 发出创建请求
-    eventBus.emit('MODULE.CREATE_REQUEST', {
-      typeId,
-      instanceId,
-      position,
+        // 创建一次性事件监听器，等待模块实例化完成
+        const onInstantiated = (event: {
+          moduleId: string;
+          moduleTypeId: string;
+          position?: Position;
+        }) => {
+          if (event.moduleTypeId === typeId) {
+            // 移除监听器
+            eventBus.off('MODULE.INSTANTIATED', onInstantiated);
+            eventBus.off('MODULE.INSTANTIATE_FAILED', onFailed);
+
+            // 获取创建的模块实例
+            const moduleInstance = useModulesStore
+              .getState()
+              .getModule(event.moduleId);
+            if (moduleInstance) {
+              resolve(moduleInstance);
+            } else {
+              reject(
+                new Error(
+                  `Module was instantiated but not found in store: ${event.moduleId}`
+                )
+              );
+            }
+          }
+        };
+
+        // 创建一次性事件监听器，处理模块实例化失败
+        const onFailed = (event: {
+          moduleTypeId: string;
+          error: EventBusError;
+        }) => {
+          if (event.moduleTypeId === typeId) {
+            // 移除监听器
+            eventBus.off('MODULE.INSTANTIATED', onInstantiated);
+            eventBus.off('MODULE.INSTANTIATE_FAILED', onFailed);
+
+            reject(
+              new Error(`Failed to instantiate module: ${event.error.message}`)
+            );
+          }
+        };
+
+        // 注册事件监听器
+        eventBus.on('MODULE.INSTANTIATED', onInstantiated);
+        eventBus.on('MODULE.INSTANTIATE_FAILED', onFailed);
+
+        // 发出模块实例化请求事件
+        eventBus.emit('MODULE.INSTANTIATE_REQUESTED', {
+          moduleTypeId: typeId,
+          position,
+          requestId,
+        });
+      } catch (error) {
+        reject(error);
+      }
     });
-
-    // 等待模块创建完成
-    const moduleInstance = await moduleFactory.create(typeId, instanceId);
-
-    // 添加到状态存储
-    useModulesStore.getState().addModule(moduleInstance, position);
-
-    return moduleInstance;
   }
 }
 

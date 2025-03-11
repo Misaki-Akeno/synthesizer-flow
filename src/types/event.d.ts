@@ -203,6 +203,7 @@ export interface EventTypes {
   'MODULE.INSTANTIATE_REQUESTED': {
     moduleTypeId: string;
     position?: Position;
+    requestId?: string; // 新增 requestId 属性
   };
   'MODULE.INSTANTIATED': {
     moduleId: string;
