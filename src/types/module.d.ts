@@ -157,13 +157,20 @@ export interface ModuleMetadata {
   moduleConstructor?: new (...args: unknown[]) => ModuleBase;
 
   /** 其他自定义元数据 */
-  [key: string]: ParameterValue | string[] | undefined | (new (...args: unknown[]) => ModuleBase);
+  [key: string]:
+    | ParameterValue
+    | string[]
+    | undefined
+    | (new (...args: unknown[]) => ModuleBase);
 }
 
 /**
  * 模块配置扩展属性类型
  */
-export type ModuleConfigurationExtension = Record<string, ParameterValue | Record<string, unknown>>;
+export type ModuleConfigurationExtension = Record<
+  string,
+  ParameterValue | Record<string, unknown>
+>;
 
 /**
  * 模块完整配置
@@ -188,7 +195,13 @@ export interface ModuleConfiguration {
   ui: ModuleUI;
 
   /** 引擎特定配置和其他扩展属性 */
-  [key: string]: ModuleMetadata | {inputs: ModuleInterface[], outputs: ModuleInterface[]} | Record<string, ParameterDefinition> | Preset[] | ModuleUI | ModuleConfigurationExtension[keyof ModuleConfigurationExtension];
+  [key: string]:
+    | ModuleMetadata
+    | { inputs: ModuleInterface[]; outputs: ModuleInterface[] }
+    | Record<string, ParameterDefinition>
+    | Preset[]
+    | ModuleUI
+    | ModuleConfigurationExtension[keyof ModuleConfigurationExtension];
 }
 
 /**

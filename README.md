@@ -2,8 +2,8 @@
 
 致力于构建模块化合成器
 
-
 ## 目录架构
+
 ```
 /components
 ├── ui/                  # 基础 UI 组件 (基于 Shadcn)
@@ -103,6 +103,7 @@
 └── flow.d.ts            # ReactFlow 类型扩展
 
 ```
+
 ## TODO:
 
 ### 短期目标

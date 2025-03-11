@@ -48,7 +48,10 @@ export abstract class Module implements ModuleBase {
 
   // 参数定义与值
   protected _paramValues: Record<string, ParameterValue> = {};
-  abstract getParameterDefinitions(): Record<string, { type: string; default: ParameterValue; min?: number; max?: number }>;
+  abstract getParameterDefinitions(): Record<
+    string,
+    { type: string; default: ParameterValue; min?: number; max?: number }
+  >;
 
   constructor(params: ModuleParams) {
     this.id = params.id || nanoid();
@@ -61,7 +64,7 @@ export abstract class Module implements ModuleBase {
     Object.keys(paramDefs).forEach((paramId) => {
       const paramDef = paramDefs[paramId];
       this._paramValues[paramId] = paramDef.default;
-      
+
       // 创建Parameter对象 - 修复为符合Parameter类型
       this.parameters[paramId] = {
         id: paramId,
@@ -72,10 +75,10 @@ export abstract class Module implements ModuleBase {
         modulationAmount: 0,
         modulationSource: null,
         min: paramDef.min,
-        max: paramDef.max
+        max: paramDef.max,
       } as Parameter;
     });
-    
+
     // 初始化预设
     if (this.metadata.presets && Array.isArray(this.metadata.presets)) {
       this.metadata.presets.forEach((preset: Preset) => {
@@ -116,7 +119,10 @@ export abstract class Module implements ModuleBase {
     inputPortId: string = 'default'
   ): void {
     const outputNode = this.getAudioNodeForPort(outputPortId, 'output');
-    const inputNode = (targetModule as unknown as Module).getAudioNodeForPort(inputPortId, 'input');
+    const inputNode = (targetModule as unknown as Module).getAudioNodeForPort(
+      inputPortId,
+      'input'
+    );
 
     if (!outputNode || !inputNode) {
       console.error('Invalid connection ports');
@@ -128,10 +134,10 @@ export abstract class Module implements ModuleBase {
       const connectionId = nanoid(); // 生成唯一的连接ID
       eventBus.emit('CONNECTION.ESTABLISHED', {
         connectionId: connectionId,
-        sourceId: this.id, 
+        sourceId: this.id,
         targetId: targetModule.id,
         sourceHandle: outputPortId,
-        targetHandle: inputPortId
+        targetHandle: inputPortId,
       } as ConnectionEvent);
     } catch (error: unknown) {
       console.error('Connection failed:', error);
@@ -147,7 +153,7 @@ export abstract class Module implements ModuleBase {
   ): void {
     // 如果没有指定目标，断开所有连接
     if (!targetModule) {
-      Object.values(this._audioNodes).forEach(node => {
+      Object.values(this._audioNodes).forEach((node) => {
         if (node && typeof node.disconnect === 'function') {
           node.disconnect();
         }
@@ -156,7 +162,10 @@ export abstract class Module implements ModuleBase {
     }
 
     const outputNode = this.getAudioNodeForPort(outputPortId, 'output');
-    const inputNode = (targetModule as unknown as Module).getAudioNodeForPort(inputPortId, 'input');
+    const inputNode = (targetModule as unknown as Module).getAudioNodeForPort(
+      inputPortId,
+      'input'
+    );
 
     if (!outputNode || !inputNode) {
       console.error('Invalid connection ports for disconnect');
@@ -169,10 +178,10 @@ export abstract class Module implements ModuleBase {
       const connectionId = nanoid();
       eventBus.emit('CONNECTION.BROKEN', {
         connectionId: connectionId,
-        sourceId: this.id, 
+        sourceId: this.id,
         targetId: targetModule.id,
         sourceHandle: outputPortId,
-        targetHandle: inputPortId
+        targetHandle: inputPortId,
       } as ConnectionEvent);
     } catch (error: unknown) {
       console.error('Disconnect failed:', error);
@@ -243,12 +252,15 @@ export abstract class Module implements ModuleBase {
     eventBus.emit('PRESET.LOADED', {
       moduleId: this.id,
       presetId: presetId,
-      presetName: preset.name
+      presetName: preset.name,
     });
   }
 
   // 验证参数值（确保在允许范围内）
-  protected validateParameterValue(paramId: string, value: ParameterValue): ParameterValue {
+  protected validateParameterValue(
+    paramId: string,
+    value: ParameterValue
+  ): ParameterValue {
     const paramDef = this.getParameterDefinitions()[paramId];
     if (!paramDef) return value;
 
