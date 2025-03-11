@@ -1,7 +1,6 @@
 import * as Tone from 'tone';
 import { Module, ModuleParams, Port } from '@/core/domain/Module';
 import { ParameterValue } from '@/types/event';
-import { eventBus } from '@/core/events/EventBus';
 import {
   ModuleCategory,
   ModuleConfiguration,
@@ -33,15 +32,8 @@ export const oscillatorBasicConfig: ModuleConfiguration = {
   },
 
   interfaces: {
-    inputs: [
-      {
-        id: 'sync',
-        label: '同步',
-        dataType: DataType.TRIGGER,
-        optional: true,
-        description: '同步触发输入，重置振荡器相位',
-      },
-    ],
+    // 移除了sync输入端口
+    inputs: [],
     outputs: [
       {
         id: 'audio_out',
@@ -128,7 +120,7 @@ export const oscillatorBasicConfig: ModuleConfiguration = {
 };
 
 export class OscillatorBasic extends Module {
-  // 振荡器和增益器实例
+  // 核心音频组件
   private oscillator: Tone.Oscillator | null = null;
   private outputGain: Tone.Gain | null = null;
 
@@ -139,7 +131,7 @@ export class OscillatorBasic extends Module {
     });
   }
 
-  // 定义输入端口 - 从配置中获取
+  // 定义输入端口
   getInputPorts(): Port[] {
     return oscillatorBasicConfig.interfaces.inputs.map((input) => ({
       id: input.id,
@@ -149,20 +141,20 @@ export class OscillatorBasic extends Module {
     }));
   }
 
-  // 定义输出端口 - 从配置中获取
+  // 定义输出端口
   getOutputPorts(): Port[] {
     return oscillatorBasicConfig.interfaces.outputs.map((output) => ({
       id: output.id,
       type: 'output',
       dataType: output.dataType.toLowerCase() as
-        | 'trigger'
         | 'audio'
+        | 'trigger'
         | 'control',
       label: output.label,
     }));
   }
 
-  // 参数定义 - 从配置中获取
+  // 参数定义
   getParameterDefinitions(): Record<
     string,
     { type: string; default: ParameterValue; min?: number; max?: number }
@@ -186,23 +178,16 @@ export class OscillatorBasic extends Module {
 
   // 创建音频节点
   protected async createAudioNodes(): Promise<void> {
-    // 创建振荡器 - 修复类型问题，分开设置参数
+    // 创建并配置振荡器
     this.oscillator = new Tone.Oscillator();
-    this.oscillator.frequency.value = this.getParameterValue(
-      'frequency'
-    ) as number;
-    this.oscillator.detune.value = this.getParameterValue('detune') as number;
-
-    // 设置波形类型
-    const waveform = this.getParameterValue('waveform') as string;
-    if (this.isValidWaveform(waveform)) {
-      this.oscillator.type = waveform as Tone.ToneOscillatorType;
-    }
-
-    // 启动振荡器
+    this.oscillator.set({
+      frequency: this.getParameterValue('frequency') as number,
+      detune: this.getParameterValue('detune') as number,
+      type: this.getParameterValue('waveform') as Tone.ToneOscillatorType,
+    });
     this.oscillator.start();
 
-    // 创建增益节点控制音量
+    // 创建输出增益节点
     this.outputGain = new Tone.Gain(
       this.getParameterValue('amplitude') as number
     );
@@ -216,26 +201,9 @@ export class OscillatorBasic extends Module {
       audio_out: this.outputGain,
     };
 
-    // 为同步输入配置事件处理
-    this.setupSyncHandler();
-
     console.log(
       `[OscillatorBasic] 创建音频节点: typeId=${this.typeId}, id=${this.id}`
     );
-  }
-
-  // 设置同步处理
-  private setupSyncHandler(): void {
-    if (this.oscillator) {
-      // 监听同步触发事件
-      eventBus.on('TRIGGER.SYNC', (event: unknown) => {
-        const syncEvent = event as { targetId: string };
-        if (syncEvent.targetId === this.id && this.oscillator) {
-          // 重启振荡器以重置相位
-          this.oscillator.stop().start();
-        }
-      });
-    }
   }
 
   // 将参数应用到音频节点
@@ -296,8 +264,6 @@ export class OscillatorBasic extends Module {
     if (portType === 'output' && portId === 'audio_out' && this.outputGain) {
       return this.outputGain;
     }
-
-    // 同步端口不直接返回音频节点，因为它是触发类型
     return null;
   }
 
@@ -325,7 +291,7 @@ export class OscillatorBasic extends Module {
 oscillatorBasicConfig.metadata.moduleConstructor =
   OscillatorBasic as unknown as new (...args: unknown[]) => ModuleBase;
 
-// 导出模块创建函数，用于模块工厂
+// 导出模块创建函数
 export function createOscillatorBasic(params: ModuleParams): OscillatorBasic {
   return new OscillatorBasic(params);
 }

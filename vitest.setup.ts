@@ -11,7 +11,21 @@ vi.mock('tone', () => {
       stop: vi.fn(),
       bpm: { value: 120 },
     },
-    // 根据项目需要继续添加更多模拟
+    Oscillator: vi.fn().mockImplementation(() => ({
+      set: vi.fn(),
+      start: vi.fn(),
+      connect: vi.fn(),
+      frequency: { value: 440 },
+      detune: { value: 0 },
+      type: 'sine',
+      stop: vi.fn(),
+      dispose: vi.fn(),
+    })),
+    Gain: vi.fn().mockImplementation(() => ({
+      gain: { value: 0.8 },
+      connect: vi.fn(),
+      dispose: vi.fn(),
+    })),
   };
 });
 
