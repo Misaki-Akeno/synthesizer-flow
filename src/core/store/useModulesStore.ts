@@ -20,40 +20,40 @@ export interface Connection {
 interface ModulesState {
   // 所有模块实例
   modules: Record<string, ModuleBase>;
-  
+
   // 模块位置信息
   positions: Record<string, NodePosition>;
-  
+
   // 模块间的连接
   connections: Record<string, Connection>;
-  
+
   // 当前选中的模块ID
   selectedModuleId: string | null;
-  
+
   // 添加模块实例
   addModule: (module: ModuleBase, position?: NodePosition) => void;
-  
+
   // 更新模块位置
   updatePosition: (moduleId: string, position: NodePosition) => void;
-  
+
   // 添加连接
   addConnection: (connection: Connection) => void;
-  
+
   // 删除连接
   removeConnection: (connectionId: string) => void;
-  
+
   // 设置选中模块
   selectModule: (moduleId: string | null) => void;
-  
+
   // 获取模块实例
   getModule: (moduleId: string) => ModuleBase | undefined;
-  
+
   // 获取所有模块实例
   getAllModules: () => ModuleBase[];
-  
+
   // 获取模块位置
   getPosition: (moduleId: string) => NodePosition | undefined;
-  
+
   // 获取所有连接
   getAllConnections: () => Connection[];
 }
@@ -64,38 +64,38 @@ export const useModulesStore = create<ModulesState>((set, get) => ({
   positions: {},
   connections: {},
   selectedModuleId: null,
-  
+
   addModule: (module, position) => {
     set((state) => ({
       modules: {
         ...state.modules,
-        [module.id]: module
+        [module.id]: module,
       },
       positions: {
         ...state.positions,
-        [module.id]: position || { x: 100, y: 100 }
-      }
+        [module.id]: position || { x: 100, y: 100 },
+      },
     }));
   },
-  
+
   updatePosition: (moduleId, position) => {
     set((state) => ({
       positions: {
         ...state.positions,
-        [moduleId]: position
-      }
+        [moduleId]: position,
+      },
     }));
   },
-  
+
   addConnection: (connection) => {
     set((state) => ({
       connections: {
         ...state.connections,
-        [connection.id]: connection
-      }
+        [connection.id]: connection,
+      },
     }));
   },
-  
+
   removeConnection: (connectionId) => {
     set((state) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -103,24 +103,24 @@ export const useModulesStore = create<ModulesState>((set, get) => ({
       return { connections: rest };
     });
   },
-  
+
   selectModule: (moduleId) => {
     set({ selectedModuleId: moduleId });
   },
-  
+
   getModule: (moduleId) => {
     return get().modules[moduleId];
   },
-  
+
   getAllModules: () => {
     return Object.values(get().modules);
   },
-  
+
   getPosition: (moduleId) => {
     return get().positions[moduleId];
   },
-  
+
   getAllConnections: () => {
     return Object.values(get().connections);
-  }
+  },
 }));

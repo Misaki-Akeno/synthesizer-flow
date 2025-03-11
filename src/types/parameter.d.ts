@@ -9,7 +9,7 @@ export enum ParameterType {
   STRING = 'string',
   BOOLEAN = 'boolean',
   ENUM = 'enum',
-  OBJECT = 'object'
+  OBJECT = 'object',
 }
 
 /**
@@ -18,37 +18,37 @@ export enum ParameterType {
 export interface Parameter {
   /** 参数ID */
   id: string;
-  
+
   /** 参数名称 */
   name: string;
-  
+
   /** 参数类型 */
   type: ParameterType | string;
-  
+
   /** 当前值 */
   value: string | number;
-  
+
   /** 默认值 */
   defaultValue: ParameterValue;
-  
+
   /** 调制量 */
   modulationAmount: number;
-  
+
   /** 调制源 */
   modulationSource: string | null;
-  
+
   /** 最小值（数值类型参数） */
   min?: number;
-  
+
   /** 最大值（数值类型参数） */
   max?: number;
-  
+
   /** 步长（数值类型参数） */
   step?: number;
-  
+
   /** 单位（如Hz、dB等） */
   unit?: string;
-  
+
   /** 可选值列表（枚举类型参数） */
   options?: Array<string | number>;
 }
