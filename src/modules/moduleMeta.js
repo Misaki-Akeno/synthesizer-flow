@@ -1,6 +1,7 @@
 /**
  * 合成器流模块配置
  * 基于 Tone.js 实现
+ * 临时数据源
  */
 
 export const moduleConfigurations = [

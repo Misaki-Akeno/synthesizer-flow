@@ -11,7 +11,7 @@ import {
 import ContextMenu from './menus/FlowContextMenu';
 
 import useRootStore from '@/core/store/rootStore';
-import DefaultModule from '@/components/modules/DefaultModule';
+import DefaultModule from '@/modules/DefaultModule';
 
 import DevTools from './devTools/DevTools';
 

@@ -6,7 +6,7 @@ import {
   PortContainer,
   ParameterControl,
   PortHandle,
-} from '@/components/modules/DefaultModuleComponents.jsx';
+} from '@/modules/DefaultModuleComponents.jsx';
 
 const DefaultModule = ({ data, id }) => {
   const {
