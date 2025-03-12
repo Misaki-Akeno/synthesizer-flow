@@ -19,7 +19,6 @@ import ModuleDebugger from './ModuleDebugger';
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(true);
   const [position, setPosition] = useState({ x: 20, y: 20 });
-  // 使用类型断言确保nodeRef被认为是非null的
   const nodeRef = useRef<HTMLDivElement>(
     null
   ) as React.RefObject<HTMLDivElement>;
@@ -73,8 +72,6 @@ export default function DevTools() {
             <Accordion
               type="multiple"
               defaultValue={[
-                'node-inspector',
-                'change-logger',
                 'viewport-logger',
                 'module-store',
                 'module-debugger',
@@ -92,6 +89,12 @@ export default function DevTools() {
                 </div>
               </DevToolSection>
 
+              <DevToolSection id="viewport-logger" title="视口信息">
+                <div className="px-4 py-2">
+                  <ViewportLogger />
+                </div>
+              </DevToolSection>
+
               <DevToolSection id="node-inspector" title="节点检查器">
                 <div className="px-4 py-2">
                   <NodeInspector />
@@ -101,12 +104,6 @@ export default function DevTools() {
               <DevToolSection id="change-logger" title="变更日志">
                 <div className="px-4 py-2">
                   <ChangeLogger />
-                </div>
-              </DevToolSection>
-
-              <DevToolSection id="viewport-logger" title="视口信息">
-                <div className="px-4 py-2">
-                  <ViewportLogger />
                 </div>
               </DevToolSection>
             </Accordion>
