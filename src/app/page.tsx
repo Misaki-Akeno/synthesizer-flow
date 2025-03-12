@@ -1,13 +1,13 @@
 import { Metadata } from 'next';
 
-import { Separator } from '@/components/ui/shared/separator';
+import { Separator } from '@/components/ui/separator';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import ReactFlowContent from '@/components/flow/react-flow-content';
+import Canvas from '@/components/workbench/Canvas';
 
 export const metadata: Metadata = {
-  title: 'Playground',
-  description: 'The OpenAI Playground built using the components.',
+  title: 'Synthsizer Playground',
+  description: 'A playground for building synthesizers',
 };
 
 export default function PlaygroundPage() {
@@ -21,7 +21,7 @@ export default function PlaygroundPage() {
         <Separator />
         <div className="flex-1 overflow-hidden">
           <ReactFlowProvider>
-            <ReactFlowContent />
+            <Canvas />
           </ReactFlowProvider>
         </div>
       </div>
