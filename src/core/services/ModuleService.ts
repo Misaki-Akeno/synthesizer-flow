@@ -6,6 +6,7 @@ import { eventBus } from '../events/EventBus';
 import { useModulesStore } from '../store/useModulesStore';
 import { Position } from '@/types/event';
 import type { EventBusError } from '@/types/event';
+import { connectionService } from './ConnectionService';
 
 /**
  * 模块服务
@@ -40,17 +41,14 @@ export class ModuleService {
       this.handleModuleDisposeRequest.bind(this)
     );
 
-    // 监听连接请求
-    eventBus.on(
-      'CONNECTION.REQUESTED',
-      this.handleConnectionRequest.bind(this)
-    );
-
     // 监听参数变更请求
     eventBus.on(
       'PARAMETER.CHANGE_REQUESTED',
       this.handleParameterChangeRequest.bind(this)
     );
+
+    // 初始化连接服务
+    await connectionService.initialize();
 
     // 发出模块服务初始化完成事件
     eventBus.emit('MODULE_SERVICE.INITIALIZED', {
@@ -152,35 +150,6 @@ export class ModuleService {
     eventBus.emit('MODULE.DESTROY_REQUEST', {
       moduleId,
     });
-  }
-
-  /**
-   * 处理连接请求
-   */
-  private handleConnectionRequest(event: {
-    source: string;
-    target: string;
-    sourceHandle?: string;
-    targetHandle?: string;
-  }): void {
-    const { source, target, sourceHandle, targetHandle } = event;
-
-    try {
-      // 获取模块实例
-      const sourceModule = useModulesStore.getState().getModule(source);
-      const targetModule = useModulesStore.getState().getModule(target);
-
-      if (!sourceModule || !targetModule) {
-        throw new Error('Source or target module not found');
-      }
-
-      // 建立连接
-      sourceModule.connect(targetModule, sourceHandle, targetHandle);
-
-      // 连接事件已经在模块connect方法中发出
-    } catch (error) {
-      console.error('Failed to establish connection:', error);
-    }
   }
 
   /**

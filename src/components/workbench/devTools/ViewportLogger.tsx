@@ -1,4 +1,4 @@
-import { Panel, useStore } from '@xyflow/react';
+import { useStore } from '@xyflow/react';
 
 export default function ViewportLogger() {
   const viewport = useStore(
@@ -8,5 +8,5 @@ export default function ViewportLogger() {
       )}, zoom: ${s.transform[2].toFixed(2)}`
   );
 
-  return <Panel position="bottom-left">{viewport}</Panel>;
+  return <div className="text-sm">{viewport}</div>;
 }

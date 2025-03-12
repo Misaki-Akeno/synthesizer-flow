@@ -1,6 +1,6 @@
 import * as React from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { cn } from '@/lib/utils/cn';
+import { cn } from '@/lib/utils';
 import {
   MenuSection,
   MenuItem,

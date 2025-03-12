@@ -1,5 +1,5 @@
 import * as ContextMenu from '@radix-ui/react-context-menu';
-import { cn } from '@/lib/utils/cn';
+import { cn } from '@/lib/utils';
 import { ChevronRightIcon } from '@radix-ui/react-icons';
 import React, { JSX } from 'react';
 

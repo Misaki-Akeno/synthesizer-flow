@@ -6,8 +6,10 @@ import { moduleRegistry } from '@/core/services/ModuleRegistry';
 import { discoverAndRegisterModules } from '@/core/services/ModuleRegistry';
 import { eventBus } from '@/core/events/EventBus';
 import { useModulesStore } from '@/core/store/useModulesStore';
+import { Button } from '@/components/ui/button';
 
-export default function DebugPage() {
+export default function ModuleDebugger() {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [modules, setModules] = useState<string[]>([]);
   const [availableModules, setAvailableModules] = useState<string[]>([]);
   const allModules = useModulesStore((state) => state.modules);
@@ -86,48 +88,32 @@ export default function DebugPage() {
   };
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold mb-4">合成器调试页面</h1>
-
-      <div className="mb-6">
-        <h2 className="text-xl font-bold mb-2">可用模块</h2>
+    <div className="space-y-3">
+      <div className="mb-3">
+        <h3 className="font-medium mb-2">可用模块</h3>
         <div className="flex gap-2 flex-wrap">
           {availableModules.map((moduleType) => (
-            <button
+            <Button
+              size="sm"
+              variant="outline"
               key={moduleType}
               onClick={() => addModule(moduleType)}
-              className="px-4 py-2 bg-green-500 text-white rounded"
             >
               添加 {moduleType}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
-      <div className="mb-6">
-        <h2 className="text-xl font-bold mb-2">已创建模块</h2>
-        <ul className="list-disc pl-5">
-          {modules.map((moduleId) => (
-            <li key={moduleId}>{moduleId}</li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="mb-6">
-        <h2 className="text-xl font-bold mb-2">操作</h2>
+      <div className="mb-3">
+        <h3 className="font-medium mb-2">操作</h3>
         <div className="flex gap-2">
-          <button
-            onClick={connectModules}
-            className="px-4 py-2 bg-purple-500 text-white rounded"
-          >
+          <Button size="sm" variant="secondary" onClick={connectModules}>
             连接前两个模块
-          </button>
-          <button
-            onClick={playTestTone}
-            className="px-4 py-2 bg-red-500 text-white rounded"
-          >
+          </Button>
+          <Button size="sm" variant="secondary" onClick={playTestTone}>
             测试声音
-          </button>
+          </Button>
         </div>
       </div>
     </div>
