@@ -1,10 +1,9 @@
 import { Metadata } from 'next';
 
 import { Separator } from '@/components/ui/separator';
-// import { ReactFlowProvider } from '@xyflow/react';
+import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-// import Canvas from '@/components/workbench/Canvas';
-// import DebugPanels from '@/components/workbench/devTools/DebugPanels';
+import Canvas from '@/components/workbench/Canvas';
 
 export const metadata: Metadata = {
   title: 'Synthsizer Playground',
@@ -21,15 +20,9 @@ export default function PlaygroundPage() {
         </div>
         <Separator />
         <div className="flex-1 overflow-hidden">
-          {/* <ReactFlowProvider>
+          <ReactFlowProvider>
             <Canvas />
-          </ReactFlowProvider> */}
-
-          <div className="absolute top-4 right-4 z-50">
-            <div className="bg-white/95 shadow-lg rounded-lg border border-gray-200">
-              {/* <DebugPanels /> */}
-            </div>
-          </div>
+          </ReactFlowProvider>
         </div>
       </div>
     </div>
