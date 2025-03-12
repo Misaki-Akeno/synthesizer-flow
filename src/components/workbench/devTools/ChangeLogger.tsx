@@ -5,6 +5,7 @@ import {
   type OnNodesChange,
   type NodeChange,
 } from '@xyflow/react';
+// import { ScrollArea } from "@/components/ui/scroll-area";
 
 type ChangeLoggerProps = {
   color?: string;
@@ -20,20 +21,21 @@ function ChangeInfo({ change }: ChangeInfoProps) {
   const { type } = change;
 
   return (
-    <div style={{ marginBottom: 4 }}>
-      <div>node id: {id}</div>
-      <div>
+    <div className="border-b last:border-0 py-2">
+      <div className="font-medium text-sm">
+        {type} - 节点ID: {id}
+      </div>
+      <div className="text-xs text-muted-foreground">
         {type === 'add' ? JSON.stringify(change.item, null, 2) : null}
         {type === 'dimensions'
-          ? `dimensions: ${change.dimensions?.width} × ${change.dimensions?.height}`
+          ? `尺寸: ${change.dimensions?.width} × ${change.dimensions?.height}`
           : null}
         {type === 'position'
-          ? `position: ${change.position?.x.toFixed(
+          ? `位置: ${change.position?.x.toFixed(
               1
             )}, ${change.position?.y.toFixed(1)}`
           : null}
-        {type === 'remove' ? 'remove' : null}
-        {type === 'select' ? (change.selected ? 'select' : 'unselect') : null}
+        {type === 'remove' ? '已移除' : null}
       </div>
     </div>
   );
@@ -64,7 +66,6 @@ export default function ChangeLogger({ limit = 20 }: ChangeLoggerProps) {
 
   return (
     <div className="react-flow__devtools-changelogger">
-      <div className="react-flow__devtools-title">Change Logger</div>
       {changes.length === 0 ? (
         <>no changes triggered</>
       ) : (
