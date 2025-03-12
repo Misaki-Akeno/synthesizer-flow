@@ -157,25 +157,11 @@ export class OscillatorBasic extends Module {
   // 参数定义
   getParameterDefinitions(): Record<
     string,
-    {
-      type: string;
-      default: ParameterValue;
-      min?: number;
-      max?: number;
-      options: never[];
-      step: number | undefined;
-    }
+    { type: string; default: ParameterValue; min?: number; max?: number; options: never[]; step: number | undefined }
   > {
     const result: Record<
       string,
-      {
-        type: string;
-        default: ParameterValue;
-        min?: number;
-        max?: number;
-        options: never[];
-        step: number | undefined;
-      }
+      { type: string; default: ParameterValue; min?: number; max?: number; options: never[]; step: number | undefined }
     > = {};
 
     Object.entries(oscillatorBasicConfig.parameters).forEach(([key, param]) => {
@@ -188,6 +174,8 @@ export class OscillatorBasic extends Module {
         step: param.step,
       };
     });
+
+
 
     return result;
   }
