@@ -27,7 +27,10 @@ class ParametersService {
    * @param parameterId 参数ID
    * @returns 参数值，如果参数不存在则返回undefined
    */
-  getParameterValue(moduleId: string, parameterId: string): ParameterValue | undefined {
+  getParameterValue(
+    moduleId: string,
+    parameterId: string
+  ): ParameterValue | undefined {
     const activeModule = useModulesStore.getState().getModule(moduleId);
     if (!activeModule) {
       console.warn(`模块不存在: ${moduleId}`);
@@ -50,7 +53,11 @@ class ParametersService {
    * @param value 新的参数值
    * @returns 是否成功设置了参数值
    */
-  setParameterValue(moduleId: string, parameterId: string, value: ParameterValue): boolean {
+  setParameterValue(
+    moduleId: string,
+    parameterId: string,
+    value: ParameterValue
+  ): boolean {
     const activeModule = useModulesStore.getState().getModule(moduleId);
     if (!activeModule) {
       console.warn(`模块不存在: ${moduleId}`);
@@ -81,7 +88,7 @@ class ParametersService {
       moduleId,
       parameterId,
       value: validatedValue,
-      previousValue
+      previousValue,
     });
 
     return true;
@@ -93,11 +100,15 @@ class ParametersService {
    * @param parameterId 参数ID
    * @param value 新的参数值
    */
-  requestParameterChange(moduleId: string, parameterId: string, value: ParameterValue): void {
+  requestParameterChange(
+    moduleId: string,
+    parameterId: string,
+    value: ParameterValue
+  ): void {
     eventBus.emit('PARAMETER.CHANGE_REQUESTED', {
       moduleId,
       parameterId,
-      value
+      value,
     });
   }
 
@@ -109,7 +120,12 @@ class ParametersService {
    * @param amount 调制量
    * @returns 是否成功设置了调制
    */
-  setModulation(moduleId: string, parameterId: string, sourceId: string | null, amount: number): boolean {
+  setModulation(
+    moduleId: string,
+    parameterId: string,
+    sourceId: string | null,
+    amount: number
+  ): boolean {
     const activeModule = useModulesStore.getState().getModule(moduleId);
     if (!activeModule) {
       console.warn(`模块不存在: ${moduleId}`);
@@ -131,7 +147,7 @@ class ParametersService {
       moduleId,
       parameterId,
       source: sourceId,
-      amount
+      amount,
     });
 
     return true;
@@ -143,8 +159,11 @@ class ParametersService {
    * @param parameter 参数对象
    * @returns 转换后的值，如果无效则返回undefined
    */
-  private validateAndConvertValue(value: ParameterValue, parameter: Parameter): ParameterValue | undefined {
-    switch(parameter.type) {
+  private validateAndConvertValue(
+    value: ParameterValue,
+    parameter: Parameter
+  ): ParameterValue | undefined {
+    switch (parameter.type) {
       case ParameterType.NUMBER:
         if (typeof value !== 'number') {
           try {
@@ -161,7 +180,7 @@ class ParametersService {
           value = parameter.max;
         }
         return value;
-        
+
       case ParameterType.INTEGER:
         if (typeof value !== 'number') {
           try {
@@ -179,7 +198,7 @@ class ParametersService {
           value = parameter.max;
         }
         return value;
-        
+
       case ParameterType.BOOLEAN:
         if (typeof value === 'boolean') {
           return value;
@@ -191,16 +210,16 @@ class ParametersService {
           return value !== 0;
         }
         return undefined;
-        
+
       case ParameterType.STRING:
         return String(value);
-        
+
       case ParameterType.ENUM:
         if (!parameter.options?.includes(value as string | number)) {
           return undefined;
         }
         return value;
-        
+
       default:
         return value;
     }

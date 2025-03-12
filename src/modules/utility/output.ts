@@ -110,11 +110,25 @@ export class OutputModule extends Module {
   // 参数定义
   getParameterDefinitions(): Record<
     string,
-    { type: string; default: ParameterValue; min?: number; max?: number }
+    {
+      type: string;
+      default: ParameterValue;
+      min?: number;
+      max?: number;
+      options: never[];
+      step: number | undefined;
+    }
   > {
     const result: Record<
       string,
-      { type: string; default: ParameterValue; min?: number; max?: number }
+      {
+        type: string;
+        default: ParameterValue;
+        min?: number;
+        max?: number;
+        options: never[];
+        step: number | undefined;
+      }
     > = {};
 
     Object.entries(outputModuleConfig.parameters).forEach(([key, param]) => {
@@ -123,6 +137,8 @@ export class OutputModule extends Module {
         default: param.default,
         min: param.min,
         max: param.max,
+        options: [],
+        step: param.step,
       };
     });
 

@@ -47,13 +47,13 @@ const Canvas = () => {
   // 处理节点变化
   const onNodesChange: OnNodesChange = useCallback((changes) => {
     setNodes((nds) => applyNodeChanges(changes, nds));
-    
+
     // 如果是位置变化，通知 flowService
-    changes.forEach(change => {
+    changes.forEach((change) => {
       if (change.type === 'position' && change.position) {
         eventBus.emit('UI.NODE.MOVED', {
           nodeId: change.id,
-          position: change.position
+          position: change.position,
         });
       }
     });
@@ -64,10 +64,10 @@ const Canvas = () => {
     setEdges((eds) => applyEdgeChanges(changes, eds));
 
     // 处理边的删除
-    changes.forEach(change => {
+    changes.forEach((change) => {
       if (change.type === 'remove') {
         eventBus.emit('UI.CONNECTION.DELETED', {
-          connectionId: change.id
+          connectionId: change.id,
         });
       }
     });
@@ -80,7 +80,7 @@ const Canvas = () => {
         source: connection.source,
         target: connection.target,
         sourceHandle: connection.sourceHandle ?? undefined,
-        targetHandle: connection.targetHandle ?? undefined
+        targetHandle: connection.targetHandle ?? undefined,
       });
     }
   }, []);

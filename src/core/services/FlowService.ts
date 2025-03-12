@@ -43,7 +43,12 @@ class FlowService {
 
     // 监听连接请求事件
     eventBus.on('CONNECTION.REQUESTED', (event) => {
-      this.addEdge(event.source, event.target, event.sourceHandle, event.targetHandle);
+      this.addEdge(
+        event.source,
+        event.target,
+        event.sourceHandle,
+        event.targetHandle
+      );
     });
 
     // 监听节点移动事件
@@ -62,7 +67,11 @@ class FlowService {
     });
   }
 
-  public addNode(moduleId: string, moduleTypeId: string, position?: Position): void {
+  public addNode(
+    moduleId: string,
+    moduleTypeId: string,
+    position?: Position
+  ): void {
     const newNode: FlowNode = {
       id: moduleId,
       type: 'moduleNode',
@@ -77,7 +86,7 @@ class FlowService {
 
     this.nodes.push(newNode);
     this.notifyListeners();
-    
+
     // 通知UI节点已创建
     eventBus.emit('UI.NODE.CREATED', { nodeId: moduleId });
   }

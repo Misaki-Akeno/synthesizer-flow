@@ -50,7 +50,14 @@ export abstract class Module implements ModuleBase {
   protected _paramValues: Record<string, ParameterValue> = {};
   abstract getParameterDefinitions(): Record<
     string,
-    { type: string; default: ParameterValue; min?: number; max?: number }
+    {
+      options: never[];
+      step: number | undefined;
+      type: string;
+      default: ParameterValue;
+      min?: number;
+      max?: number;
+    }
   >;
 
   constructor(params: ModuleParams) {
@@ -76,6 +83,12 @@ export abstract class Module implements ModuleBase {
         modulationSource: null,
         min: paramDef.min,
         max: paramDef.max,
+        step: paramDef.step,
+        // 确保枚举类型参数的选项被正确设置
+        options:
+          paramDef.type.toString().toUpperCase() === 'ENUM'
+            ? paramDef.options || []
+            : undefined,
       } as Parameter;
     });
 
