@@ -1,12 +1,18 @@
 import { eventBus } from '../events/EventBus';
 import { useModulesStore } from '../store/useModulesStore';
 import { nanoid } from 'nanoid';
+import { container } from '../di/Container';
 
 /**
  * 连接服务
  * 负责处理模块之间的连接相关功能
  */
 export class ConnectionService {
+  constructor() {
+    // 将自身注册到容器
+    container.register('connectionService', this);
+  }
+
   /**
    * 初始化连接服务
    */
@@ -16,8 +22,6 @@ export class ConnectionService {
       'CONNECTION.REQUESTED',
       this.handleConnectionRequest.bind(this)
     );
-
-    console.log('ConnectionService initialized');
   }
 
   /**
@@ -39,35 +43,33 @@ export class ConnectionService {
       if (!sourceModule || !targetModule) {
         throw new Error('Source or target module not found');
       }
-      
+
       // 建立连接
       sourceModule.connect(targetModule, sourceHandle, targetHandle);
-      
+
       // 生成连接ID
       const connectionId = nanoid();
-      
+
       // 将连接添加到存储中
       useModulesStore.getState().addConnection({
         id: connectionId,
         sourceId: source,
         targetId: target,
         sourceHandle,
-        targetHandle
+        targetHandle,
       });
-      
-      console.log(`创建连接 ${source} to ${target}`);
-      
+
       // 发出连接建立事件
       eventBus.emit('CONNECTION.ESTABLISHED', {
         connectionId,
         sourceId: source,
         targetId: target,
         sourceHandle,
-        targetHandle
+        targetHandle,
       });
     } catch (error) {
       console.error('Failed to establish connection:', error);
-      
+
       // 发出连接失败事件
       eventBus.emit('SYSTEM.ERROR', {
         message: '连接模块失败',
@@ -100,18 +102,20 @@ export class ConnectionService {
    * 删除连接
    */
   removeConnection(connectionId: string): void {
-    const connection = useModulesStore.getState().getAllConnections()
-      .find(conn => conn.id === connectionId);
-      
+    const connection = useModulesStore
+      .getState()
+      .getAllConnections()
+      .find((conn) => conn.id === connectionId);
+
     if (!connection) {
       console.warn(`Connection ${connectionId} not found`);
       return;
     }
-    
+
     try {
       const { sourceId, targetId, sourceHandle, targetHandle } = connection;
       const sourceModule = useModulesStore.getState().getModule(sourceId);
-      
+
       if (sourceModule) {
         sourceModule.disconnect(
           useModulesStore.getState().getModule(targetId),
@@ -119,23 +123,20 @@ export class ConnectionService {
           targetHandle
         );
       }
-      
+
       // 从存储中移除连接
       useModulesStore.getState().removeConnection(connectionId);
-      
+
       // 发出连接断开事件
       eventBus.emit('CONNECTION.BROKEN', {
         connectionId,
         sourceId,
         targetId,
         sourceHandle,
-        targetHandle
+        targetHandle,
       });
     } catch (error) {
       console.error('Failed to remove connection:', error);
     }
   }
 }
-
-// 导出连接服务单例
-export const connectionService = new ConnectionService();

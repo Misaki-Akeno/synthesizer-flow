@@ -2,7 +2,7 @@ import {
   ModuleConfiguration,
   ModuleCategory,
   ModuleRegistry as IModuleRegistry,
-} from '@/types/module';
+} from '@/interfaces/module';
 import { eventBus } from '../events/EventBus';
 import { oscillatorBasicConfig } from '@/modules/generator/oscillator-basic';
 import { outputModuleConfig } from '@/modules/utility/output';
@@ -65,8 +65,6 @@ export const moduleRegistry = new ModuleRegistry();
 
 // 用于自动发现和加载模块的函数
 export async function discoverAndRegisterModules(): Promise<void> {
-  console.log('开始发现和注册模块...');
-
   try {
     // 这里使用动态导入来获取所有模块
     // 注意: 这种方法在 Next.js 中需要特殊处理

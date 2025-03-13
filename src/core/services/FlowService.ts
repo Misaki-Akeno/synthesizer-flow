@@ -1,7 +1,8 @@
 import { eventBus } from '../events/EventBus';
-import type { ModuleBase } from '@/types/module';
-import type { Position } from '@/types/event';
+import type { ModuleBase } from '@/interfaces/module';
+import type { Position } from '@/interfaces/event';
 import { nanoid } from 'nanoid';
+import { container } from '../di/Container';
 
 type FlowNode = {
   id: string;
@@ -26,13 +27,15 @@ type FlowEdge = {
   targetHandle?: string;
 };
 
-class FlowService {
+export class FlowService {
   private nodes: FlowNode[] = [];
   private edges: FlowEdge[] = [];
   private listeners: Set<() => void> = new Set();
 
   constructor() {
     this.registerEventListeners();
+    // 将自身注册到容器
+    container.register('flowService', this);
   }
 
   private registerEventListeners(): void {
@@ -43,7 +46,12 @@ class FlowService {
 
     // 监听连接请求事件
     eventBus.on('CONNECTION.REQUESTED', (event) => {
-      this.addEdge(event.source, event.target, event.sourceHandle, event.targetHandle);
+      this.addEdge(
+        event.source,
+        event.target,
+        event.sourceHandle,
+        event.targetHandle
+      );
     });
 
     // 监听节点移动事件
@@ -62,7 +70,11 @@ class FlowService {
     });
   }
 
-  public addNode(moduleId: string, moduleTypeId: string, position?: Position): void {
+  public addNode(
+    moduleId: string,
+    moduleTypeId: string,
+    position?: Position
+  ): void {
     const newNode: FlowNode = {
       id: moduleId,
       type: 'moduleNode',
@@ -77,7 +89,7 @@ class FlowService {
 
     this.nodes.push(newNode);
     this.notifyListeners();
-    
+
     // 通知UI节点已创建
     eventBus.emit('UI.NODE.CREATED', { nodeId: moduleId });
   }
@@ -189,5 +201,5 @@ class FlowService {
   }
 }
 
-// 创建单例实例
-export const flowService = new FlowService();
+// 不再导出单例实例，请通过容器获取
+// 使用方法：container.get<FlowService>('flowService')

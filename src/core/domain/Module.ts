@@ -1,31 +1,18 @@
 import { nanoid } from 'nanoid';
 import { eventBus } from '@/core/events/EventBus';
 import * as Tone from 'tone';
-import { ParameterValue } from '@/types/event';
-import { ModuleBase, ModuleMetadata, Preset } from '@/types/module';
-import { Parameter } from '@/types/parameter';
-
-export interface Port {
-  id: string;
-  type: 'input' | 'output';
-  dataType: 'audio' | 'control' | 'trigger' | 'midi';
-  label: string;
-}
-
-export interface ModuleParams {
-  id?: string;
-  typeId: string;
-  metadata: ModuleMetadata;
-  position?: { x: number; y: number };
-}
-
-export interface ConnectionEvent {
-  connectionId: string; // 添加必需的 connectionId 字段
-  sourceId: string;
-  targetId: string;
-  sourceHandle?: string;
-  targetHandle?: string;
-}
+import { ParameterValue } from '@/interfaces/event';
+import {
+  ModuleBase,
+  ModuleMetadata,
+  Preset,
+  Port,
+  ModuleParams,
+  ConnectionEvent,
+} from '@/interfaces/module';
+import { Parameter } from '@/interfaces/parameter';
+import { moduleLifecycleManager } from './ModuleLifecycle';
+import { ModuleLifecycleState } from '@/interfaces/lifecycle';
 
 export abstract class Module implements ModuleBase {
   id: string;
@@ -35,6 +22,11 @@ export abstract class Module implements ModuleBase {
   position: { x: number; y: number };
   protected _initialized: boolean = false;
   private _presets: Record<string, Preset> = {};
+
+  // Property to satisfy ModuleBase interface
+  get initialized(): boolean {
+    return this._initialized;
+  }
 
   // 音频节点引用
   protected _audioNodes: Record<string, Tone.ToneAudioNode> = {};
@@ -50,7 +42,14 @@ export abstract class Module implements ModuleBase {
   protected _paramValues: Record<string, ParameterValue> = {};
   abstract getParameterDefinitions(): Record<
     string,
-    { type: string; default: ParameterValue; min?: number; max?: number }
+    {
+      options: never[];
+      step: number | undefined;
+      type: string;
+      default: ParameterValue;
+      min?: number;
+      max?: number;
+    }
   >;
 
   constructor(params: ModuleParams) {
@@ -59,39 +58,89 @@ export abstract class Module implements ModuleBase {
     this.metadata = params.metadata;
     this.position = params.position || { x: 100, y: 100 };
 
+    // 注册到生命周期管理器
+    moduleLifecycleManager.registerModule(this.id, this);
+
     // 初始化参数值为默认值
     const paramDefs = this.getParameterDefinitions();
     Object.keys(paramDefs).forEach((paramId) => {
       const paramDef = paramDefs[paramId];
       this._paramValues[paramId] = paramDef.default;
 
-      // 创建Parameter对象 - 修复为符合Parameter类型
+      // 使用标准Parameter对象
       this.parameters[paramId] = {
         id: paramId,
-        name: paramId, // 添加缺失的必要属性
+        name: paramId, // 名称，可以改进为更友好的名称
         type: this.mapParamTypeToParameterType(paramDef.type),
-        value: paramDef.default,
+        value: paramDef.default as string | number,
         defaultValue: paramDef.default,
         modulationAmount: 0,
         modulationSource: null,
         min: paramDef.min,
         max: paramDef.max,
-      } as Parameter;
+        step: paramDef.step,
+        options:
+          paramDef.type.toString().toUpperCase() === 'ENUM'
+            ? paramDef.options || []
+            : undefined,
+        modulatable: true,
+      };
     });
 
     // 初始化预设
     if (this.metadata.presets && Array.isArray(this.metadata.presets)) {
-      this.metadata.presets.forEach((preset: Preset) => {
+      // 添加类型断言确保类型兼容性
+      (this.metadata.presets as Preset[]).forEach((preset: Preset) => {
         this._presets[preset.id] = preset;
       });
     }
   }
 
   // 将参数类型映射到ParameterType枚举
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private mapParamTypeToParameterType(type: string): any {
-    // TODO:临时解决方案，后续可以完善为更精确的映射
-    return type.toLowerCase();
+  private mapParamTypeToParameterType(type: string): string {
+    // 确保类型字符串有值
+    if (!type) {
+      console.warn(
+        'Parameter type is undefined or empty, defaulting to "number"'
+      );
+      return 'number';
+    }
+
+    // 标准化类型字符串 (转为小写并去除空格)
+    const normalizedType = type.toLowerCase().trim();
+
+    // 映射类型字符串到ParameterType
+    switch (normalizedType) {
+      case 'number':
+        return 'number';
+      case 'integer':
+        return 'integer';
+      case 'boolean':
+        return 'boolean';
+      case 'string':
+        return 'string';
+      case 'enum':
+        return 'enum';
+      default:
+        // 对于未知类型，尝试智能匹配
+        if (normalizedType.includes('int')) {
+          return 'integer';
+        } else if (normalizedType.includes('bool')) {
+          return 'boolean';
+        } else if (normalizedType.includes('str')) {
+          return 'string';
+        } else if (
+          normalizedType.includes('enum') ||
+          normalizedType.includes('option')
+        ) {
+          return 'enum';
+        } else {
+          console.warn(
+            `Unknown parameter type: ${type}, defaulting to "number"`
+          );
+          return 'number';
+        }
+    }
   }
 
   // 初始化音频节点
@@ -99,10 +148,24 @@ export abstract class Module implements ModuleBase {
     if (this._initialized) return;
 
     try {
+      // 更新模块状态
+      moduleLifecycleManager.setState(
+        this.id,
+        ModuleLifecycleState.INITIALIZING
+      );
+
       await this.createAudioNodes();
       this._initialized = true;
+
+      // 更新状态到已初始化
+      moduleLifecycleManager.setState(
+        this.id,
+        ModuleLifecycleState.INITIALIZED
+      );
       eventBus.emit('MODULE.INITIALIZED', { moduleId: this.id });
     } catch (error) {
+      // 更新状态到错误
+      moduleLifecycleManager.setState(this.id, ModuleLifecycleState.ERROR);
       console.error(`Failed to initialize module ${this.id}:`, error);
       eventBus.emit('MODULE.INITIALIZE_FAILED', { moduleId: this.id, error });
       throw error;
@@ -198,7 +261,7 @@ export abstract class Module implements ModuleBase {
 
   // 获取参数值
   getParameterValue(paramId: string): ParameterValue {
-    return this.parameters[paramId]?.value ?? this._paramValues[paramId];
+    return this._paramValues[paramId];
   }
 
   // 设置参数值
@@ -212,28 +275,23 @@ export abstract class Module implements ModuleBase {
     // 验证参数值
     const validatedValue = this.validateParameterValue(paramId, value);
 
-    // 保存旧值用于事件
-    const oldValue = this._paramValues[paramId];
-
-    // 更新参数值
+    // 更新内部参数值
     this._paramValues[paramId] = validatedValue;
-    if (this.parameters[paramId]) {
-      // 确保只有非null的字符串或数字值被分配给parameter.value
-      if (validatedValue !== null) {
-        this.parameters[paramId].value = validatedValue as string | number;
-      }
+
+    // 更新Parameter对象的值
+    const parameter = this.parameters[paramId];
+    if (parameter) {
+      parameter.value = validatedValue;
     }
 
-    // 应用参数到音频节点
-    this.applyParameterToAudioNode(paramId, validatedValue);
-
-    // 发出参数变更事件
-    eventBus.emit('PARAMETER.CHANGED', {
-      moduleId: this.id,
-      parameterId: paramId,
-      value: validatedValue,
-      previousValue: oldValue,
-    });
+    // 确保应用参数到音频节点 - 这是关键步骤
+    if (this._initialized && this._audioNodes) {
+      this.applyParameterToAudioNode(paramId, validatedValue);
+    } else {
+      console.warn(
+        `Module ${this.id} not initialized or no audio nodes available`
+      );
+    }
   }
 
   // 加载预设
@@ -293,6 +351,9 @@ export abstract class Module implements ModuleBase {
 
   // 销毁模块
   async dispose(): Promise<void> {
+    // 更新状态
+    moduleLifecycleManager.setState(this.id, ModuleLifecycleState.DISPOSING);
+
     // 销毁音频节点
     Object.values(this._audioNodes).forEach((node) => {
       if (node && typeof node.dispose === 'function') {
@@ -303,6 +364,10 @@ export abstract class Module implements ModuleBase {
     this._audioNodes = {};
     this._initialized = false;
 
+    // 更新状态到已销毁
+    moduleLifecycleManager.setState(this.id, ModuleLifecycleState.DISPOSED);
     eventBus.emit('MODULE.DISPOSED', { moduleId: this.id });
   }
 }
+
+export type { ModuleParams, Port };

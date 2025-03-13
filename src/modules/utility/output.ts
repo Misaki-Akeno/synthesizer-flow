@@ -1,13 +1,13 @@
 import * as Tone from 'tone';
 import { Module, ModuleParams, Port } from '@/core/domain/Module';
-import { ParameterValue } from '@/types/event';
+import { ParameterValue } from '@/interfaces/event';
 import {
   ModuleCategory,
   ModuleConfiguration,
   DataType,
   ParamType,
   ModuleBase,
-} from '@/types/module';
+} from '@/interfaces/module';
 
 // 模块常量定义
 const MODULE_ID = 'output';
@@ -110,11 +110,25 @@ export class OutputModule extends Module {
   // 参数定义
   getParameterDefinitions(): Record<
     string,
-    { type: string; default: ParameterValue; min?: number; max?: number }
+    {
+      type: string;
+      default: ParameterValue;
+      min?: number;
+      max?: number;
+      options: never[];
+      step: number | undefined;
+    }
   > {
     const result: Record<
       string,
-      { type: string; default: ParameterValue; min?: number; max?: number }
+      {
+        type: string;
+        default: ParameterValue;
+        min?: number;
+        max?: number;
+        options: never[];
+        step: number | undefined;
+      }
     > = {};
 
     Object.entries(outputModuleConfig.parameters).forEach(([key, param]) => {
@@ -123,6 +137,8 @@ export class OutputModule extends Module {
         default: param.default,
         min: param.min,
         max: param.max,
+        options: [],
+        step: param.step,
       };
     });
 
@@ -148,10 +164,6 @@ export class OutputModule extends Module {
     this._audioNodes = {
       audio_in: this.volumeNode,
     };
-
-    console.log(
-      `[OutputModule] 创建音频节点: typeId=${this.typeId}, id=${this.id}`
-    );
   }
 
   // 将参数应用到音频节点

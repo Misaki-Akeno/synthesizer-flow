@@ -33,9 +33,15 @@ export interface ConnectionHandle {
 }
 
 /**
- * Parameter value type
+ * 参数值类型：可以是字符串、数字、布尔值或数组等
  */
-export type ParameterValue = string | number | boolean | object | null;
+export type ParameterValue =
+  | string
+  | number
+  | boolean
+  | unknown[]
+  | Record<string, unknown>
+  | null;
 
 /**
  * Event bus error interface
@@ -100,8 +106,7 @@ interface ModuleCreateRequestEvent {
 }
 
 // 模块创建成功事件
-interface ModuleCreatedEvent {
-  moduleId: string;
+export interface ModuleCreatedEvent extends ModuleEvent {
   typeId: string;
   module: unknown;
 }
@@ -135,14 +140,32 @@ interface ModuleDisposedEvent {
 }
 
 // 模块初始化事件
-interface ModuleInitializedEvent {
-  moduleId: string;
-}
+export type ModuleInitializedEvent = ModuleEvent;
 
 // 模块初始化失败事件
 interface ModuleInitializeFailedEvent {
   moduleId: string;
   error: unknown;
+}
+
+/**
+ * 参数变化事件
+ */
+export interface ParameterChangeEvent {
+  moduleId: string;
+  parameterId: string;
+  value: ParameterValue;
+  previousValue: ParameterValue;
+  unit?: string;
+}
+
+/**
+ * 预设加载事件
+ */
+export interface PresetLoadEvent {
+  moduleId: string;
+  presetId: string;
+  presetName: string;
 }
 
 // 参数变更事件
@@ -163,6 +186,9 @@ interface PresetLoadedEvent {
 // 触发同步事件
 interface TriggerSyncEvent {
   targetId: string;
+  value?: number; // 添加触发值
+  duration?: number; // 添加触发持续时间
+  timestamp?: number; // 添加触发时间点
 }
 
 // 连接建立事件
@@ -181,6 +207,21 @@ interface ConnectionBrokenEvent {
   targetId: string;
   sourceHandle?: string;
   targetHandle?: string;
+}
+
+/**
+ * 模块事件基础接口
+ */
+export interface ModuleEvent {
+  moduleId: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 模块错误事件
+ */
+export interface ModuleErrorEvent extends ModuleEvent {
+  error: unknown;
 }
 
 /**
@@ -221,6 +262,10 @@ export interface EventTypes {
   'MODULE.DISPOSE_REQUESTED': {
     moduleId: string;
   };
+  'MODULE.INITIALIZATION_COMPLETED': {
+    // 新增模块初始化完成事件
+    moduleId: string;
+  };
 
   // 参数事件
   'PARAMETER.CHANGED': ParameterChangedEvent;
@@ -235,6 +280,17 @@ export interface EventTypes {
 
   // 触发事件
   'TRIGGER.SYNC': TriggerSyncEvent;
+  // 添加触发开始和结束事件
+  'TRIGGER.START': {
+    targetId: string;
+    value: number;
+    timestamp: number;
+  };
+  'TRIGGER.END': {
+    targetId: string;
+    timestamp: number;
+    duration: number;
+  };
 
   // 连接事件
   'CONNECTION.ESTABLISHED': ConnectionEstablishedEvent;
@@ -244,6 +300,24 @@ export interface EventTypes {
     target: string;
     sourceHandle?: string;
     targetHandle?: string;
+  };
+
+  // 调试事件
+  'DEBUG.LOG_ADDED': {
+    moduleId: string;
+    entry: {
+      id: string;
+      timestamp: number;
+      type: string;
+      source: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      value: any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      metadata?: Record<string, any>;
+    };
+  };
+  'DEBUG.LOGS_CLEARED': {
+    moduleId: string;
   };
 
   // UI事件
@@ -280,3 +354,5 @@ export interface EventTypes {
   // symbol索引签名，允许任何symbol作为键
   [key: symbol]: unknown;
 }
+
+export * from './event';

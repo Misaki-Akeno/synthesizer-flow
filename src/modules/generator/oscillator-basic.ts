@@ -1,13 +1,13 @@
 import * as Tone from 'tone';
 import { Module, ModuleParams, Port } from '@/core/domain/Module';
-import { ParameterValue } from '@/types/event';
+import { ParameterValue } from '@/interfaces/event';
 import {
   ModuleCategory,
   ModuleConfiguration,
   DataType,
   ParamType,
   ModuleBase,
-} from '@/types/module';
+} from '@/interfaces/module';
 
 // 模块常量定义
 const MODULE_ID = 'oscillator-basic';
@@ -157,11 +157,25 @@ export class OscillatorBasic extends Module {
   // 参数定义
   getParameterDefinitions(): Record<
     string,
-    { type: string; default: ParameterValue; min?: number; max?: number }
+    {
+      type: string;
+      default: ParameterValue;
+      min?: number;
+      max?: number;
+      options: never[];
+      step: number | undefined;
+    }
   > {
     const result: Record<
       string,
-      { type: string; default: ParameterValue; min?: number; max?: number }
+      {
+        type: string;
+        default: ParameterValue;
+        min?: number;
+        max?: number;
+        options: never[];
+        step: number | undefined;
+      }
     > = {};
 
     Object.entries(oscillatorBasicConfig.parameters).forEach(([key, param]) => {
@@ -170,6 +184,8 @@ export class OscillatorBasic extends Module {
         default: param.default,
         min: param.min,
         max: param.max,
+        options: Array.isArray(param.options) ? (param.options as never[]) : [],
+        step: param.step,
       };
     });
 
@@ -200,10 +216,6 @@ export class OscillatorBasic extends Module {
       oscillator: this.oscillator,
       audio_out: this.outputGain,
     };
-
-    console.log(
-      `[OscillatorBasic] 创建音频节点: typeId=${this.typeId}, id=${this.id}`
-    );
   }
 
   // 将参数应用到音频节点

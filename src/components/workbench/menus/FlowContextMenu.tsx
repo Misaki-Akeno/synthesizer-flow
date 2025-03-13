@@ -7,7 +7,12 @@ import {
   SubMenu,
 } from '@/components/workbench/menus/MenuComponents';
 import { useModulesStore } from '@/core/store/useModulesStore';
-import { ModuleBase, ModuleMetadata, ModuleUI, Preset } from '@/types/module';
+import {
+  ModuleBase,
+  ModuleMetadata,
+  ModuleUI,
+  Preset,
+} from '@/interfaces/module';
 
 export const MENU_ITEM_TYPES = {
   SECTION: 'section',

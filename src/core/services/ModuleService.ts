@@ -1,18 +1,34 @@
 import { nanoid } from 'nanoid';
-import { ModuleBase, ParameterValue } from '@/types/module';
-// import { moduleRegistry } from './ModuleRegistry';
+import { ModuleBase } from '@/interfaces/module';
 import { moduleFactory } from '../factory/ModuleFactory';
 import { eventBus } from '../events/EventBus';
 import { useModulesStore } from '../store/useModulesStore';
-import { Position } from '@/types/event';
-import type { EventBusError } from '@/types/event';
-import { connectionService } from './ConnectionService';
+import { Position } from '@/interfaces/event';
+import type { EventBusError } from '@/interfaces/event';
+import { container } from '../di/Container';
+import { moduleLifecycleManager } from '../domain/ModuleLifecycle';
+import { ModuleLifecycleState } from '@/interfaces/lifecycle';
+// 修复错误导入
+import { errorHandler, ErrorCode } from '../events/ErrorHandler';
 
 /**
  * 模块服务
  * 负责模块的创建、初始化和管理
  */
 export class ModuleService {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private connectionService: any; // 类型会在构造函数中获取
+
+  constructor() {
+    // 通过容器获取connectionService
+    setTimeout(() => {
+      this.connectionService = container.get('connectionService');
+    }, 0);
+
+    // 将自身注册到容器
+    container.register('moduleService', this);
+  }
+
   /**
    * 初始化模块服务
    */
@@ -41,21 +57,12 @@ export class ModuleService {
       this.handleModuleDisposeRequest.bind(this)
     );
 
-    // 监听参数变更请求
-    eventBus.on(
-      'PARAMETER.CHANGE_REQUESTED',
-      this.handleParameterChangeRequest.bind(this)
-    );
-
-    // 初始化连接服务
-    await connectionService.initialize();
+    // 参数相关的事件监听已经移至 ParametersService
 
     // 发出模块服务初始化完成事件
     eventBus.emit('MODULE_SERVICE.INITIALIZED', {
       time: new Date().toISOString(),
     });
-
-    console.log('ModuleService initialized');
   }
 
   /**
@@ -74,8 +81,21 @@ export class ModuleService {
 
       // 将模块添加到状态存储
       useModulesStore.getState().addModule(moduleInstance, position);
+
+      // 验证模块生命周期状态
+      const moduleState = moduleLifecycleManager.getState(moduleInstance.id);
+      if (moduleState !== ModuleLifecycleState.INITIALIZED) {
+        console.warn(
+          `模块 ${moduleInstance.id} 创建后状态异常: ${moduleState}`
+        );
+      }
     } catch (error) {
-      console.error('Failed to create module:', error);
+      errorHandler.moduleError(
+        event.instanceId || 'unknown',
+        ErrorCode.MODULE_INIT_FAILED,
+        `Failed to create module: ${(error as Error).message}`,
+        error as Error
+      );
     }
   }
 
@@ -88,14 +108,33 @@ export class ModuleService {
     try {
       const { moduleId } = event;
 
+      // 检查模块当前状态
+      const currentState = moduleLifecycleManager.getState(moduleId);
+      if (!currentState || currentState === ModuleLifecycleState.DISPOSED) {
+        console.warn(
+          `尝试销毁不存在或已销毁的模块: ${moduleId}, 当前状态: ${currentState}`
+        );
+        return;
+      }
+
       // 销毁模块实例
       await moduleFactory.destroy(moduleId);
 
-      // 从状态中删除模块(这里没有真正实现删除，只是作为示例)
-      // 删除逻辑需要在useModulesStore中实现
+      // 从状态中删除模块
+      useModulesStore.getState().removeModule(moduleId);
+
+      // 验证模块生命周期状态
+      const finalState = moduleLifecycleManager.getState(moduleId);
+      if (finalState !== ModuleLifecycleState.DISPOSED) {
+        console.error(`模块 ${moduleId} 销毁后状态异常: ${finalState}`);
+      }
     } catch (error) {
-      console.error('Failed to destroy module:', error);
-      // 错误已在moduleFactory.destroy中处理
+      errorHandler.moduleError(
+        event.moduleId,
+        ErrorCode.MODULE_DISPOSE_FAILED,
+        `Failed to destroy module: ${(error as Error).message}`,
+        error as Error
+      );
     }
   }
 
@@ -119,6 +158,12 @@ export class ModuleService {
 
       // 将模块添加到状态存储
       useModulesStore.getState().addModule(moduleInstance, position);
+
+      // 验证模块生命周期状态
+      const moduleState = moduleLifecycleManager.getState(instanceId);
+      if (moduleState !== ModuleLifecycleState.INITIALIZED) {
+        console.warn(`模块 ${instanceId} 实例化后状态异常: ${moduleState}`);
+      }
 
       // 创建成功后发出实例化完成事件
       eventBus.emit('MODULE.INSTANTIATED', {
@@ -146,37 +191,19 @@ export class ModuleService {
   }): Promise<void> {
     const { moduleId } = event;
 
+    // 检查模块当前状态
+    const currentState = moduleLifecycleManager.getState(moduleId);
+    if (!currentState || currentState === ModuleLifecycleState.DISPOSED) {
+      console.warn(
+        `尝试释放不存在或已销毁的模块: ${moduleId}, 当前状态: ${currentState}`
+      );
+      return;
+    }
+
     // 发出销毁请求
     eventBus.emit('MODULE.DESTROY_REQUEST', {
       moduleId,
     });
-  }
-
-  /**
-   * 处理参数变更请求
-   */
-  private handleParameterChangeRequest(event: {
-    moduleId: string;
-    parameterId: string;
-    value: unknown;
-  }): void {
-    const { moduleId, parameterId, value } = event;
-
-    try {
-      // 获取模块实例
-      const moduleInstance = useModulesStore.getState().getModule(moduleId);
-
-      if (!moduleInstance) {
-        throw new Error(`Module ${moduleId} not found`);
-      }
-
-      // 设置参数值
-      moduleInstance.setParameterValue(parameterId, value as ParameterValue);
-
-      // 参数变更事件已经在模块setParameterValue方法中发出
-    } catch (error) {
-      console.error('Failed to change parameter:', error);
-    }
   }
 
   /**
@@ -246,7 +273,30 @@ export class ModuleService {
       }
     });
   }
+
+  /**
+   * 获取模块当前生命周期状态
+   */
+  getModuleState(moduleId: string): ModuleLifecycleState | undefined {
+    return moduleLifecycleManager.getState(moduleId);
+  }
+
+  /**
+   * 检查模块是否已初始化
+   */
+  isModuleInitialized(moduleId: string): boolean {
+    const state = this.getModuleState(moduleId);
+    return state === ModuleLifecycleState.INITIALIZED;
+  }
+
+  /**
+   * 检查模块是否已销毁
+   */
+  isModuleDisposed(moduleId: string): boolean {
+    const state = this.getModuleState(moduleId);
+    return state === ModuleLifecycleState.DISPOSED;
+  }
 }
 
-// 导出模块服务单例
-export const moduleService = new ModuleService();
+// 不再导出单例实例，请通过容器获取
+// 使用方法：container.get<ModuleService>('moduleService')

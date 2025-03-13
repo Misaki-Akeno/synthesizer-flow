@@ -1,36 +1,37 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { moduleService } from '@/core/services/ModuleService';
-import { moduleRegistry } from '@/core/services/ModuleRegistry';
-import { discoverAndRegisterModules } from '@/core/services/ModuleRegistry';
+import { moduleRegistry } from '@/core/factory/ModuleRegistry';
 import { eventBus } from '@/core/events/EventBus';
 import { useModulesStore } from '@/core/store/useModulesStore';
 import { Button } from '@/components/ui/button';
+import { bootstrapApplication } from '@/core/bootstrap';
+import { Services } from '@/core/services/ServiceAccessor';
 
 export default function ModuleDebugger() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [modules, setModules] = useState<string[]>([]);
   const [availableModules, setAvailableModules] = useState<string[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
   const allModules = useModulesStore((state) => state.modules);
 
   // 初始化模块系统
   useEffect(() => {
-    const initModuleSystem = async () => {
-      await discoverAndRegisterModules();
-      await moduleService.initialize();
+    const initApp = async () => {
+      // 引导应用初始化
+      await bootstrapApplication();
+      setIsInitialized(true);
 
       // 获取所有可用模块类型
       const moduleTypes = moduleRegistry.getAll().map((m) => m.metadata.id);
       setAvailableModules(moduleTypes);
     };
 
-    initModuleSystem();
+    initApp();
 
     // 监听模块创建事件
     const onModuleCreated = ({ moduleId }: { moduleId: string }) => {
       setModules((prev) => [...prev, moduleId]);
-      console.log(`模块已创建: ${moduleId}`);
     };
 
     eventBus.on('MODULE.CREATED', onModuleCreated);
@@ -43,7 +44,8 @@ export default function ModuleDebugger() {
   // 添加模块
   const addModule = async (moduleTypeId: string) => {
     try {
-      await moduleService.createModule(moduleTypeId, {
+      // 使用 ServiceAccessor 获取模块服务
+      await Services.moduleService.createModule(moduleTypeId, {
         x: 100 + Math.random() * 300,
         y: 100 + Math.random() * 200,
       });
@@ -63,12 +65,13 @@ export default function ModuleDebugger() {
     const source = moduleIds[0];
     const target = moduleIds[1];
 
-    eventBus.emit('CONNECTION.REQUESTED', {
+    // 使用连接服务创建连接
+    Services.connectionService.createConnection(
       source,
       target,
-      sourceHandle: 'audio_out',
-      targetHandle: 'audio_in',
-    });
+      'audio_out',
+      'audio_in'
+    );
   };
 
   // 触发示波器模块显示
@@ -79,16 +82,30 @@ export default function ModuleDebugger() {
     );
 
     if (oscillatorModule) {
-      // 改变振荡器参数
-      oscillatorModule.setParameterValue('frequency', 880);
-      oscillatorModule.setParameterValue('amplitude', 0.5);
+      // 使用参数服务修改振荡器参数
+      Services.parameterService.setParameterValue(
+        oscillatorModule.id,
+        'frequency',
+        880
+      );
+      Services.parameterService.setParameterValue(
+        oscillatorModule.id,
+        'amplitude',
+        0.5
+      );
     } else {
-      console.log('未找到振荡器模块，请先添加一个');
+      console.error('未找到振荡器模块，请先添加一个');
     }
   };
 
   return (
     <div className="space-y-3">
+      <div className="mb-3">
+        <h3 className="font-medium mb-2">
+          状态: {isInitialized ? '已初始化' : '初始化中...'}
+        </h3>
+      </div>
+
       <div className="mb-3">
         <h3 className="font-medium mb-2">可用模块</h3>
         <div className="flex gap-2 flex-wrap">
@@ -98,6 +115,7 @@ export default function ModuleDebugger() {
               variant="outline"
               key={moduleType}
               onClick={() => addModule(moduleType)}
+              disabled={!isInitialized}
             >
               添加 {moduleType}
             </Button>
@@ -108,10 +126,20 @@ export default function ModuleDebugger() {
       <div className="mb-3">
         <h3 className="font-medium mb-2">操作</h3>
         <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={connectModules}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={connectModules}
+            disabled={!isInitialized}
+          >
             连接前两个模块
           </Button>
-          <Button size="sm" variant="secondary" onClick={playTestTone}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={playTestTone}
+            disabled={!isInitialized}
+          >
             测试声音
           </Button>
         </div>
