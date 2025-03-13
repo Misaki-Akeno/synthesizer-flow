@@ -9,7 +9,7 @@ export enum ModuleLifecycleState {
   INITIALIZED = 'initialized',
   ERROR = 'error',
   DISPOSING = 'disposing',
-  DISPOSED = 'disposed'
+  DISPOSED = 'disposed',
 }
 
 /**
@@ -44,5 +44,7 @@ export interface ModuleLifecycleManager {
   /**
    * 监听模块状态变化
    */
-  onStateChange(callback: (moduleId: string, state: ModuleLifecycleState) => void): () => void;
+  onStateChange(
+    callback: (moduleId: string, state: ModuleLifecycleState) => void
+  ): () => void;
 }

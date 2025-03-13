@@ -35,7 +35,9 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
       setModuleConfig(config);
     }
     // 获取模块参数
-    const moduleParams = Services.parameterService.getParameters(nodeData.moduleId);
+    const moduleParams = Services.parameterService.getParameters(
+      nodeData.moduleId
+    );
     setParameters(moduleParams);
   }, [nodeData.moduleTypeId, nodeData.moduleId]);
 
@@ -43,7 +45,11 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
   const handleSliderChange = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (key: string, newValue: any) => {
-      Services.parameterService.setParameterValue(nodeData.moduleId, key, newValue);
+      Services.parameterService.setParameterValue(
+        nodeData.moduleId,
+        key,
+        newValue
+      );
       setParameters({
         ...parameters,
         [key]: { ...parameters[key], value: newValue },

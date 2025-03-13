@@ -25,7 +25,11 @@ export class Container {
   /**
    * 注册类
    */
-  registerClass<T>(key: string, constructor: Constructor<T>, ...args: any[]): void {
+  registerClass<T>(
+    key: string,
+    constructor: Constructor<T>,
+    ...args: any[]
+  ): void {
     this.registerFactory(key, () => new constructor(...args));
   }
 

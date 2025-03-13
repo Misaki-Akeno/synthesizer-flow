@@ -253,7 +253,7 @@ export interface ModuleBase {
 
   /** 模块参数 */
   parameters: Record<string, Parameter>;
-  
+
   /** 模块位置 */
   position: { x: number; y: number }; // 添加位置属性
 

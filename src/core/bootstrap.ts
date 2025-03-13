@@ -14,34 +14,35 @@ import { ParametersService } from './services/ParametersService';
  */
 export async function bootstrapApplication(): Promise<void> {
   console.log('🚀 开始初始化应用...');
-  
+
   // 注册基础服务
   container.register('eventBus', eventBus);
   container.register('errorHandler', errorHandler);
   container.register('moduleLifecycleManager', moduleLifecycleManager);
   container.register('moduleRegistry', moduleRegistry);
-  
+
   // 注册服务类
   container.registerClass('moduleService', ModuleService);
   container.registerClass('connectionService', ConnectionService);
   container.registerClass('flowService', FlowService);
   container.registerClass('parameterService', ParametersService);
-  
+
   // 获取服务实例
   const moduleService = container.get<ModuleService>('moduleService');
-  const connectionService = container.get<ConnectionService>('connectionService');
+  const connectionService =
+    container.get<ConnectionService>('connectionService');
   const parameterService = container.get<ParametersService>('parameterService');
-  
+
   // 初始化各服务
   await moduleService.initialize();
   await connectionService.initialize();
   await parameterService.initialize();
-  
+
   // 发现并注册所有可用的模块
   await discoverAndRegisterModules();
-  
+
   console.log('✅ 应用初始化完成');
-  
+
   // 发布系统初始化完成事件
   eventBus.emit('SYSTEM.INITIALIZED', {});
 }
@@ -59,4 +60,3 @@ export interface ServiceMap {
   moduleLifecycleManager: typeof moduleLifecycleManager;
   moduleRegistry: typeof moduleRegistry;
 }
-

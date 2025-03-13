@@ -1,5 +1,8 @@
 import { ModuleBase } from '@/interfaces/module';
-import { ModuleLifecycleManager, ModuleLifecycleState } from '@/interfaces/lifecycle';
+import {
+  ModuleLifecycleManager,
+  ModuleLifecycleState,
+} from '@/interfaces/lifecycle';
 
 /**
  * 模块生命周期管理实现
@@ -7,7 +10,9 @@ import { ModuleLifecycleManager, ModuleLifecycleState } from '@/interfaces/lifec
 class ModuleLifecycleManagerImpl implements ModuleLifecycleManager {
   private modules: Record<string, ModuleBase> = {};
   private states: Record<string, ModuleLifecycleState> = {};
-  private listeners: Array<(moduleId: string, state: ModuleLifecycleState) => void> = [];
+  private listeners: Array<
+    (moduleId: string, state: ModuleLifecycleState) => void
+  > = [];
 
   getState(moduleId: string): ModuleLifecycleState | undefined {
     return this.states[moduleId];
@@ -32,10 +37,14 @@ class ModuleLifecycleManagerImpl implements ModuleLifecycleManager {
     return { ...this.modules };
   }
 
-  onStateChange(callback: (moduleId: string, state: ModuleLifecycleState) => void): () => void {
+  onStateChange(
+    callback: (moduleId: string, state: ModuleLifecycleState) => void
+  ): () => void {
     this.listeners.push(callback);
     return () => {
-      this.listeners = this.listeners.filter(listener => listener !== callback);
+      this.listeners = this.listeners.filter(
+        (listener) => listener !== callback
+      );
     };
   }
 

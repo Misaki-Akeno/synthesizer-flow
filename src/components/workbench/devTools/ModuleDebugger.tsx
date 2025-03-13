@@ -32,7 +32,6 @@ export default function ModuleDebugger() {
     // 监听模块创建事件
     const onModuleCreated = ({ moduleId }: { moduleId: string }) => {
       setModules((prev) => [...prev, moduleId]);
-      console.log(`模块已创建: ${moduleId}`);
     };
 
     eventBus.on('MODULE.CREATED', onModuleCreated);
@@ -84,17 +83,27 @@ export default function ModuleDebugger() {
 
     if (oscillatorModule) {
       // 使用参数服务修改振荡器参数
-      Services.parameterService.setParameterValue(oscillatorModule.id, 'frequency', 880);
-      Services.parameterService.setParameterValue(oscillatorModule.id, 'amplitude', 0.5);
+      Services.parameterService.setParameterValue(
+        oscillatorModule.id,
+        'frequency',
+        880
+      );
+      Services.parameterService.setParameterValue(
+        oscillatorModule.id,
+        'amplitude',
+        0.5
+      );
     } else {
-      console.log('未找到振荡器模块，请先添加一个');
+      console.error('未找到振荡器模块，请先添加一个');
     }
   };
 
   return (
     <div className="space-y-3">
       <div className="mb-3">
-        <h3 className="font-medium mb-2">状态: {isInitialized ? '已初始化' : '初始化中...'}</h3>
+        <h3 className="font-medium mb-2">
+          状态: {isInitialized ? '已初始化' : '初始化中...'}
+        </h3>
       </div>
 
       <div className="mb-3">
@@ -117,17 +126,17 @@ export default function ModuleDebugger() {
       <div className="mb-3">
         <h3 className="font-medium mb-2">操作</h3>
         <div className="flex gap-2">
-          <Button 
-            size="sm" 
-            variant="secondary" 
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={connectModules}
             disabled={!isInitialized}
           >
             连接前两个模块
           </Button>
-          <Button 
-            size="sm" 
-            variant="secondary" 
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={playTestTone}
             disabled={!isInitialized}
           >

@@ -23,7 +23,7 @@ export abstract class Module implements ModuleBase {
   position: { x: number; y: number };
   protected _initialized: boolean = false;
   private _presets: Record<string, Preset> = {};
-  
+
   // Property to satisfy ModuleBase interface
   get initialized(): boolean {
     return this._initialized;
@@ -156,13 +156,19 @@ export abstract class Module implements ModuleBase {
 
     try {
       // 更新模块状态
-      moduleLifecycleManager.setState(this.id, ModuleLifecycleState.INITIALIZING);
-      
+      moduleLifecycleManager.setState(
+        this.id,
+        ModuleLifecycleState.INITIALIZING
+      );
+
       await this.createAudioNodes();
       this._initialized = true;
-      
+
       // 更新状态到已初始化
-      moduleLifecycleManager.setState(this.id, ModuleLifecycleState.INITIALIZED);
+      moduleLifecycleManager.setState(
+        this.id,
+        ModuleLifecycleState.INITIALIZED
+      );
       eventBus.emit('MODULE.INITIALIZED', { moduleId: this.id });
     } catch (error) {
       // 更新状态到错误
@@ -279,7 +285,11 @@ export abstract class Module implements ModuleBase {
     // 如果是ObservableParameter，使用其setter
     const parameter = this.parameters[paramId];
     if (parameter && parameter instanceof ObservableParameter) {
-      if (validatedValue !== null && (typeof validatedValue === 'string' || typeof validatedValue === 'number')) {
+      if (
+        validatedValue !== null &&
+        (typeof validatedValue === 'string' ||
+          typeof validatedValue === 'number')
+      ) {
         parameter.value = validatedValue;
       }
       return; // ObservableParameter会处理通知和事件
@@ -288,9 +298,12 @@ export abstract class Module implements ModuleBase {
     // 传统方式处理非ObservableParameter
     const oldValue = this._paramValues[paramId];
     this._paramValues[paramId] = validatedValue;
-    
+
     if (parameter && validatedValue !== null) {
-      if (typeof validatedValue === 'string' || typeof validatedValue === 'number') {
+      if (
+        typeof validatedValue === 'string' ||
+        typeof validatedValue === 'number'
+      ) {
         parameter.value = validatedValue;
       }
     }
@@ -366,7 +379,7 @@ export abstract class Module implements ModuleBase {
   async dispose(): Promise<void> {
     // 更新状态
     moduleLifecycleManager.setState(this.id, ModuleLifecycleState.DISPOSING);
-    
+
     // 销毁音频节点
     Object.values(this._audioNodes).forEach((node) => {
       if (node && typeof node.dispose === 'function') {

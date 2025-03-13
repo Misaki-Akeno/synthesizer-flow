@@ -14,14 +14,12 @@ export class ParametersService {
    * 初始化参数服务
    */
   async initialize(): Promise<void> {
-    console.log('ParametersService initialized');
-    
     // 将自身注册到容器
     container.register('parameterService', this);
-    
+
     return Promise.resolve();
   }
-  
+
   /**
    * 创建可观察参数
    */
@@ -111,8 +109,8 @@ export class ParametersService {
     const activeModule = useModulesStore.getState().getModule(moduleId);
     if (!activeModule) {
       errorHandler.moduleError(
-        moduleId, 
-        ErrorCode.MODULE_NOT_FOUND, 
+        moduleId,
+        ErrorCode.MODULE_NOT_FOUND,
         `模块不存在: ${moduleId}`
       );
       return false;

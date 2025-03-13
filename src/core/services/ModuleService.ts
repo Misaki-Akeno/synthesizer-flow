@@ -24,7 +24,7 @@ export class ModuleService {
     setTimeout(() => {
       this.connectionService = container.get('connectionService');
     }, 0);
-    
+
     // 将自身注册到容器
     container.register('moduleService', this);
   }
@@ -67,8 +67,6 @@ export class ModuleService {
     eventBus.emit('MODULE_SERVICE.INITIALIZED', {
       time: new Date().toISOString(),
     });
-
-    console.log('ModuleService initialized');
   }
 
   /**
@@ -87,11 +85,13 @@ export class ModuleService {
 
       // 将模块添加到状态存储
       useModulesStore.getState().addModule(moduleInstance, position);
-      
+
       // 验证模块生命周期状态
       const moduleState = moduleLifecycleManager.getState(moduleInstance.id);
       if (moduleState !== ModuleLifecycleState.INITIALIZED) {
-        console.warn(`模块 ${moduleInstance.id} 创建后状态异常: ${moduleState}`);
+        console.warn(
+          `模块 ${moduleInstance.id} 创建后状态异常: ${moduleState}`
+        );
       }
     } catch (error) {
       errorHandler.moduleError(
@@ -115,7 +115,9 @@ export class ModuleService {
       // 检查模块当前状态
       const currentState = moduleLifecycleManager.getState(moduleId);
       if (!currentState || currentState === ModuleLifecycleState.DISPOSED) {
-        console.warn(`尝试销毁不存在或已销毁的模块: ${moduleId}, 当前状态: ${currentState}`);
+        console.warn(
+          `尝试销毁不存在或已销毁的模块: ${moduleId}, 当前状态: ${currentState}`
+        );
         return;
       }
 
@@ -124,7 +126,7 @@ export class ModuleService {
 
       // 从状态中删除模块
       useModulesStore.getState().removeModule(moduleId);
-      
+
       // 验证模块生命周期状态
       const finalState = moduleLifecycleManager.getState(moduleId);
       if (finalState !== ModuleLifecycleState.DISPOSED) {
@@ -160,7 +162,7 @@ export class ModuleService {
 
       // 将模块添加到状态存储
       useModulesStore.getState().addModule(moduleInstance, position);
-      
+
       // 验证模块生命周期状态
       const moduleState = moduleLifecycleManager.getState(instanceId);
       if (moduleState !== ModuleLifecycleState.INITIALIZED) {
@@ -192,11 +194,13 @@ export class ModuleService {
     moduleId: string;
   }): Promise<void> {
     const { moduleId } = event;
-    
+
     // 检查模块当前状态
     const currentState = moduleLifecycleManager.getState(moduleId);
     if (!currentState || currentState === ModuleLifecycleState.DISPOSED) {
-      console.warn(`尝试释放不存在或已销毁的模块: ${moduleId}, 当前状态: ${currentState}`);
+      console.warn(
+        `尝试释放不存在或已销毁的模块: ${moduleId}, 当前状态: ${currentState}`
+      );
       return;
     }
 
@@ -300,14 +304,14 @@ export class ModuleService {
       }
     });
   }
-  
+
   /**
    * 获取模块当前生命周期状态
    */
   getModuleState(moduleId: string): ModuleLifecycleState | undefined {
     return moduleLifecycleManager.getState(moduleId);
   }
-  
+
   /**
    * 检查模块是否已初始化
    */
@@ -315,7 +319,7 @@ export class ModuleService {
     const state = this.getModuleState(moduleId);
     return state === ModuleLifecycleState.INITIALIZED;
   }
-  
+
   /**
    * 检查模块是否已销毁
    */

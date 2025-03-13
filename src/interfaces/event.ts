@@ -35,7 +35,13 @@ export interface ConnectionHandle {
 /**
  * 参数值类型：可以是字符串、数字、布尔值或数组等
  */
-export type ParameterValue = string | number | boolean | unknown[] | Record<string, unknown> | null;
+export type ParameterValue =
+  | string
+  | number
+  | boolean
+  | unknown[]
+  | Record<string, unknown>
+  | null;
 
 /**
  * Event bus error interface
@@ -256,7 +262,8 @@ export interface EventTypes {
   'MODULE.DISPOSE_REQUESTED': {
     moduleId: string;
   };
-  'MODULE.INITIALIZATION_COMPLETED': { // 新增模块初始化完成事件
+  'MODULE.INITIALIZATION_COMPLETED': {
+    // 新增模块初始化完成事件
     moduleId: string;
   };
 

@@ -86,23 +86,28 @@ export const useModulesStore = create<ModulesState>((set, get) => ({
     set((state) => {
       // 创建modules和positions的副本，排除要删除的模块
       const { [moduleId]: removedModule, ...remainingModules } = state.modules;
-      const { [moduleId]: removedPosition, ...remainingPositions } = state.positions;
-      
+      const { [moduleId]: removedPosition, ...remainingPositions } =
+        state.positions;
+
       // 找到与该模块相关的所有连接
       const remainingConnections = { ...state.connections };
-      Object.keys(state.connections).forEach(connectionId => {
+      Object.keys(state.connections).forEach((connectionId) => {
         const connection = state.connections[connectionId];
-        if (connection.sourceId === moduleId || connection.targetId === moduleId) {
+        if (
+          connection.sourceId === moduleId ||
+          connection.targetId === moduleId
+        ) {
           delete remainingConnections[connectionId];
         }
       });
-      
+
       return {
         modules: remainingModules,
         positions: remainingPositions,
         connections: remainingConnections,
         // 如果当前选中的是被删除的模块，则清除选中状态
-        selectedModuleId: state.selectedModuleId === moduleId ? null : state.selectedModuleId
+        selectedModuleId:
+          state.selectedModuleId === moduleId ? null : state.selectedModuleId,
       };
     });
   },

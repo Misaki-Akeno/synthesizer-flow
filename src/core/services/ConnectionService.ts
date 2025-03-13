@@ -59,8 +59,6 @@ export class ConnectionService {
         targetHandle,
       });
 
-      console.log(`创建连接 ${source} to ${target}`);
-
       // 发出连接建立事件
       eventBus.emit('CONNECTION.ESTABLISHED', {
         connectionId,

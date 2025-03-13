@@ -216,10 +216,6 @@ export class OscillatorBasic extends Module {
       oscillator: this.oscillator,
       audio_out: this.outputGain,
     };
-
-    console.log(
-      `[OscillatorBasic] 创建音频节点: typeId=${this.typeId}, id=${this.id}`
-    );
   }
 
   // 将参数应用到音频节点

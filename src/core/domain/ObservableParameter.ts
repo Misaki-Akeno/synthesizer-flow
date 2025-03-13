@@ -49,7 +49,7 @@ export class ObservableParameter implements Parameter {
         parameterId: this.id,
         value: newValue,
         previousValue: oldValue,
-        unit: this.unit
+        unit: this.unit,
       });
     }
   }
@@ -66,9 +66,12 @@ export class ObservableParameter implements Parameter {
     // 作为示例，简单地添加调制量
     if (typeof baseValue === 'number') {
       const modulated = baseValue + this.modulationAmount;
-      return Math.max(this.min ?? -Infinity, Math.min(modulated, this.max ?? Infinity));
+      return Math.max(
+        this.min ?? -Infinity,
+        Math.min(modulated, this.max ?? Infinity)
+      );
     }
-    
+
     return baseValue;
   }
 
@@ -78,7 +81,7 @@ export class ObservableParameter implements Parameter {
   onChange(callback: (value: ParameterValue) => void): () => void {
     this._listeners.push(callback);
     return () => {
-      this._listeners = this._listeners.filter(l => l !== callback);
+      this._listeners = this._listeners.filter((l) => l !== callback);
     };
   }
 

@@ -1,4 +1,10 @@
-import { ModuleBase, ModuleConfiguration, ModuleInterface, ModuleMetadata, ParameterDefinition } from './module';
+import {
+  ModuleBase,
+  ModuleConfiguration,
+  ModuleInterface,
+  ModuleMetadata,
+  ParameterDefinition,
+} from './module';
 
 /**
  * 模块构造函数参数类型
@@ -15,6 +21,8 @@ export interface ModuleConstructorParams {
 /**
  * 模块构造函数类型
  */
-export type ModuleConstructor = new (params: ModuleConstructorParams) => ModuleBase;
+export type ModuleConstructor = new (
+  params: ModuleConstructorParams
+) => ModuleBase;
 
 export * from './factory';

@@ -9,18 +9,18 @@ export enum ErrorCode {
   MODULE_NOT_FOUND = 'MODULE_NOT_FOUND',
   MODULE_INIT_FAILED = 'MODULE_INIT_FAILED',
   MODULE_DISPOSE_FAILED = 'MODULE_DISPOSE_FAILED',
-  
+
   // 参数错误
   PARAMETER_NOT_FOUND = 'PARAMETER_NOT_FOUND',
   PARAMETER_INVALID_VALUE = 'PARAMETER_INVALID_VALUE',
-  
+
   // 连接错误
   CONNECTION_FAILED = 'CONNECTION_FAILED',
   CONNECTION_INVALID = 'CONNECTION_INVALID',
-  
+
   // 系统错误
   SYSTEM_ERROR = 'SYSTEM_ERROR',
-  UNKNOWN_ERROR = 'UNKNOWN_ERROR'
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
 }
 
 /**
@@ -40,20 +40,20 @@ export class ErrorHandler {
       code,
       message,
       originalError,
-      metadata
+      metadata,
     };
-    
+
     console.error(`[Error ${code}]`, message, originalError || '');
-    
+
     // 发布错误事件
     eventBus.emit('SYSTEM.ERROR', {
       message,
-      error
+      error,
     });
-    
+
     return error;
   }
-  
+
   /**
    * 创建模块错误
    */
@@ -65,7 +65,7 @@ export class ErrorHandler {
   ): EventBusError {
     return this.handleError(code, message, originalError, { moduleId });
   }
-  
+
   /**
    * 创建参数错误
    */
@@ -76,7 +76,10 @@ export class ErrorHandler {
     message: string,
     originalError?: Error
   ): EventBusError {
-    return this.handleError(code, message, originalError, { moduleId, parameterId });
+    return this.handleError(code, message, originalError, {
+      moduleId,
+      parameterId,
+    });
   }
 }
 
