@@ -63,10 +63,10 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
     <div
       className="module-node"
       style={{
-        backgroundColor: moduleConfig?.color
-          ? String(moduleConfig.color)
+        backgroundColor: moduleConfig?.ui?.color
+          ? String(moduleConfig.ui.color)
           : '#cccccc',
-        borderRadius: '6px',
+        borderRadius: '8px', // 修改 borderRadius 从 6px 改为 8px
         minWidth: '240px',
         width: '100%',
         boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
@@ -75,7 +75,7 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
       {/* 标题区域 */}
       <ModuleHeader
         label={nodeData.label}
-        category={String(moduleConfig?.category || '')}
+        category={String(moduleConfig?.metadata?.category || '')}
       />
       <div className="bg-white bg-opacity-90 rounded-md">
         {/* 输入/输出端口区域 */}
@@ -118,14 +118,14 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
 
         {/* 参数控制区域 */}
         {Object.keys(parameters).length > 0 && (
-          <div className="nodrag parameters-container border-t border-gray-200 px-2 py-2">
+          <div className="nodrag parameters-container border-t border-gray-200 px-3 py-2">
             {Object.entries(parameters).map(([key, param]) => (
               <ParameterControl
                 key={key}
                 paramKey={key}
                 param={param}
-                isModulatable={false}
-                modInputId=""
+                isModulatable={param.modulatable || false}
+                modInputId={`mod_${key}`}
                 handleSliderChange={handleSliderChange}
                 handleModRangeChange={() => {}}
               />

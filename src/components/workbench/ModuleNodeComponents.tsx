@@ -91,10 +91,11 @@ export const ParameterControl: React.FC<ParameterControlProps> = ({
   handleModRangeChange,
 }) => {
   return (
-    <div className="parameter-control relative">
-      {/* 参数标签和当前值 */}
-      <div className="flex items-center justify-between mb-1 pt-1 pb-0">
-        <div className="flex items-center">
+    <div className="parameter-control relative mb-2">
+      {/* 参数标签和控件的水平布局 */}
+      <div className="flex items-center">
+        {/* 左侧: 调制输入端口和标签 */}
+        <div className="flex items-center w-10 min-w-[5rem] flex-shrink-0">
           {isModulatable && (
             <div
               className="relative flex items-center justify-center mr-1"
@@ -115,30 +116,45 @@ export const ParameterControl: React.FC<ParameterControlProps> = ({
               />
             </div>
           )}
-          <label className="text-xs font-medium ml-0">
+          <label className="text-xs font-medium truncate" title={param.label || paramKey}>
             {param.label || paramKey}:
           </label>
         </div>
-
-        <div className="flex items-center">
-          {param.isModulated && (
-            <span className="text-blue-500 mr-1 text-xs">~</span>
+        
+        {/* 右侧: 参数控件 */}
+        <div className="flex-1 flex items-center">
+          {renderParameterControl(
+            param,
+            paramKey,
+            handleSliderChange,
+            handleModRangeChange
           )}
-          <span className="text-xs">
-            {param.displayValue || param.value || 0}
-            {param.unit && <span className="ml-0.5">{param.unit}</span>}
-          </span>
+          
+          {/* 当前值显示 - 修正条件判断 */}
+          {(param.type && (param.type.toString().toUpperCase() === "NUMBER" || param.type.toString().toUpperCase() === "INTEGER")) && (
+            <div className="ml-2 w-14 flex-shrink-0">
+              <input
+                type="number"
+                className="w-full text-xs p-1 border rounded"
+                value={param.value || 0}
+                min={param.min || 0}
+                max={param.max || 100}
+                step={param.step || (param.type.toString().toUpperCase() === "INTEGER" ? 1 : 0.01)}
+                onChange={(e) => handleSliderChange(paramKey, parseFloat(e.target.value))}
+              />
+            </div>
+          )}
+          
+          {/* 单位显示 */}
+          {param.unit && (
+            <span className="text-xs ml-1">{param.unit}</span>
+          )}
+          
+          {/* 调制指示器 */}
+          {param.isModulated && (
+            <span className="text-blue-500 ml-1 text-xs">~</span>
+          )}
         </div>
-      </div>
-
-      {/* 参数控制器 - 基于参数类型 */}
-      <div className="flex items-center relative">
-        {renderParameterControl(
-          param,
-          paramKey,
-          handleSliderChange,
-          handleModRangeChange
-        )}
       </div>
     </div>
   );
@@ -197,7 +213,6 @@ const renderParameterControl = (
           <span className="text-xs">{param.label}</span>
         </label>
       );
-      return null; // 触发按钮由上面的特殊处理块处理
 
     case 'STRING':
       return (
@@ -213,7 +228,7 @@ const renderParameterControl = (
     case 'NUMBER':
     case 'INTEGER':
       return (
-        <div className="w-full relative pt-0 pb-1">
+        <div className="flex-1 relative">
           {!param.isModulated ? (
             <Slider
               min={param.min || 0}
@@ -226,7 +241,7 @@ const renderParameterControl = (
               onValueChange={(newValue: number[]) =>
                 handleSliderChange(key, newValue[0])
               }
-              className="h-4"
+              className="h-3"
             />
           ) : (
             <>
@@ -244,18 +259,18 @@ const renderParameterControl = (
                 onValueChange={(newValue: number[]) =>
                   handleModRangeChange(key, newValue)
                 }
-                className="h-4"
+                className="h-3"
               />
 
               {param.isModulated && param.displayValue && (
                 <div
-                  className="ml-2 mr-2 relative"
-                  style={{ transform: 'translateY(-8px)' }}
+                  className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none"
                 >
                   <div
-                    className="absolute w-3 h-3 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none mod-display-handle"
+                    className="absolute w-2 h-2 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
                     style={{
                       left: `${((parseFloat(param.displayValue) - param.min) / (param.max - param.min)) * 100}%`,
+                      top: '50%',
                       zIndex: 2,
                     }}
                     title={`当前值: ${parseFloat(param.displayValue).toFixed(1)}`}
@@ -269,12 +284,13 @@ const renderParameterControl = (
 
     case 'OBJECT':
       return (
-        <div className="w-full text-xs p-1 border rounded bg-gray-50">
-          <pre className="whitespace-pre-wrap break-all overflow-hidden max-h-20">
-            {JSON.stringify(param.value, null, 2)}
-          </pre>
+        <div className="flex-1 text-xs flex items-center">
+          <div className="border rounded bg-gray-50 px-2 py-0.5 truncate flex-1" title={JSON.stringify(param.value)}>
+            {JSON.stringify(param.value).substring(0, 20)}
+            {JSON.stringify(param.value).length > 20 ? '...' : ''}
+          </div>
           <button
-            className="text-xs mt-1 bg-gray-200 rounded px-2 py-0.5"
+            className="text-xs ml-2 bg-gray-200 rounded px-2 py-0.5"
             onClick={() => alert('对象编辑功能尚未实现')}
           >
             编辑
@@ -285,11 +301,11 @@ const renderParameterControl = (
     default:
       // 未知类型的参数，显示为只读文本
       return (
-        <div className="w-full text-xs p-1 border rounded bg-gray-50">
+        <div className="flex-1 text-xs p-1 border rounded bg-gray-50">
           {String(param.value)}
-          <div className="text-[9px] text-gray-500">
-            未知参数类型: {param.type}
-          </div>
+          <span className="text-[9px] text-gray-500 ml-1">
+            ({param.type})
+          </span>
         </div>
       );
   }
