@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { moduleService } from '@/core/services/ModuleService';
-import { moduleRegistry } from '@/core/services/ModuleRegistry';
-import { discoverAndRegisterModules } from '@/core/services/ModuleRegistry';
+import { moduleRegistry } from '@/core/factory/ModuleRegistry';
+import { discoverAndRegisterModules } from '@/core/factory/ModuleRegistry';
 import { eventBus } from '@/core/events/EventBus';
 import { useModulesStore } from '@/core/store/useModulesStore';
 import { Button } from '@/components/ui/button';

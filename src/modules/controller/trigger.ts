@@ -57,7 +57,7 @@ export const triggerModuleConfig: ModuleConfiguration = {
     },
     triggerButton: {
       type: ParamType.BOOLEAN,
-      default: false, 
+      default: false,
       label: '触发',
       description: '点击以发送触发信号',
     },
@@ -114,7 +114,7 @@ export const triggerModuleConfig: ModuleConfiguration = {
 
 export class TriggerModule extends Module {
   // 核心音频组件
-  private triggerSignal: Tone.Signal<"number"> | null = null;
+  private triggerSignal: Tone.Signal<'number'> | null = null;
   private triggerDelay: Tone.Delay | null = null;
   // 记录上次触发时间，避免重复触发
   private lastTriggerTime: number = 0;
@@ -148,11 +148,25 @@ export class TriggerModule extends Module {
   // 参数定义
   getParameterDefinitions(): Record<
     string,
-    { type: string; default: ParameterValue; min?: number; max?: number; options: never[]; step: number | undefined }
+    {
+      type: string;
+      default: ParameterValue;
+      min?: number;
+      max?: number;
+      options: never[];
+      step: number | undefined;
+    }
   > {
     const result: Record<
       string,
-      { type: string; default: ParameterValue; min?: number; max?: number; options: never[]; step: number | undefined }
+      {
+        type: string;
+        default: ParameterValue;
+        min?: number;
+        max?: number;
+        options: never[];
+        step: number | undefined;
+      }
     > = {};
 
     Object.entries(triggerModuleConfig.parameters).forEach(([key, param]) => {
@@ -175,13 +189,13 @@ export class TriggerModule extends Module {
     if (Tone.getContext().state !== 'running') {
       console.warn('[TriggerModule] 音频上下文未运行，可能导致触发不正常');
     }
-    
+
     // 创建触发信号节点
     this.triggerSignal = new Tone.Signal(0);
-    
+
     // 创建短延迟节点，用于重置触发状态
     this.triggerDelay = new Tone.Delay(0.01);
-    
+
     // 连接信号到延迟
     this.triggerSignal.connect(this.triggerDelay);
 
@@ -204,11 +218,11 @@ export class TriggerModule extends Module {
       case 'triggerValue':
         console.log(`[TriggerModule] 触发值更新: ${value}`);
         break;
-      
+
       case 'triggerDuration':
         console.log(`[TriggerModule] 触发持续时间更新: ${value}秒`);
         break;
-      
+
       case 'triggerButton':
         // 当按钮参数被设置为true时，触发信号
         if (value === true && !this.isTriggering) {
@@ -216,7 +230,7 @@ export class TriggerModule extends Module {
           // 按钮状态重置将在executeTrigger内部处理
         }
         break;
-        
+
       default:
         console.warn(`[TriggerModule] 未知参数: ${paramId}`);
     }
@@ -228,36 +242,36 @@ export class TriggerModule extends Module {
       console.warn('[TriggerModule] 触发信号节点未初始化');
       return;
     }
-    
+
     const now = Date.now();
     // 防止短时间内重复触发（至少间隔50ms）
     if (now - this.lastTriggerTime < 50) {
       console.debug('[TriggerModule] 触发频率过高，忽略此次触发');
       return;
     }
-    
+
     this.lastTriggerTime = now;
     this.isTriggering = true;
-    
+
     // 获取当前触发值和持续时间
     const triggerValue = this.getParameterValue('triggerValue') as number;
     const triggerDuration = this.getParameterValue('triggerDuration') as number;
-    
+
     // 清除之前可能存在的重置计时器
     if (this.triggerResetTimer) {
       clearTimeout(this.triggerResetTimer);
       this.triggerResetTimer = null;
     }
-    
+
     try {
       const audioContextTime = Tone.now();
-      
+
       // 发送触发信号
       this.triggerSignal.setValueAtTime(triggerValue, audioContextTime);
-      
+
       // 在指定持续时间后重置为0
       this.triggerSignal.setValueAtTime(0, audioContextTime + triggerDuration);
-      
+
       // 发送触发事件到事件总线，添加更多信息
       eventBus.emit('TRIGGER.SYNC', {
         targetId: this.id,
@@ -265,9 +279,11 @@ export class TriggerModule extends Module {
         duration: triggerDuration,
         timestamp: audioContextTime,
       });
-      
-      console.log(`[TriggerModule] 触发: value=${triggerValue}, duration=${triggerDuration}s`);
-      
+
+      console.log(
+        `[TriggerModule] 触发: value=${triggerValue}, duration=${triggerDuration}s`
+      );
+
       // 设置一个定时器，在触发完成后重置按钮状态
       // 使用触发持续时间加上一个小的缓冲
       const resetTimeMs = Math.max(triggerDuration * 1000 + 50, 100);
@@ -308,7 +324,11 @@ export class TriggerModule extends Module {
     portId: string,
     portType: 'input' | 'output'
   ): Tone.ToneAudioNode | null {
-    if (portType === 'output' && portId === 'trigger_out' && this.triggerSignal) {
+    if (
+      portType === 'output' &&
+      portId === 'trigger_out' &&
+      this.triggerSignal
+    ) {
       return this.triggerSignal;
     }
     return null;
@@ -318,7 +338,7 @@ export class TriggerModule extends Module {
   setParameterValue(paramId: string, value: ParameterValue): void {
     // 调用父类方法处理基本逻辑
     super.setParameterValue(paramId, value);
-    
+
     // 特别处理triggerButton参数，确保存储正确的类型
     if (paramId === 'triggerButton' && this.parameters[paramId]) {
       // 在parameters中存储数字(0/1)，但在_paramValues中保留原始布尔值
@@ -333,7 +353,7 @@ export class TriggerModule extends Module {
       clearTimeout(this.triggerResetTimer);
       this.triggerResetTimer = null;
     }
-    
+
     if (this.triggerSignal) {
       this.triggerSignal.dispose();
       this.triggerSignal = null;
@@ -353,9 +373,8 @@ export class TriggerModule extends Module {
 }
 
 // 设置模块构造函数引用
-triggerModuleConfig.metadata.moduleConstructor = TriggerModule as unknown as new (
-  ...args: unknown[]
-) => ModuleBase;
+triggerModuleConfig.metadata.moduleConstructor =
+  TriggerModule as unknown as new (...args: unknown[]) => ModuleBase;
 
 // 导出模块创建函数
 export function createTriggerModule(params: ModuleParams): TriggerModule {

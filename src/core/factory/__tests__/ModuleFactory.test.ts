@@ -8,7 +8,7 @@ import {
   ModuleConfiguration,
   DataType,
 } from '@/types/module';
-import { moduleRegistry } from '../../services/ModuleRegistry';
+import { moduleRegistry } from '../ModuleRegistry';
 import { eventBus } from '../../events/EventBus';
 import { Parameter } from '@/types/parameter';
 

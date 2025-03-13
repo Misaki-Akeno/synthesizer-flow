@@ -11,7 +11,7 @@ import { ParameterValue } from './event';
 export interface Port {
   id: string;
   type: 'input' | 'output';
-  dataType: 'audio' | 'control' | 'trigger' | 'midi';
+  dataType: 'audio' | 'control' | 'trigger' | 'midi' | 'note'; // 添加 'note' 类型支持
   label: string;
 }
 
@@ -60,6 +60,7 @@ export enum DataType {
   MIDI = 'MIDI',
   EVENT = 'EVENT',
   CUSTOM = 'CUSTOM',
+  NOTE = 'NOTE', // 新增 NOTE 类型
 }
 
 /**
@@ -67,6 +68,7 @@ export enum DataType {
  */
 export enum ParamType {
   NUMBER = 'NUMBER',
+  INTEGER = 'INTEGER', // 新增 INTEGER 类型
   STRING = 'STRING',
   BOOLEAN = 'BOOLEAN',
   ENUM = 'ENUM',

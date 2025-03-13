@@ -163,9 +163,9 @@ interface PresetLoadedEvent {
 // 触发同步事件
 interface TriggerSyncEvent {
   targetId: string;
-  value?: number;       // 添加触发值
-  duration?: number;    // 添加触发持续时间
-  timestamp?: number;   // 添加触发时间点
+  value?: number; // 添加触发值
+  duration?: number; // 添加触发持续时间
+  timestamp?: number; // 添加触发时间点
 }
 
 // 连接建立事件
@@ -258,6 +258,24 @@ export interface EventTypes {
     target: string;
     sourceHandle?: string;
     targetHandle?: string;
+  };
+
+  // 调试事件
+  'DEBUG.LOG_ADDED': {
+    moduleId: string;
+    entry: {
+      id: string;
+      timestamp: number;
+      type: string;
+      source: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      value: any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      metadata?: Record<string, any>;
+    };
+  };
+  'DEBUG.LOGS_CLEARED': {
+    moduleId: string;
   };
 
   // UI事件

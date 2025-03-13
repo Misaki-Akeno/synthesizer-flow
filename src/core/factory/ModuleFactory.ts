@@ -7,7 +7,7 @@ import {
   ModuleInterface,
   ParameterDefinition,
 } from '@/types/module';
-import { moduleRegistry } from '../services/ModuleRegistry';
+import { moduleRegistry } from './ModuleRegistry';
 import { eventBus } from '../events/EventBus';
 
 /**

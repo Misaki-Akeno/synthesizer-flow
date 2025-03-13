@@ -2,7 +2,14 @@ import { nanoid } from 'nanoid';
 import { eventBus } from '@/core/events/EventBus';
 import * as Tone from 'tone';
 import { ParameterValue } from '@/types/event';
-import { ModuleBase, ModuleMetadata, Preset, Port, ModuleParams, ConnectionEvent } from '@/types/module';
+import {
+  ModuleBase,
+  ModuleMetadata,
+  Preset,
+  Port,
+  ModuleParams,
+  ConnectionEvent,
+} from '@/types/module';
 import { Parameter } from '@/types/parameter';
 
 export abstract class Module implements ModuleBase {
@@ -79,10 +86,50 @@ export abstract class Module implements ModuleBase {
   }
 
   // 将参数类型映射到ParameterType枚举
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private mapParamTypeToParameterType(type: string): any {
-    // TODO:临时解决方案，后续可以完善为更精确的映射
-    return type.toLowerCase();
+  private mapParamTypeToParameterType(type: string): string {
+    // 确保类型字符串有值
+    if (!type) {
+      console.warn(
+        'Parameter type is undefined or empty, defaulting to "number"'
+      );
+      return 'number';
+    }
+
+    // 标准化类型字符串 (转为小写并去除空格)
+    const normalizedType = type.toLowerCase().trim();
+
+    // 映射类型字符串到ParameterType
+    switch (normalizedType) {
+      case 'number':
+        return 'number';
+      case 'integer':
+        return 'integer';
+      case 'boolean':
+        return 'boolean';
+      case 'string':
+        return 'string';
+      case 'enum':
+        return 'enum';
+      default:
+        // 对于未知类型，尝试智能匹配
+        if (normalizedType.includes('int')) {
+          return 'integer';
+        } else if (normalizedType.includes('bool')) {
+          return 'boolean';
+        } else if (normalizedType.includes('str')) {
+          return 'string';
+        } else if (
+          normalizedType.includes('enum') ||
+          normalizedType.includes('option')
+        ) {
+          return 'enum';
+        } else {
+          console.warn(
+            `Unknown parameter type: ${type}, defaulting to "number"`
+          );
+          return 'number';
+        }
+    }
   }
 
   // 初始化音频节点
@@ -297,4 +344,3 @@ export abstract class Module implements ModuleBase {
     eventBus.emit('MODULE.DISPOSED', { moduleId: this.id });
   }
 }
-
