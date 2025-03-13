@@ -2,30 +2,8 @@ import { nanoid } from 'nanoid';
 import { eventBus } from '@/core/events/EventBus';
 import * as Tone from 'tone';
 import { ParameterValue } from '@/types/event';
-import { ModuleBase, ModuleMetadata, Preset } from '@/types/module';
+import { ModuleBase, ModuleMetadata, Preset, Port, ModuleParams, ConnectionEvent } from '@/types/module';
 import { Parameter } from '@/types/parameter';
-
-export interface Port {
-  id: string;
-  type: 'input' | 'output';
-  dataType: 'audio' | 'control' | 'trigger' | 'midi';
-  label: string;
-}
-
-export interface ModuleParams {
-  id?: string;
-  typeId: string;
-  metadata: ModuleMetadata;
-  position?: { x: number; y: number };
-}
-
-export interface ConnectionEvent {
-  connectionId: string; // 添加必需的 connectionId 字段
-  sourceId: string;
-  targetId: string;
-  sourceHandle?: string;
-  targetHandle?: string;
-}
 
 export abstract class Module implements ModuleBase {
   id: string;
@@ -319,3 +297,4 @@ export abstract class Module implements ModuleBase {
     eventBus.emit('MODULE.DISPOSED', { moduleId: this.id });
   }
 }
+

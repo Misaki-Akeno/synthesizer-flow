@@ -6,6 +6,37 @@ import { Parameter } from './parameter';
 import { ParameterValue } from './event';
 
 /**
+ * 模块端口接口定义
+ */
+export interface Port {
+  id: string;
+  type: 'input' | 'output';
+  dataType: 'audio' | 'control' | 'trigger' | 'midi';
+  label: string;
+}
+
+/**
+ * 模块参数接口定义
+ */
+export interface ModuleParams {
+  id?: string;
+  typeId: string;
+  metadata: ModuleMetadata;
+  position?: { x: number; y: number };
+}
+
+/**
+ * 连接事件接口定义
+ */
+export interface ConnectionEvent {
+  connectionId: string;
+  sourceId: string;
+  targetId: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+}
+
+/**
  * 模块类别枚举
  */
 export enum ModuleCategory {

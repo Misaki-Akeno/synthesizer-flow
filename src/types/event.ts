@@ -163,6 +163,9 @@ interface PresetLoadedEvent {
 // 触发同步事件
 interface TriggerSyncEvent {
   targetId: string;
+  value?: number;       // 添加触发值
+  duration?: number;    // 添加触发持续时间
+  timestamp?: number;   // 添加触发时间点
 }
 
 // 连接建立事件
@@ -235,6 +238,17 @@ export interface EventTypes {
 
   // 触发事件
   'TRIGGER.SYNC': TriggerSyncEvent;
+  // 添加触发开始和结束事件
+  'TRIGGER.START': {
+    targetId: string;
+    value: number;
+    timestamp: number;
+  };
+  'TRIGGER.END': {
+    targetId: string;
+    timestamp: number;
+    duration: number;
+  };
 
   // 连接事件
   'CONNECTION.ESTABLISHED': ConnectionEstablishedEvent;

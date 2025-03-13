@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Position, NodeProps } from '@xyflow/react';
 import { ModuleInterface, ModuleConfiguration } from '@/types/module';
 import { Parameter } from '@/types/parameter';
@@ -24,10 +24,10 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
   // 数据类型转换
   const nodeData = data as unknown as ModuleNodeData;
   const [moduleConfig, setModuleConfig] = useState<ModuleConfiguration | null>(
-    null
+    null 
   );
   const [parameters, setParameters] = useState<Record<string, Parameter>>({});
-
+  
   useEffect(() => {
     // 根据 moduleTypeId 获取模块配置
     const config = moduleRegistry.getById(nodeData.moduleTypeId);
@@ -41,13 +41,13 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
 
   // 处理参数控制器滑块变化
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleSliderChange = (key: string, newValue: any) => {
+  const handleSliderChange = useCallback((key: string, newValue: any) => {
     parametersService.setParameterValue(nodeData.moduleId, key, newValue);
     setParameters({
       ...parameters,
       [key]: { ...parameters[key], value: newValue },
     });
-  };
+  }, [nodeData.moduleId, parameters]);
 
   return (
     <div
