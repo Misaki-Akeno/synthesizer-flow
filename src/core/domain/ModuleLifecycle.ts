@@ -13,6 +13,7 @@ class ModuleLifecycleManagerImpl implements ModuleLifecycleManager {
   private listeners: Array<
     (moduleId: string, state: ModuleLifecycleState) => void
   > = [];
+  private positions: Record<string, { x: number; y: number }> = {};
 
   getState(moduleId: string): ModuleLifecycleState | undefined {
     return this.states[moduleId];
@@ -46,6 +47,19 @@ class ModuleLifecycleManagerImpl implements ModuleLifecycleManager {
         (listener) => listener !== callback
       );
     };
+  }
+
+  updateModulePosition(moduleId: string, position: { x: number; y: number }): void {
+    this.positions[moduleId] = position;
+  }
+
+  getModulePosition(moduleId: string): { x: number; y: number } | undefined {
+    return this.positions[moduleId];
+  }
+
+  isModuleInitialized(moduleId: string): boolean {
+    const state = this.states[moduleId];
+    return state === ModuleLifecycleState.INITIALIZED;
   }
 
   private notifyListeners(moduleId: string, state: ModuleLifecycleState): void {
