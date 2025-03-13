@@ -11,7 +11,6 @@ import {
   ConnectionEvent,
 } from '@/interfaces/module';
 import { Parameter } from '@/interfaces/parameter';
-import { ObservableParameter } from './ObservableParameter';
 import { moduleLifecycleManager } from './ModuleLifecycle';
 import { ModuleLifecycleState } from '@/interfaces/lifecycle';
 
@@ -68,30 +67,24 @@ export abstract class Module implements ModuleBase {
       const paramDef = paramDefs[paramId];
       this._paramValues[paramId] = paramDef.default;
 
-      // 使用ObservableParameter代替普通的Parameter
-      this.parameters[paramId] = new ObservableParameter(
-        paramId,
-        paramId, // 名称，可以改进为更友好的名称
-        this.mapParamTypeToParameterType(paramDef.type),
-        paramDef.default as string | number,
-        paramDef.default,
-        0, // modulationAmount
-        null, // modulationSource
-        paramDef.min,
-        paramDef.max,
-        paramDef.step,
-        undefined, // unit
-        paramDef.type.toString().toUpperCase() === 'ENUM'
-          ? paramDef.options || []
-          : undefined,
-        true // modulatable
-      );
-
-      // 添加参数变化监听，自动应用到音频节点
-      (this.parameters[paramId] as ObservableParameter).onChange((value) => {
-        this._paramValues[paramId] = value;
-        this.applyParameterToAudioNode(paramId, value);
-      });
+      // 使用标准Parameter对象
+      this.parameters[paramId] = {
+        id: paramId,
+        name: paramId, // 名称，可以改进为更友好的名称
+        type: this.mapParamTypeToParameterType(paramDef.type),
+        value: paramDef.default as string | number,
+        defaultValue: paramDef.default,
+        modulationAmount: 0,
+        modulationSource: null,
+        min: paramDef.min,
+        max: paramDef.max,
+        step: paramDef.step,
+        options:
+          paramDef.type.toString().toUpperCase() === 'ENUM'
+            ? paramDef.options || []
+            : undefined,
+        modulatable: true,
+      };
     });
 
     // 初始化预设
@@ -268,7 +261,7 @@ export abstract class Module implements ModuleBase {
 
   // 获取参数值
   getParameterValue(paramId: string): ParameterValue {
-    return this.parameters[paramId]?.value ?? this._paramValues[paramId];
+    return this._paramValues[paramId];
   }
 
   // 设置参数值
@@ -282,42 +275,23 @@ export abstract class Module implements ModuleBase {
     // 验证参数值
     const validatedValue = this.validateParameterValue(paramId, value);
 
-    // 如果是ObservableParameter，使用其setter
-    const parameter = this.parameters[paramId];
-    if (parameter && parameter instanceof ObservableParameter) {
-      if (
-        validatedValue !== null &&
-        (typeof validatedValue === 'string' ||
-          typeof validatedValue === 'number')
-      ) {
-        parameter.value = validatedValue;
-      }
-      return; // ObservableParameter会处理通知和事件
-    }
-
-    // 传统方式处理非ObservableParameter
-    const oldValue = this._paramValues[paramId];
+    // 更新内部参数值
     this._paramValues[paramId] = validatedValue;
 
-    if (parameter && validatedValue !== null) {
-      if (
-        typeof validatedValue === 'string' ||
-        typeof validatedValue === 'number'
-      ) {
-        parameter.value = validatedValue;
-      }
+    // 更新Parameter对象的值
+    const parameter = this.parameters[paramId];
+    if (parameter) {
+      parameter.value = validatedValue;
     }
 
-    // 应用参数到音频节点
-    this.applyParameterToAudioNode(paramId, validatedValue);
-
-    // 发出参数变更事件
-    eventBus.emit('PARAMETER.CHANGED', {
-      moduleId: this.id,
-      parameterId: paramId,
-      value: validatedValue,
-      previousValue: oldValue,
-    });
+    // 确保应用参数到音频节点 - 这是关键步骤
+    if (this._initialized && this._audioNodes) {
+      this.applyParameterToAudioNode(paramId, validatedValue);
+    } else {
+      console.warn(
+        `Module ${this.id} not initialized or no audio nodes available`
+      );
+    }
   }
 
   // 加载预设
@@ -395,3 +369,5 @@ export abstract class Module implements ModuleBase {
     eventBus.emit('MODULE.DISPOSED', { moduleId: this.id });
   }
 }
+
+export type { ModuleParams, Port };

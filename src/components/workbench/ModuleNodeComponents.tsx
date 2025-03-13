@@ -144,26 +144,6 @@ export const ParameterControl: React.FC<ParameterControlProps> = ({
   );
 };
 
-// 定义触发按钮组件
-interface TriggerButtonProps {
-  onClick: () => void;
-  label: string;
-}
-
-export const TriggerButton: React.FC<TriggerButtonProps> = ({
-  onClick,
-  label,
-}) => {
-  return (
-    <button
-      className="w-full py-2 px-4 bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors"
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-};
-
 // 定义 renderParameterControl 方法的参数类型
 const renderParameterControl = (
   param: any,
@@ -171,16 +151,6 @@ const renderParameterControl = (
   handleSliderChange: (key: string, newValue: any) => void,
   handleModRangeChange: (key: string, newRange: any) => void
 ): React.ReactNode => {
-  // 特殊处理触发器按钮
-  if (key === 'triggerButton') {
-    return (
-      <TriggerButton
-        onClick={() => handleSliderChange(key, true)}
-        label={param.label || '触发'}
-      />
-    );
-  }
-
   // 根据参数类型渲染不同控件
   switch (param.type.toString().toUpperCase()) {
     case 'ENUM':
@@ -216,19 +186,17 @@ const renderParameterControl = (
 
     case 'BOOLEAN':
       // 如果是普通布尔值而非触发按钮，使用复选框
-      if (key !== 'triggerButton') {
-        return (
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={!!param.value}
-              onChange={(e) => handleSliderChange(key, e.target.checked)}
-              className="mr-1"
-            />
-            <span className="text-xs">{param.label}</span>
-          </label>
-        );
-      }
+      return (
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={!!param.value}
+            onChange={(e) => handleSliderChange(key, e.target.checked)}
+            className="mr-1"
+          />
+          <span className="text-xs">{param.label}</span>
+        </label>
+      );
       return null; // 触发按钮由上面的特殊处理块处理
 
     case 'STRING':

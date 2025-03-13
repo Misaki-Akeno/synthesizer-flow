@@ -26,7 +26,7 @@ export interface Parameter {
   type: ParameterType | string;
 
   /** 当前值 */
-  value: string | number;
+  value: ParameterValue;
 
   /** 默认值 */
   defaultValue: ParameterValue;

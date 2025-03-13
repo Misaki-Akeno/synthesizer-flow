@@ -1,7 +1,4 @@
-// 模块类型定义
-// 包含模块元数据的类型定义
-// 模块实例本身的类型定义，可以在后面开发过程中逐步添加
-
+// 模块类型定义 - 主要实现文件
 import { Parameter } from './parameter';
 import { ParameterValue } from './event';
 
@@ -11,7 +8,7 @@ import { ParameterValue } from './event';
 export interface Port {
   id: string;
   type: 'input' | 'output';
-  dataType: 'audio' | 'control' | 'trigger' | 'midi' | 'note'; // 添加 'note' 类型支持
+  dataType: 'audio' | 'control' | 'trigger' | 'midi' | 'note';
   label: string;
 }
 
@@ -23,7 +20,7 @@ export interface ModuleParams {
   typeId: string;
   metadata: ModuleMetadata;
   position?: { x: number; y: number };
-  initialized?: boolean; // 添加初始化标志
+  initialized?: boolean;
 }
 
 /**
@@ -61,7 +58,7 @@ export enum DataType {
   MIDI = 'MIDI',
   EVENT = 'EVENT',
   CUSTOM = 'CUSTOM',
-  NOTE = 'NOTE', // 新增 NOTE 类型
+  NOTE = 'NOTE',
 }
 
 /**
@@ -69,7 +66,7 @@ export enum DataType {
  */
 export enum ParamType {
   NUMBER = 'NUMBER',
-  INTEGER = 'INTEGER', // 新增 INTEGER 类型
+  INTEGER = 'INTEGER',
   STRING = 'STRING',
   BOOLEAN = 'BOOLEAN',
   ENUM = 'ENUM',
@@ -255,10 +252,10 @@ export interface ModuleBase {
   parameters: Record<string, Parameter>;
 
   /** 模块位置 */
-  position: { x: number; y: number }; // 添加位置属性
+  position: { x: number; y: number };
 
   /** 模块是否已初始化 */
-  initialized: boolean; // 添加初始化状态属性
+  initialized: boolean;
 
   /** 初始化模块 */
   initialize(): Promise<void>;
@@ -276,13 +273,13 @@ export interface ModuleBase {
     inputId?: string
   ): void;
 
-  /** 获取参数值 */
+  /** 获取参数值 - 推荐改用 ParametersService */
   getParameterValue(parameterId: string): ParameterValue;
 
-  /** 设置参数值 */
+  /** 设置参数值 - 推荐改用 ParametersService */
   setParameterValue(parameterId: string, value: ParameterValue): void;
 
-  /** 加载预设 */
+  /** 加载预设 - 推荐改用 ParametersService */
   loadPreset(presetId: string): void;
 
   /** 自定义方法和属性 */
@@ -319,7 +316,3 @@ export interface ModuleFactory {
   /** 销毁模块实例 */
   destroy(moduleId: string): Promise<void>;
 }
-
-export { type ParameterValue };
-
-export * from './module';

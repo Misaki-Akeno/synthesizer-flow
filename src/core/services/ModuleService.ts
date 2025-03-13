@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { ModuleBase, ParameterValue } from '@/interfaces/module';
+import { ModuleBase } from '@/interfaces/module';
 import { moduleFactory } from '../factory/ModuleFactory';
 import { eventBus } from '../events/EventBus';
 import { useModulesStore } from '../store/useModulesStore';
@@ -57,11 +57,7 @@ export class ModuleService {
       this.handleModuleDisposeRequest.bind(this)
     );
 
-    // 监听参数变更请求
-    eventBus.on(
-      'PARAMETER.CHANGE_REQUESTED',
-      this.handleParameterChangeRequest.bind(this)
-    );
+    // 参数相关的事件监听已经移至 ParametersService
 
     // 发出模块服务初始化完成事件
     eventBus.emit('MODULE_SERVICE.INITIALIZED', {
@@ -208,33 +204,6 @@ export class ModuleService {
     eventBus.emit('MODULE.DESTROY_REQUEST', {
       moduleId,
     });
-  }
-
-  /**
-   * 处理参数变更请求
-   */
-  private handleParameterChangeRequest(event: {
-    moduleId: string;
-    parameterId: string;
-    value: unknown;
-  }): void {
-    const { moduleId, parameterId, value } = event;
-
-    try {
-      // 获取模块实例
-      const moduleInstance = useModulesStore.getState().getModule(moduleId);
-
-      if (!moduleInstance) {
-        throw new Error(`Module ${moduleId} not found`);
-      }
-
-      // 设置参数值
-      moduleInstance.setParameterValue(parameterId, value as ParameterValue);
-
-      // 参数变更事件已经在模块setParameterValue方法中发出
-    } catch (error) {
-      console.error('Failed to change parameter:', error);
-    }
   }
 
   /**

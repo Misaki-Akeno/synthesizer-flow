@@ -6,7 +6,6 @@ import {
 import { eventBus } from '../events/EventBus';
 import { oscillatorBasicConfig } from '@/modules/generator/oscillator-basic';
 import { outputModuleConfig } from '@/modules/utility/output';
-import { triggerModuleConfig } from '@/modules/controller/trigger';
 
 /**
  * 模块注册表服务实现
@@ -98,7 +97,6 @@ async function loadAllModuleConfigs(): Promise<ModuleConfiguration[]> {
   try {
     configs.push(oscillatorBasicConfig);
     configs.push(outputModuleConfig);
-    configs.push(triggerModuleConfig);
 
     // 2. 以后可以在这里添加更多模块
     // configs.push(otherModuleConfig);

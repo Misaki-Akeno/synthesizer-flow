@@ -41,15 +41,16 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
     setParameters(moduleParams);
   }, [nodeData.moduleTypeId, nodeData.moduleId]);
 
-  // 处理参数控制器滑块变化
+  // 处理参数控制器变化
   const handleSliderChange = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (key: string, newValue: any) => {
-      Services.parameterService.setParameterValue(
+      Services.parameterService.requestParameterChange(
         nodeData.moduleId,
         key,
         newValue
       );
+      // 本地状态更新，用于即时UI反馈
       setParameters({
         ...parameters,
         [key]: { ...parameters[key], value: newValue },
