@@ -5,7 +5,8 @@ import { moduleRegistry } from '@/core/factory/ModuleRegistry';
 import { eventBus } from '@/core/events/EventBus';
 import { useModulesStore } from '@/core/store/useModulesStore';
 import { Button } from '@/components/ui/button';
-import { bootstrapApplication, getService } from '@/core/bootstrap';
+import { bootstrapApplication } from '@/core/bootstrap';
+import { Services } from '@/core/services/ServiceAccessor';
 
 export default function ModuleDebugger() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -44,9 +45,8 @@ export default function ModuleDebugger() {
   // 添加模块
   const addModule = async (moduleTypeId: string) => {
     try {
-      // 使用依赖注入获取模块服务
-      const moduleService = getService('moduleService');
-      await moduleService.createModule(moduleTypeId, {
+      // 使用 ServiceAccessor 获取模块服务
+      await Services.moduleService.createModule(moduleTypeId, {
         x: 100 + Math.random() * 300,
         y: 100 + Math.random() * 200,
       });
@@ -67,8 +67,7 @@ export default function ModuleDebugger() {
     const target = moduleIds[1];
 
     // 使用连接服务创建连接
-    const connectionService = getService('connectionService');
-    connectionService.createConnection(
+    Services.connectionService.createConnection(
       source,
       target,
       'audio_out',
@@ -85,9 +84,8 @@ export default function ModuleDebugger() {
 
     if (oscillatorModule) {
       // 使用参数服务修改振荡器参数
-      const parameterService = getService('parameterService');
-      parameterService.setParameterValue(oscillatorModule.id, 'frequency', 880);
-      parameterService.setParameterValue(oscillatorModule.id, 'amplitude', 0.5);
+      Services.parameterService.setParameterValue(oscillatorModule.id, 'frequency', 880);
+      Services.parameterService.setParameterValue(oscillatorModule.id, 'amplitude', 0.5);
     } else {
       console.log('未找到振荡器模块，请先添加一个');
     }

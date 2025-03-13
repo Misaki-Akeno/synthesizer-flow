@@ -256,6 +256,9 @@ export interface EventTypes {
   'MODULE.DISPOSE_REQUESTED': {
     moduleId: string;
   };
+  'MODULE.INITIALIZATION_COMPLETED': { // 新增模块初始化完成事件
+    moduleId: string;
+  };
 
   // 参数事件
   'PARAMETER.CHANGED': ParameterChangedEvent;

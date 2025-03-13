@@ -127,7 +127,6 @@ export const useModulesStore = create<ModulesState>((set, get) => ({
 
   removeConnection: (connectionId) => {
     set((state) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [connectionId]: removed, ...rest } = state.connections;
       return { connections: rest };
     });

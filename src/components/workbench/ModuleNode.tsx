@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Position, NodeProps } from '@xyflow/react';
 import { ModuleInterface, ModuleConfiguration } from '@/interfaces/module';
 import { Parameter } from '@/interfaces/parameter';
-import parametersService from '@/core/services/ParametersService';
+import { Services } from '@/core/services/ServiceAccessor';
 import { moduleRegistry } from '@/core/factory/ModuleRegistry';
 
 // 新增 DefaultModuleComponents 的引用
@@ -35,15 +35,15 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
       setModuleConfig(config);
     }
     // 获取模块参数
-    const moduleParams = parametersService.getParameters(nodeData.moduleId);
+    const moduleParams = Services.parameterService.getParameters(nodeData.moduleId);
     setParameters(moduleParams);
   }, [nodeData.moduleTypeId, nodeData.moduleId]);
 
   // 处理参数控制器滑块变化
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSliderChange = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (key: string, newValue: any) => {
-      parametersService.setParameterValue(nodeData.moduleId, key, newValue);
+      Services.parameterService.setParameterValue(nodeData.moduleId, key, newValue);
       setParameters({
         ...parameters,
         [key]: { ...parameters[key], value: newValue },

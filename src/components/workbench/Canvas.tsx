@@ -1,25 +1,22 @@
 'use client';
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
   ReactFlow,
   MiniMap,
   Controls,
   Background,
   BackgroundVariant,
-  applyEdgeChanges,
-  applyNodeChanges,
   NodeTypes,
   OnConnect,
-  OnNodesChange,
-  OnEdgesChange,
-  Edge,
   Node,
   Connection,
+  useNodesState,
+  useEdgesState,
 } from '@xyflow/react';
 import DevTools from './devTools/DevTools';
 import ModuleNode from './ModuleNode';
-import { flowService } from '@/core/services/FlowService';
+import { Services } from '@/core/services/ServiceAccessor';
 import { eventBus } from '@/core/events/EventBus';
 
 // 注册自定义节点类型
@@ -29,40 +26,48 @@ const nodeTypes: NodeTypes = {
 
 const Canvas = () => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   // 订阅 flowService 以接收数据更新
   useEffect(() => {
-    const unsubscribe = flowService.subscribe(() => {
-      setNodes(flowService.getNodes());
-      setEdges(flowService.getEdges());
+    // 初始加载数据
+    setNodes(Services.flowService.getNodes().map(node => ({
+      ...node,
+      type: node.type || 'moduleNode',
+    })));
+    setEdges(Services.flowService.getEdges());
+
+    const unsubscribe = Services.flowService.subscribe(() => {
+      const flowNodes = Services.flowService.getNodes();
+      setNodes(flowNodes.map(node => ({
+        ...node,
+        type: node.type || 'moduleNode',
+        draggable: Services.moduleService.isModuleInitialized(node.id)
+      })));
+      setEdges(Services.flowService.getEdges());
     });
 
     return () => {
       unsubscribe();
     };
+  }, [setNodes, setEdges]);
+
+  // 处理节点拖拽结束
+  const onNodeDragStop = useCallback((event: NodeDragEvent, node: Node) => {
+    if (node.id && node.position) {
+      eventBus.emit('UI.NODE.MOVED', {
+        nodeId: node.id,
+        position: node.position,
+      });
+    }
   }, []);
 
-  // 处理节点变化
-  const onNodesChange: OnNodesChange = useCallback((changes) => {
-    setNodes((nds) => applyNodeChanges(changes, nds));
-
-    // 如果是位置变化，通知 flowService
-    changes.forEach((change) => {
-      if (change.type === 'position' && change.position) {
-        eventBus.emit('UI.NODE.MOVED', {
-          nodeId: change.id,
-          position: change.position,
-        });
-      }
-    });
-  }, []);
-
-  // 处理边变化
-  const onEdgesChange: OnEdgesChange = useCallback((changes) => {
-    setEdges((eds) => applyEdgeChanges(changes, eds));
-
+  // 处理边的删除
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleEdgesChange = useCallback((changes: any[]) => {
+    onEdgesChange(changes);
+    
     // 处理边的删除
     changes.forEach((change) => {
       if (change.type === 'remove') {
@@ -71,7 +76,7 @@ const Canvas = () => {
         });
       }
     });
-  }, []);
+  }, [onEdgesChange]);
 
   // 处理连接创建
   const onConnect: OnConnect = useCallback((connection: Connection) => {
@@ -91,7 +96,8 @@ const Canvas = () => {
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onEdgesChange={handleEdgesChange}
+        onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         fitView

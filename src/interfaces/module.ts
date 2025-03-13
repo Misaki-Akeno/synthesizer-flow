@@ -23,6 +23,7 @@ export interface ModuleParams {
   typeId: string;
   metadata: ModuleMetadata;
   position?: { x: number; y: number };
+  initialized?: boolean; // 添加初始化标志
 }
 
 /**
@@ -252,6 +253,12 @@ export interface ModuleBase {
 
   /** 模块参数 */
   parameters: Record<string, Parameter>;
+  
+  /** 模块位置 */
+  position: { x: number; y: number }; // 添加位置属性
+
+  /** 模块是否已初始化 */
+  initialized: boolean; // 添加初始化状态属性
 
   /** 初始化模块 */
   initialize(): Promise<void>;

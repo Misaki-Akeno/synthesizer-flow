@@ -23,6 +23,11 @@ export abstract class Module implements ModuleBase {
   position: { x: number; y: number };
   protected _initialized: boolean = false;
   private _presets: Record<string, Preset> = {};
+  
+  // Property to satisfy ModuleBase interface
+  get initialized(): boolean {
+    return this._initialized;
+  }
 
   // 音频节点引用
   protected _audioNodes: Record<string, Tone.ToneAudioNode> = {};

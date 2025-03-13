@@ -45,6 +45,21 @@ export interface ModuleLifecycleManager {
    * 监听模块状态变化
    */
   onStateChange(callback: (moduleId: string, state: ModuleLifecycleState) => void): () => void;
+
+  /**
+   * 更新模块位置
+   */
+  updateModulePosition(moduleId: string, position: { x: number; y: number }): void;
+
+  /**
+   * 获取模块位置
+   */
+  getModulePosition(moduleId: string): { x: number; y: number } | undefined;
+
+  /**
+   * 检查模块是否已初始化完成
+   */
+  isModuleInitialized(moduleId: string): boolean;
 }
 
 export * from './lifecycle';
