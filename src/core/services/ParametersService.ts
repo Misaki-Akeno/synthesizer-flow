@@ -1,12 +1,62 @@
 import { useModulesStore } from '../store/useModulesStore';
-import { Parameter, ParameterType } from '@/types/parameter';
-import { ParameterValue } from '@/types/event';
+import { Parameter, ParameterType } from '@/interfaces/parameter';
+import { ParameterValue } from '@/interfaces/event';
 import { eventBus } from '@/core/events/EventBus';
+import { ObservableParameter } from '../domain/ObservableParameter';
+import { errorHandler, ErrorCode } from '@/core/events/ErrorHandler';
+import { container } from '../di/Container';
 
 /**
  * 参数服务 - 提供模块参数管理功能
  */
-class ParametersService {
+export class ParametersService {
+  /**
+   * 初始化参数服务
+   */
+  async initialize(): Promise<void> {
+    console.log('ParametersService initialized');
+    
+    // 将自身注册到容器
+    container.register('parameterService', this);
+    
+    return Promise.resolve();
+  }
+  
+  /**
+   * 创建可观察参数
+   */
+  createObservableParameter(
+    id: string,
+    name: string,
+    type: ParameterType | string,
+    value: string | number,
+    defaultValue: ParameterValue,
+    options: {
+      min?: number;
+      max?: number;
+      step?: number;
+      unit?: string;
+      options?: Array<string | number>;
+      modulatable?: boolean;
+    } = {}
+  ): ObservableParameter {
+    return new ObservableParameter(
+      id,
+      name,
+      type,
+      value,
+      defaultValue,
+      0, // modulationAmount
+      null, // modulationSource
+      options.min,
+      options.max,
+      options.step,
+      options.unit,
+      options.options,
+      options.modulatable
+    );
+  }
+
   /**
    * 获取模块的所有参数
    * @param moduleId 模块ID
@@ -60,20 +110,34 @@ class ParametersService {
   ): boolean {
     const activeModule = useModulesStore.getState().getModule(moduleId);
     if (!activeModule) {
-      console.warn(`模块不存在: ${moduleId}`);
+      errorHandler.moduleError(
+        moduleId, 
+        ErrorCode.MODULE_NOT_FOUND, 
+        `模块不存在: ${moduleId}`
+      );
       return false;
     }
 
     const parameter = activeModule.parameters[parameterId];
     if (!parameter) {
-      console.warn(`参数不存在: ${moduleId}.${parameterId}`);
+      errorHandler.parameterError(
+        moduleId,
+        parameterId,
+        ErrorCode.PARAMETER_NOT_FOUND,
+        `参数不存在: ${moduleId}.${parameterId}`
+      );
       return false;
     }
 
     // 验证并转换值
     const validatedValue = this.validateAndConvertValue(value, parameter);
     if (validatedValue === undefined) {
-      console.warn(`参数值类型不匹配: ${moduleId}.${parameterId}`);
+      errorHandler.parameterError(
+        moduleId,
+        parameterId,
+        ErrorCode.PARAMETER_INVALID_VALUE,
+        `参数值类型不匹配: ${moduleId}.${parameterId}`
+      );
       return false;
     }
 
@@ -83,13 +147,16 @@ class ParametersService {
     // 使用模块的内部方法设置参数值
     activeModule.setParameterValue(parameterId, validatedValue);
 
-    // 发布参数变更事件
-    eventBus.emit('PARAMETER.CHANGED', {
-      moduleId,
-      parameterId,
-      value: validatedValue,
-      previousValue,
-    });
+    // 如果是ObservableParameter，不需要手动发送事件，它会自己发送
+    if (!(parameter instanceof ObservableParameter)) {
+      // 发布参数变更事件
+      eventBus.emit('PARAMETER.CHANGED', {
+        moduleId,
+        parameterId,
+        value: validatedValue,
+        previousValue,
+      });
+    }
 
     return true;
   }
@@ -225,7 +292,3 @@ class ParametersService {
     }
   }
 }
-
-// 创建并导出单例实例
-const parametersService = new ParametersService();
-export default parametersService;

@@ -7,10 +7,10 @@ import {
   ModuleMetadata,
   ModuleConfiguration,
   DataType,
-} from '@/types/module';
+} from '@/interfaces/module';
 import { moduleRegistry } from '../ModuleRegistry';
 import { eventBus } from '../../events/EventBus';
-import { Parameter } from '@/types/parameter';
+import { Parameter } from '@/interfaces/parameter';
 
 // 模拟依赖
 vi.mock('nanoid', () => ({

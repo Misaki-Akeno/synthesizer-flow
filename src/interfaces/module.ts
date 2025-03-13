@@ -314,3 +314,5 @@ export interface ModuleFactory {
 }
 
 export { type ParameterValue };
+
+export * from './module';

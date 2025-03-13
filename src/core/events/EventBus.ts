@@ -2,7 +2,7 @@
 // 提供全局事件发布和订阅功能
 
 import mitt from 'mitt';
-import type { EventTypes } from '@/types/event';
+import type { EventTypes } from '@/interfaces/event';
 
 // 创建事件总线
 const emitter = mitt<EventTypes>();

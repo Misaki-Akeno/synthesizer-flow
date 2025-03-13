@@ -2,7 +2,7 @@ import {
   ModuleConfiguration,
   ModuleCategory,
   ModuleRegistry as IModuleRegistry,
-} from '@/types/module';
+} from '@/interfaces/module';
 import { eventBus } from '../events/EventBus';
 import { oscillatorBasicConfig } from '@/modules/generator/oscillator-basic';
 import { outputModuleConfig } from '@/modules/utility/output';

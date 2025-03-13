@@ -1,6 +1,6 @@
 import * as Tone from 'tone';
 import { Module } from '@/core/domain/Module';
-import { ParameterValue } from '@/types/event';
+import { ParameterValue } from '@/interfaces/event';
 import {
   ModuleCategory,
   ModuleConfiguration,
@@ -9,7 +9,7 @@ import {
   ModuleBase,
   ModuleParams,
   Port,
-} from '@/types/module';
+} from '@/interfaces/module';
 import { eventBus } from '@/core/events/EventBus';
 
 // 模块常量定义

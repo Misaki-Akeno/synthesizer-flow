@@ -51,4 +51,15 @@ export interface Parameter {
 
   /** 可选值列表（枚举类型参数） */
   options?: Array<string | number>;
+
+  /** 是否可调制 */
+  modulatable?: boolean;
+
+  /** 显示条件 */
+  visibleWhen?: {
+    parameter: string;
+    equals: ParameterValue | ParameterValue[];
+  };
 }
+
+export * from './parameter';

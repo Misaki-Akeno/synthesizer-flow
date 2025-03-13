@@ -1,7 +1,8 @@
 import { eventBus } from '../events/EventBus';
-import type { ModuleBase } from '@/types/module';
-import type { Position } from '@/types/event';
+import type { ModuleBase } from '@/interfaces/module';
+import type { Position } from '@/interfaces/event';
 import { nanoid } from 'nanoid';
+import { container } from '../di/Container';
 
 type FlowNode = {
   id: string;
@@ -26,13 +27,15 @@ type FlowEdge = {
   targetHandle?: string;
 };
 
-class FlowService {
+export class FlowService {
   private nodes: FlowNode[] = [];
   private edges: FlowEdge[] = [];
   private listeners: Set<() => void> = new Set();
 
   constructor() {
     this.registerEventListeners();
+    // 将自身注册到容器
+    container.register('flowService', this);
   }
 
   private registerEventListeners(): void {
@@ -198,5 +201,5 @@ class FlowService {
   }
 }
 
-// 创建单例实例
-export const flowService = new FlowService();
+// 不再导出单例实例，请通过容器获取
+// 使用方法：container.get<FlowService>('flowService')

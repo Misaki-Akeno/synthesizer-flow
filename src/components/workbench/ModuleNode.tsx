@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Position, NodeProps } from '@xyflow/react';
-import { ModuleInterface, ModuleConfiguration } from '@/types/module';
-import { Parameter } from '@/types/parameter';
+import { ModuleInterface, ModuleConfiguration } from '@/interfaces/module';
+import { Parameter } from '@/interfaces/parameter';
 import parametersService from '@/core/services/ParametersService';
 import { moduleRegistry } from '@/core/factory/ModuleRegistry';
 

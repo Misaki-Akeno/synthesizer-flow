@@ -3,29 +3,10 @@ import {
   ModuleBase,
   ModuleFactory as IModuleFactory,
   ModuleConfiguration,
-  ModuleMetadata,
-  ModuleInterface,
-  ParameterDefinition,
-} from '@/types/module';
+} from '@/interfaces/module';
+import { ModuleConstructor } from '@/interfaces/factory';
 import { moduleRegistry } from './ModuleRegistry';
 import { eventBus } from '../events/EventBus';
-
-/**
- * 模块构造函数参数类型
- */
-interface ModuleConstructorParams {
-  id: string;
-  typeId: string;
-  config?: ModuleConfiguration;
-  metadata: ModuleMetadata;
-  parameters: Record<string, ParameterDefinition>;
-  interfaces: { inputs: ModuleInterface[]; outputs: ModuleInterface[] };
-}
-
-/**
- * 模块构造函数类型
- */
-type ModuleConstructor = new (params: ModuleConstructorParams) => ModuleBase;
 
 /**
  * 模块工厂实现

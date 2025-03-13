@@ -1,11 +1,12 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 // 模块状态存储
 // - 存储模块注册表
 // - 存储当前工作区中的模块实例
 // - 提供添加/删除/更新模块的操作
 
 import { create } from 'zustand';
-import { ModuleBase } from '@/types/module';
-import { Position as NodePosition } from '@/types/event';
+import { ModuleBase } from '@/interfaces/module';
+import { Position as NodePosition } from '@/interfaces/event';
 
 // 连接定义
 export interface Connection {
@@ -32,6 +33,9 @@ interface ModulesState {
 
   // 添加模块实例
   addModule: (module: ModuleBase, position?: NodePosition) => void;
+
+  // 删除模块实例
+  removeModule: (moduleId: string) => void;
 
   // 更新模块位置
   updatePosition: (moduleId: string, position: NodePosition) => void;
@@ -76,6 +80,31 @@ export const useModulesStore = create<ModulesState>((set, get) => ({
         [module.id]: position || { x: 100, y: 100 },
       },
     }));
+  },
+
+  removeModule: (moduleId) => {
+    set((state) => {
+      // 创建modules和positions的副本，排除要删除的模块
+      const { [moduleId]: removedModule, ...remainingModules } = state.modules;
+      const { [moduleId]: removedPosition, ...remainingPositions } = state.positions;
+      
+      // 找到与该模块相关的所有连接
+      const remainingConnections = { ...state.connections };
+      Object.keys(state.connections).forEach(connectionId => {
+        const connection = state.connections[connectionId];
+        if (connection.sourceId === moduleId || connection.targetId === moduleId) {
+          delete remainingConnections[connectionId];
+        }
+      });
+      
+      return {
+        modules: remainingModules,
+        positions: remainingPositions,
+        connections: remainingConnections,
+        // 如果当前选中的是被删除的模块，则清除选中状态
+        selectedModuleId: state.selectedModuleId === moduleId ? null : state.selectedModuleId
+      };
+    });
   },
 
   updatePosition: (moduleId, position) => {

@@ -33,9 +33,9 @@ export interface ConnectionHandle {
 }
 
 /**
- * Parameter value type
+ * 参数值类型：可以是字符串、数字、布尔值或数组等
  */
-export type ParameterValue = string | number | boolean | object | null;
+export type ParameterValue = string | number | boolean | unknown[] | Record<string, unknown> | null;
 
 /**
  * Event bus error interface
@@ -100,8 +100,7 @@ interface ModuleCreateRequestEvent {
 }
 
 // 模块创建成功事件
-interface ModuleCreatedEvent {
-  moduleId: string;
+export interface ModuleCreatedEvent extends ModuleEvent {
   typeId: string;
   module: unknown;
 }
@@ -135,14 +134,32 @@ interface ModuleDisposedEvent {
 }
 
 // 模块初始化事件
-interface ModuleInitializedEvent {
-  moduleId: string;
-}
+export type ModuleInitializedEvent = ModuleEvent;
 
 // 模块初始化失败事件
 interface ModuleInitializeFailedEvent {
   moduleId: string;
   error: unknown;
+}
+
+/**
+ * 参数变化事件
+ */
+export interface ParameterChangeEvent {
+  moduleId: string;
+  parameterId: string;
+  value: ParameterValue;
+  previousValue: ParameterValue;
+  unit?: string;
+}
+
+/**
+ * 预设加载事件
+ */
+export interface PresetLoadEvent {
+  moduleId: string;
+  presetId: string;
+  presetName: string;
 }
 
 // 参数变更事件
@@ -184,6 +201,21 @@ interface ConnectionBrokenEvent {
   targetId: string;
   sourceHandle?: string;
   targetHandle?: string;
+}
+
+/**
+ * 模块事件基础接口
+ */
+export interface ModuleEvent {
+  moduleId: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 模块错误事件
+ */
+export interface ModuleErrorEvent extends ModuleEvent {
+  error: unknown;
 }
 
 /**
@@ -312,3 +344,5 @@ export interface EventTypes {
   // symbol索引签名，允许任何symbol作为键
   [key: symbol]: unknown;
 }
+
+export * from './event';

@@ -1,12 +1,18 @@
 import { eventBus } from '../events/EventBus';
 import { useModulesStore } from '../store/useModulesStore';
 import { nanoid } from 'nanoid';
+import { container } from '../di/Container';
 
 /**
  * 连接服务
  * 负责处理模块之间的连接相关功能
  */
 export class ConnectionService {
+  constructor() {
+    // 将自身注册到容器
+    container.register('connectionService', this);
+  }
+
   /**
    * 初始化连接服务
    */
@@ -136,6 +142,3 @@ export class ConnectionService {
     }
   }
 }
-
-// 导出连接服务单例
-export const connectionService = new ConnectionService();

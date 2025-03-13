@@ -1,13 +1,13 @@
 import * as Tone from 'tone';
 import { Module, ModuleParams, Port } from '@/core/domain/Module';
-import { ParameterValue } from '@/types/event';
+import { ParameterValue } from '@/interfaces/event';
 import {
   ModuleCategory,
   ModuleConfiguration,
   DataType,
   ParamType,
   ModuleBase,
-} from '@/types/module';
+} from '@/interfaces/module';
 
 // 模块常量定义
 const MODULE_ID = 'oscillator-basic';
