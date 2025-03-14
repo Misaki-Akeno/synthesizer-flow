@@ -277,7 +277,11 @@ export interface ModuleBase {
   getParameterValue(parameterId: string): ParameterValue;
 
   /** 设置参数值 - 推荐改用 ParametersService */
-  setParameterValue(parameterId: string, value: ParameterValue): void;
+  setParameterValue(
+    parameterId: string,
+    value: ParameterValue,
+    skipEvent?: boolean
+  ): void;
 
   /** 加载预设 - 推荐改用 ParametersService */
   loadPreset(presetId: string): void;

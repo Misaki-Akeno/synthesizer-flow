@@ -8,7 +8,6 @@ import {
   Preset,
   Port,
   ModuleParams,
-  ConnectionEvent,
 } from '@/interfaces/module';
 import { Parameter } from '@/interfaces/parameter';
 import { moduleLifecycleManager } from './ModuleLifecycle';
@@ -194,14 +193,8 @@ export abstract class Module implements ModuleBase {
 
     try {
       outputNode.connect(inputNode);
-      const connectionId = nanoid(); // 生成唯一的连接ID
-      eventBus.emit('CONNECTION.ESTABLISHED', {
-        connectionId: connectionId,
-        sourceId: this.id,
-        targetId: targetModule.id,
-        sourceHandle: outputPortId,
-        targetHandle: inputPortId,
-      } as ConnectionEvent);
+      // 删除对CONNECTION.ESTABLISHED事件的发送
+      // 这个事件只应该由ConnectionService发出
     } catch (error: unknown) {
       console.error('Connection failed:', error);
       throw new Error(`Connection failed: ${(error as Error).message}`);
@@ -218,7 +211,11 @@ export abstract class Module implements ModuleBase {
     if (!targetModule) {
       Object.values(this._audioNodes).forEach((node) => {
         if (node && typeof node.disconnect === 'function') {
-          node.disconnect();
+          try {
+            node.disconnect();
+          } catch (error) {
+            console.warn(`无法断开所有连接: ${(error as Error).message}`);
+          }
         }
       });
       return;
@@ -236,18 +233,30 @@ export abstract class Module implements ModuleBase {
     }
 
     try {
+      // 尝试特定断开
       outputNode.disconnect(inputNode);
-      // 对于断开连接，我们需要一个连接ID，这里临时生成一个
-      const connectionId = nanoid();
-      eventBus.emit('CONNECTION.BROKEN', {
-        connectionId: connectionId,
-        sourceId: this.id,
-        targetId: targetModule.id,
-        sourceHandle: outputPortId,
-        targetHandle: inputPortId,
-      } as ConnectionEvent);
     } catch (error: unknown) {
-      console.error('Disconnect failed:', error);
+      // 特定断开失败，尝试检查错误类型
+      if (error instanceof Error && error.name === 'InvalidAccessError') {
+        // 这可能意味着连接不存在
+        console.warn(`尝试断开不存在的连接: ${this.id} -> ${targetModule.id}`);
+      } else {
+        // 对于其他错误，重试使用全断开然后重连其他连接的方式
+        try {
+          // 获取当前模块的所有输出节点
+          // const outputNodes = this.getOutputPorts().map(port =>
+          //   this.getAudioNodeForPort(port.id, 'output')
+          // ).filter(Boolean);
+
+          // 断开当前输出节点的所有连接
+          if (outputNode && typeof outputNode.disconnect === 'function') {
+            outputNode.disconnect();
+            console.log(`断开 ${outputPortId} 的所有连接并将重新连接其他连接`);
+          }
+        } catch (retryError) {
+          console.error('断开连接时发生错误:', retryError);
+        }
+      }
     }
   }
 
@@ -265,7 +274,11 @@ export abstract class Module implements ModuleBase {
   }
 
   // 设置参数值
-  setParameterValue(paramId: string, value: ParameterValue): void {
+  setParameterValue(
+    paramId: string,
+    value: ParameterValue,
+    skipEvent: boolean = false
+  ): void {
     const paramDef = this.getParameterDefinitions()[paramId];
     if (!paramDef) {
       console.error(`Parameter ${paramId} not found in module ${this.id}`);
@@ -291,6 +304,16 @@ export abstract class Module implements ModuleBase {
       console.warn(
         `Module ${this.id} not initialized or no audio nodes available`
       );
+    }
+
+    // 只有当skipEvent为false时才发送事件，避免重复事件
+    if (!skipEvent) {
+      eventBus.emit('PARAMETER.CHANGED', {
+        moduleId: this.id,
+        parameterId: paramId,
+        value: validatedValue,
+        previousValue: parameter?.value,
+      });
     }
   }
 

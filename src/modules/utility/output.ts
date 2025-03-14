@@ -177,6 +177,9 @@ export class OutputModule extends Module {
       case 'volume':
         if (typeof value === 'number') {
           this.volumeNode.volume.value = value;
+          // 保持静音状态不变
+          const muteState = this.getParameterValue('mute');
+          this.volumeNode.mute = Boolean(muteState);
         }
         break;
 
