@@ -121,14 +121,8 @@ export class FlowService {
       targetHandle,
     });
 
-    // 通知系统连接已建立
-    eventBus.emit('CONNECTION.ESTABLISHED', {
-      connectionId: edgeId,
-      sourceId: source,
-      targetId: target,
-      sourceHandle,
-      targetHandle,
-    });
+    // 删除此处的CONNECTION.ESTABLISHED事件
+    // 由ConnectionService负责发送此事件
   }
 
   public updateNodePosition(nodeId: string, position: Position): void {
@@ -166,19 +160,23 @@ export class FlowService {
 
   public removeEdge(edgeId: string): void {
     const edge = this.edges.find((e) => e.id === edgeId);
-    if (edge) {
-      // 通知系统连接已断开
-      eventBus.emit('CONNECTION.BROKEN', {
-        connectionId: edge.id,
-        sourceId: edge.source,
-        targetId: edge.target,
-        sourceHandle: edge.sourceHandle,
-        targetHandle: edge.targetHandle,
-      });
+    if (!edge) {
+      console.warn(`边 ${edgeId} 不存在，无法删除`);
+      return;
     }
 
-    this.edges = this.edges.filter((edge) => edge.id !== edgeId);
+    // 首先过滤掉边，避免重复发送事件
+    this.edges = this.edges.filter((e) => e.id !== edgeId);
     this.notifyListeners();
+
+    // 通知系统连接已断开
+    eventBus.emit('CONNECTION.BROKEN', {
+      connectionId: edge.id,
+      sourceId: edge.source,
+      targetId: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+    });
   }
 
   public getNodes(): FlowNode[] {

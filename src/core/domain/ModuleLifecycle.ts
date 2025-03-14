@@ -49,7 +49,10 @@ class ModuleLifecycleManagerImpl implements ModuleLifecycleManager {
     };
   }
 
-  updateModulePosition(moduleId: string, position: { x: number; y: number }): void {
+  updateModulePosition(
+    moduleId: string,
+    position: { x: number; y: number }
+  ): void {
     this.positions[moduleId] = position;
   }
 

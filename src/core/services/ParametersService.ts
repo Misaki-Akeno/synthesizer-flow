@@ -115,12 +115,18 @@ export class ParametersService {
     // 保存先前的值以便发送事件
     const previousValue = parameter.value;
 
+    // 如果值没有变化，直接返回成功
+    if (validatedValue === previousValue) {
+      return true;
+    }
+
     // 更新参数值
     parameter.value = validatedValue;
 
-    // 重要修改：直接调用模块的 setParameterValue 方法确保音频引擎参数同步更新
+    // 调用模块的 setParameterValue 方法确保音频引擎参数同步更新
+    // 传入 true 作为 skipEvent 参数，防止模块再次触发事件
     if (activeModule.setParameterValue) {
-      activeModule.setParameterValue(parameterId, validatedValue);
+      activeModule.setParameterValue(parameterId, validatedValue, true);
     } else {
       console.warn(`模块 ${moduleId} 没有实现 setParameterValue 方法`);
     }

@@ -15,6 +15,8 @@ import {
   useNodesState,
   useEdgesState,
   NodeMouseHandler,
+  useKeyPress,
+  useReactFlow,
 } from '@xyflow/react';
 import DevTools from './devTools/DevTools';
 import ModuleNode from './ModuleNode';
@@ -31,6 +33,39 @@ const Canvas = () => {
   // 修正泛型参数：从数组类型改为单个元素类型
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const { getEdges, getNodes } = useReactFlow();
+
+  // 检测 Delete 和 Backspace 键是否被按下
+  const deletePressed = useKeyPress('Delete');
+  const backspacePressed = useKeyPress('Backspace');
+
+  // 处理键盘删除事件
+  useEffect(() => {
+    const handleDeleteElements = () => {
+      // 获取当前选中的节点和边
+      const selectedNodes = getNodes().filter((node) => node.selected);
+      const selectedEdges = getEdges().filter((edge) => edge.selected);
+
+      // 处理选中节点的删除
+      selectedNodes.forEach((node) => {
+        eventBus.emit('UI.NODE.DELETED', {
+          nodeId: node.id,
+        });
+      });
+
+      // 处理选中边的删除
+      selectedEdges.forEach((edge) => {
+        eventBus.emit('UI.CONNECTION.DELETED', {
+          connectionId: edge.id,
+        });
+      });
+    };
+
+    // 当 Delete 或 Backspace 键被按下时执行删除操作
+    if (deletePressed || backspacePressed) {
+      handleDeleteElements();
+    }
+  }, [deletePressed, backspacePressed, getNodes, getEdges]);
 
   // 订阅 flowService 以接收数据更新
   useEffect(() => {
@@ -111,6 +146,7 @@ const Canvas = () => {
         onConnect={onConnect}
         nodeTypes={nodeTypes}
         fitView
+        deleteKeyCode={['Backspace', 'Delete']} // 同时支持 Backspace 和 Delete 键
       >
         <Controls />
         <MiniMap />

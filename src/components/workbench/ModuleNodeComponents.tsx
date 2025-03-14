@@ -116,11 +116,14 @@ export const ParameterControl: React.FC<ParameterControlProps> = ({
               />
             </div>
           )}
-          <label className="text-xs font-medium truncate" title={param.label || paramKey}>
+          <label
+            className="text-xs font-medium truncate"
+            title={param.label || paramKey}
+          >
             {param.label || paramKey}:
           </label>
         </div>
-        
+
         {/* 右侧: 参数控件 */}
         <div className="flex-1 flex items-center">
           {renderParameterControl(
@@ -129,27 +132,34 @@ export const ParameterControl: React.FC<ParameterControlProps> = ({
             handleSliderChange,
             handleModRangeChange
           )}
-          
+
           {/* 当前值显示 - 修正条件判断 */}
-          {(param.type && (param.type.toString().toUpperCase() === "NUMBER" || param.type.toString().toUpperCase() === "INTEGER")) && (
-            <div className="ml-2 w-14 flex-shrink-0">
-              <input
-                type="number"
-                className="w-full text-xs p-1 border rounded"
-                value={param.value || 0}
-                min={param.min || 0}
-                max={param.max || 100}
-                step={param.step || (param.type.toString().toUpperCase() === "INTEGER" ? 1 : 0.01)}
-                onChange={(e) => handleSliderChange(paramKey, parseFloat(e.target.value))}
-              />
-            </div>
-          )}
-          
+          {param.type &&
+            (param.type.toString().toUpperCase() === 'NUMBER' ||
+              param.type.toString().toUpperCase() === 'INTEGER') && (
+              <div className="ml-2 w-14 flex-shrink-0">
+                <input
+                  type="number"
+                  className="w-full text-xs p-1 border rounded"
+                  value={param.value || 0}
+                  min={param.min || 0}
+                  max={param.max || 100}
+                  step={
+                    param.step ||
+                    (param.type.toString().toUpperCase() === 'INTEGER'
+                      ? 1
+                      : 0.01)
+                  }
+                  onChange={(e) =>
+                    handleSliderChange(paramKey, parseFloat(e.target.value))
+                  }
+                />
+              </div>
+            )}
+
           {/* 单位显示 */}
-          {param.unit && (
-            <span className="text-xs ml-1">{param.unit}</span>
-          )}
-          
+          {param.unit && <span className="text-xs ml-1">{param.unit}</span>}
+
           {/* 调制指示器 */}
           {param.isModulated && (
             <span className="text-blue-500 ml-1 text-xs">~</span>
@@ -263,9 +273,7 @@ const renderParameterControl = (
               />
 
               {param.isModulated && param.displayValue && (
-                <div
-                  className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none"
-                >
+                <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none">
                   <div
                     className="absolute w-2 h-2 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
                     style={{
@@ -285,7 +293,10 @@ const renderParameterControl = (
     case 'OBJECT':
       return (
         <div className="flex-1 text-xs flex items-center">
-          <div className="border rounded bg-gray-50 px-2 py-0.5 truncate flex-1" title={JSON.stringify(param.value)}>
+          <div
+            className="border rounded bg-gray-50 px-2 py-0.5 truncate flex-1"
+            title={JSON.stringify(param.value)}
+          >
             {JSON.stringify(param.value).substring(0, 20)}
             {JSON.stringify(param.value).length > 20 ? '...' : ''}
           </div>
@@ -303,9 +314,7 @@ const renderParameterControl = (
       return (
         <div className="flex-1 text-xs p-1 border rounded bg-gray-50">
           {String(param.value)}
-          <span className="text-[9px] text-gray-500 ml-1">
-            ({param.type})
-          </span>
+          <span className="text-[9px] text-gray-500 ml-1">({param.type})</span>
         </div>
       );
   }
