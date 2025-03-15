@@ -293,7 +293,7 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
                 handleSliderChange={handleSliderChange}
                 handleModRangeChange={handleModRangeChange}
                 handleAutomationToggle={handleAutomationToggle}
-                isModulatable={false}
+                isModulatable={param.automatable ?? false}
               />
             ))}
           </div>
