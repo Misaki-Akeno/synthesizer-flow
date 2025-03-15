@@ -21,7 +21,6 @@ interface ModuleNodeData {
   label: string;
 }
 
-
 const ModuleNode: React.FC<NodeProps> = ({ data }) => {
   // 数据类型转换
   const nodeData = data as unknown as ModuleNodeData;
@@ -29,22 +28,23 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
     null
   );
   const [parameters, setParameters] = useState<Record<string, Parameter>>({});
-  
+
   // 使用 useRef 存储订阅，以便在组件卸载时取消订阅
   const subscriptions = useRef<{ unsubscribe: () => void }[]>([]);
 
   // 加载模块的所有参数
   const loadModuleParameters = useCallback(() => {
     // 清理之前的订阅
-    subscriptions.current.forEach(sub => sub.unsubscribe());
+    subscriptions.current.forEach((sub) => sub.unsubscribe());
     subscriptions.current = [];
-    
+
     // 获取模块参数 - 通过新的参数系统
-    const moduleParamsSub = Services.parameterSystem.getModuleParameters$(nodeData.moduleId)
-      .subscribe(params => {
+    const moduleParamsSub = Services.parameterSystem
+      .getModuleParameters$(nodeData.moduleId)
+      .subscribe((params) => {
         // 将参数对象转换为UI组件所需的格式
         const parameterMap: Record<string, Parameter> = {};
-        
+
         Object.entries(params || {}).forEach(([paramId, paramData]) => {
           // 构建带有UI状态的参数对象
           const param: Parameter = {
@@ -69,37 +69,36 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
             // 其他UI相关状态
             visible: paramData.visible !== false,
             disabled: paramData.disabled || false,
-            automatable: paramData.automatable || false
+            automatable: paramData.automatable || false,
           };
-          
+
           // 添加到参数映射
           parameterMap[paramId] = param;
-          
+
           // 获取参数的自动化状态
-          const stateSub = Services.parameterSystem.getParameterState$(
-            nodeData.moduleId,
-            paramId
-          ).subscribe(state => {
-            setParameters(prevParams => ({
-              ...prevParams,
-              [paramId]: {
-                ...(prevParams[paramId] || {}),
-                // 动态更新值和状态
-                value: state.value,
-                isAutomated: state.automated || false,
-                automationRange: state.automationRange,
-                displayValue: state.value,
-              } as Parameter
-            }));
-          });
-          
+          const stateSub = Services.parameterSystem
+            .getParameterState$(nodeData.moduleId, paramId)
+            .subscribe((state) => {
+              setParameters((prevParams) => ({
+                ...prevParams,
+                [paramId]: {
+                  ...(prevParams[paramId] || {}),
+                  // 动态更新值和状态
+                  value: state.value,
+                  isAutomated: state.automated || false,
+                  automationRange: state.automationRange,
+                  displayValue: state.value,
+                } as Parameter,
+              }));
+            });
+
           subscriptions.current.push(stateSub);
         });
-        
+
         // 初始设置参数
         setParameters(parameterMap);
       });
-    
+
     subscriptions.current.push(moduleParamsSub);
   }, [nodeData.moduleId]);
 
@@ -109,22 +108,23 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
     if (config) {
       setModuleConfig(config);
     }
-    
+
     // 获取模块参数
     loadModuleParameters();
-    
+
     // 订阅参数变化
-    const subscription = Services.parameterSystem.getModuleParameterChanges$(nodeData.moduleId)
+    const subscription = Services.parameterSystem
+      .getModuleParameterChanges$(nodeData.moduleId)
       .subscribe(() => {
         // 当参数发生变化时重新加载参数状态
         loadModuleParameters();
       });
-      
+
     subscriptions.current.push(subscription);
-    
+
     return () => {
       // 清理所有订阅
-      subscriptions.current.forEach(sub => sub.unsubscribe());
+      subscriptions.current.forEach((sub) => sub.unsubscribe());
       subscriptions.current = [];
     };
   }, [nodeData.moduleTypeId, nodeData.moduleId, loadModuleParameters]);
@@ -138,15 +138,15 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
         newValue,
         'ui'
       );
-      
+
       // 本地状态更新，用于即时UI反馈
-      setParameters(prev => {
+      setParameters((prev) => {
         const updated = { ...prev };
         if (updated[key]) {
           updated[key] = {
             ...updated[key],
             value: newValue,
-            displayValue: newValue
+            displayValue: newValue,
           };
         }
         return updated;
@@ -154,12 +154,12 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
     },
     [nodeData.moduleId]
   );
-  
+
   // 处理自动化范围变化
   const handleModRangeChange = useCallback(
     (paramId: string, range: number[]) => {
       if (range.length !== 2) return;
-      
+
       // 更新自动化范围
       Services.parameterSystem.setParameterAutomationRange(
         nodeData.moduleId,
@@ -167,14 +167,14 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
         range[0],
         range[1]
       );
-      
+
       // 更新本地状态用于UI反馈
-      setParameters(prev => {
+      setParameters((prev) => {
         const updated = { ...prev };
         if (updated[paramId]) {
           updated[paramId] = {
             ...updated[paramId],
-            automationRange: range as [number, number]
+            automationRange: range as [number, number],
           };
         }
         return updated;
@@ -182,18 +182,18 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
     },
     [nodeData.moduleId]
   );
-  
+
   // 处理自动化开关
   const handleAutomationToggle = useCallback(
     (paramId: string, enabled: boolean) => {
       if (enabled) {
         // 这里只是启用自动化准备，实际的自动化连接需要在连线时创建
-        setParameters(prev => {
+        setParameters((prev) => {
           const updated = { ...prev };
           if (updated[paramId]) {
             updated[paramId] = {
               ...updated[paramId],
-              isAutomationEnabled: true
+              isAutomationEnabled: true,
             };
           }
           return updated;
@@ -206,15 +206,15 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
           '', // 源模块ID，空字符串表示移除所有
           '' // 源参数ID，空字符串表示移除所有
         );
-        
+
         // 更新本地状态
-        setParameters(prev => {
+        setParameters((prev) => {
           const updated = { ...prev };
           if (updated[paramId]) {
             updated[paramId] = {
               ...updated[paramId],
               isAutomated: false,
-              isAutomationEnabled: false
+              isAutomationEnabled: false,
             };
           }
           return updated;
@@ -289,11 +289,11 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
                 key={key}
                 paramKey={key}
                 param={param}
-                isAutomatable={param.automatable || false}
                 modInputId={`mod_${key}`}
                 handleSliderChange={handleSliderChange}
                 handleModRangeChange={handleModRangeChange}
                 handleAutomationToggle={handleAutomationToggle}
+                isModulatable={false}
               />
             ))}
           </div>

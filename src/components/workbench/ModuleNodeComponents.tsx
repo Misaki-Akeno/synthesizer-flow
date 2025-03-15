@@ -76,7 +76,7 @@ export const PortContainer: React.FC<PortContainerProps> = ({
 interface ParameterControlProps {
   paramKey: string;
   param: any;
-  isAutomatable: boolean;
+  isModulatable: boolean;
   modInputId: string;
   handleSliderChange: (key: string, newValue: any) => void;
   handleModRangeChange: (key: string, newRange: any) => void;
@@ -86,7 +86,7 @@ interface ParameterControlProps {
 export const ParameterControl: React.FC<ParameterControlProps> = ({
   paramKey,
   param,
-  isAutomatable: isAutomatable,
+  isModulatable,
   modInputId,
   handleSliderChange,
   handleModRangeChange,
@@ -105,7 +105,7 @@ export const ParameterControl: React.FC<ParameterControlProps> = ({
       <div className="flex items-center">
         {/* 左侧: 自动化输入端口和标签 */}
         <div className="flex items-center w-10 min-w-[5rem] flex-shrink-0">
-          {isAutomatable && (
+          {isModulatable && (
             <div
               className="relative flex items-center justify-center mr-1"
               style={{ width: '2px', height: '16px' }}
