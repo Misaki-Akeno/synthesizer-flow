@@ -8,7 +8,7 @@ import { ParameterValue } from './event';
 export interface Port {
   id: string;
   type: 'input' | 'output';
-  dataType: 'audio' | 'control' | 'trigger' | 'midi' | 'note';
+  dataType: 'audio' | 'control' | 'trigger';
   label: string;
 }
 

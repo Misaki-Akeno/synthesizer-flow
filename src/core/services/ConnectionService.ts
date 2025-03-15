@@ -1,7 +1,6 @@
 import { eventBus } from '../events/EventBus';
 import { useModulesStore } from '../store/useModulesStore';
 import { nanoid } from 'nanoid';
-import { container } from '../di/Container';
 
 /**
  * 连接服务
@@ -21,10 +20,6 @@ export class ConnectionService {
     }
   >();
 
-  constructor() {
-    // 将自身注册到容器
-    container.register('connectionService', this);
-  }
 
   /**
    * 初始化连接服务

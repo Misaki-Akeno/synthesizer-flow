@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -20,7 +20,7 @@ import {
 } from '@xyflow/react';
 import DevTools from './devTools/DevTools';
 import ModuleNode from './ModuleNode';
-import { Services } from '@/core/services/ServiceAccessor';
+import { Services, initializeApplication } from '@/core/services/ServiceAccessor';
 import { eventBus } from '@/core/events/EventBus';
 
 // 注册自定义节点类型
@@ -30,10 +30,30 @@ const nodeTypes: NodeTypes = {
 
 const Canvas = () => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
-  // 修正泛型参数：从数组类型改为单个元素类型
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const { getEdges, getNodes } = useReactFlow();
+  
+  // 添加服务初始化状态
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
+
+  // 初始化服务
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        setIsInitializing(true);
+        await initializeApplication();
+        setIsInitializing(false);
+      } catch (error) {
+        console.error('服务初始化失败:', error);
+        setInitError((error as Error).message || '初始化服务时发生未知错误');
+        setIsInitializing(false);
+      }
+    };
+
+    initialize();
+  }, []);
 
   // 检测 Delete 和 Backspace 键是否被按下
   const deletePressed = useKeyPress('Delete');
@@ -69,6 +89,9 @@ const Canvas = () => {
 
   // 订阅 flowService 以接收数据更新
   useEffect(() => {
+    // 如果服务尚未初始化完成，则不进行数据加载
+    if (isInitializing) return;
+    
     // 初始加载数据
     setNodes(
       Services.flowService.getNodes().map((node) => ({
@@ -93,7 +116,7 @@ const Canvas = () => {
     return () => {
       unsubscribe();
     };
-  }, [setNodes, setEdges]);
+  }, [setNodes, setEdges, isInitializing]);
 
   // 处理节点拖拽结束
   const onNodeDragStop = useCallback<NodeMouseHandler>((event, node) => {
@@ -176,6 +199,31 @@ const Canvas = () => {
     },
     []
   );
+
+  // 如果出现初始化错误，显示错误信息
+  if (initError) {
+    return (
+      <div className="flex items-center justify-center h-full flex-col">
+        <h3 className="text-red-500 text-xl mb-2">初始化失败</h3>
+        <p className="text-gray-600">{initError}</p>
+        <button 
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          onClick={() => window.location.reload()}
+        >
+          重新加载
+        </button>
+      </div>
+    );
+  }
+
+  // 显示加载状态
+  if (isInitializing) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-lg text-gray-600">初始化服务中...</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100%', height: '100%' }} ref={reactFlowWrapper}>

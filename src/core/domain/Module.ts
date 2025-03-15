@@ -57,7 +57,7 @@ export abstract class Module implements ModuleBase {
     this.metadata = params.metadata;
     this.position = params.position || { x: 100, y: 100 };
 
-    // 注册到生命周期管理器
+    // 注册到生命周期管理器，简化状态追踪
     moduleLifecycleManager.registerModule(this.id, this);
 
     // 初始化参数值为默认值
@@ -73,8 +73,8 @@ export abstract class Module implements ModuleBase {
         type: this.mapParamTypeToParameterType(paramDef.type),
         value: paramDef.default as string | number,
         defaultValue: paramDef.default,
-        modulationAmount: 0,
-        modulationSource: null,
+        automationAmount: 0,
+        automationSource: null,
         min: paramDef.min,
         max: paramDef.max,
         step: paramDef.step,
@@ -82,7 +82,7 @@ export abstract class Module implements ModuleBase {
           paramDef.type.toString().toUpperCase() === 'ENUM'
             ? paramDef.options || []
             : undefined,
-        modulatable: true,
+        automatable: true,
       };
     });
 
@@ -174,7 +174,7 @@ export abstract class Module implements ModuleBase {
   // 创建音频节点（子类实现）
   protected abstract createAudioNodes(): Promise<void>;
 
-  // 连接到目标模块
+  // 简化连接方法，直接连接音频节点
   connect(
     targetModule: ModuleBase,
     outputPortId: string = 'default',
@@ -187,17 +187,15 @@ export abstract class Module implements ModuleBase {
     );
 
     if (!outputNode || !inputNode) {
-      console.error('Invalid connection ports');
+      console.error('无效的连接端口');
       return;
     }
 
     try {
       outputNode.connect(inputNode);
-      // 删除对CONNECTION.ESTABLISHED事件的发送
-      // 这个事件只应该由ConnectionService发出
     } catch (error: unknown) {
-      console.error('Connection failed:', error);
-      throw new Error(`Connection failed: ${(error as Error).message}`);
+      console.error('连接失败:', error);
+      throw new Error(`连接失败: ${(error as Error).message}`);
     }
   }
 

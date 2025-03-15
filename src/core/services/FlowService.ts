@@ -2,7 +2,7 @@ import { eventBus } from '../events/EventBus';
 import type { ModuleBase } from '@/interfaces/module';
 import type { Position } from '@/interfaces/event';
 import { nanoid } from 'nanoid';
-import { container } from '../di/Container';
+import type { ConnectionService } from './ConnectionService';
 
 type FlowNode = {
   id: string;
@@ -31,18 +31,26 @@ export class FlowService {
   private nodes: FlowNode[] = [];
   private edges: FlowEdge[] = [];
   private listeners: Set<() => void> = new Set();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private connectionService: any; // 会在初始化后获取
+  private connectionService: ConnectionService | null = null;
 
   constructor() {
     this.registerEventListeners();
-    // 将自身注册到容器
-    container.register('flowService', this);
+  }
 
-    // 异步获取连接服务
-    setTimeout(() => {
-      this.connectionService = container.get('connectionService');
-    }, 0);
+  /**
+   * 初始化服务
+   */
+  public async initialize(): Promise<void> {
+    console.log('初始化FlowService...');
+    // 可以在这里添加任何初始化逻辑
+    return Promise.resolve();
+  }
+
+  /**
+   * 设置连接服务
+   */
+  public setConnectionService(service: ConnectionService): void {
+    this.connectionService = service;
   }
 
   private registerEventListeners(): void {
@@ -231,5 +239,4 @@ export class FlowService {
   }
 }
 
-// 不再导出单例实例，请通过容器获取
-// 使用方法：container.get<FlowService>('flowService')
+// 不再导出单例实例，请通过ServiceAccessor获取

@@ -124,7 +124,7 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
                 key={key}
                 paramKey={key}
                 param={param}
-                isModulatable={param.modulatable || false}
+                isModulatable={param.automatable || false}
                 modInputId={`mod_${key}`}
                 handleSliderChange={handleSliderChange}
                 handleModRangeChange={() => {}}

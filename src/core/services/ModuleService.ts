@@ -4,29 +4,27 @@ import { moduleFactory } from '../factory/ModuleFactory';
 import { eventBus } from '../events/EventBus';
 import { useModulesStore } from '../store/useModulesStore';
 import { Position } from '@/interfaces/event';
-import type { EventBusError } from '@/interfaces/event';
-import { container } from '../di/Container';
+import { errorHandler, ErrorCode } from '../events/ErrorHandler';
 import { moduleLifecycleManager } from '../domain/ModuleLifecycle';
 import { ModuleLifecycleState } from '@/interfaces/lifecycle';
-// 修复错误导入
-import { errorHandler, ErrorCode } from '../events/ErrorHandler';
+import type { ConnectionService } from './ConnectionService';
 
 /**
  * 模块服务
  * 负责模块的创建、初始化和管理
  */
 export class ModuleService {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private connectionService: any; // 类型会在构造函数中获取
+  private connectionService: ConnectionService | null = null;
 
   constructor() {
-    // 通过容器获取connectionService
-    setTimeout(() => {
-      this.connectionService = container.get('connectionService');
-    }, 0);
+    // 移除了之前对container的引用
+  }
 
-    // 将自身注册到容器
-    container.register('moduleService', this);
+  /**
+   * 设置连接服务引用
+   */
+  setConnectionService(connectionService: ConnectionService): void {
+    this.connectionService = connectionService;
   }
 
   /**
@@ -56,8 +54,6 @@ export class ModuleService {
       'MODULE.DISPOSE_REQUESTED',
       this.handleModuleDisposeRequest.bind(this)
     );
-
-    // 参数相关的事件监听已经移至 ParametersService
 
     // 发出模块服务初始化完成事件
     eventBus.emit('MODULE_SERVICE.INITIALIZED', {
@@ -207,71 +203,30 @@ export class ModuleService {
   }
 
   /**
-   * 创建模块实例
+   * 创建模块实例，简化实现
    */
   async createModule(typeId: string, position?: Position): Promise<ModuleBase> {
-    return new Promise((resolve, reject) => {
-      try {
-        // 生成一个唯一的请求ID，用于关联创建请求和响应
-        const requestId = nanoid();
-
-        // 创建一次性事件监听器，等待模块实例化完成
-        const onInstantiated = (event: {
-          moduleId: string;
-          moduleTypeId: string;
-          position?: Position;
-        }) => {
-          if (event.moduleTypeId === typeId) {
-            // 移除监听器
-            eventBus.off('MODULE.INSTANTIATED', onInstantiated);
-            eventBus.off('MODULE.INSTANTIATE_FAILED', onFailed);
-
-            // 获取创建的模块实例
-            const moduleInstance = useModulesStore
-              .getState()
-              .getModule(event.moduleId);
-            if (moduleInstance) {
-              resolve(moduleInstance);
-            } else {
-              reject(
-                new Error(
-                  `Module was instantiated but not found in store: ${event.moduleId}`
-                )
-              );
-            }
-          }
-        };
-
-        // 创建一次性事件监听器，处理模块实例化失败
-        const onFailed = (event: {
-          moduleTypeId: string;
-          error: EventBusError;
-        }) => {
-          if (event.moduleTypeId === typeId) {
-            // 移除监听器
-            eventBus.off('MODULE.INSTANTIATED', onInstantiated);
-            eventBus.off('MODULE.INSTANTIATE_FAILED', onFailed);
-
-            reject(
-              new Error(`Failed to instantiate module: ${event.error.message}`)
-            );
-          }
-        };
-
-        // 注册事件监听器
-        eventBus.on('MODULE.INSTANTIATED', onInstantiated);
-        eventBus.on('MODULE.INSTANTIATE_FAILED', onFailed);
-
-        // 发出模块实例化请求事件
-        eventBus.emit('MODULE.INSTANTIATE_REQUESTED', {
-          moduleTypeId: typeId,
-          position,
-          requestId,
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
+    try {
+      const instanceId = nanoid();
+      
+      // 直接创建模块实例
+      const moduleInstance = await moduleFactory.create(typeId, instanceId);
+      
+      // 将模块添加到状态存储
+      useModulesStore.getState().addModule(moduleInstance, position);
+      
+      // 发出已实例化事件
+      eventBus.emit('MODULE.INSTANTIATED', {
+        moduleId: instanceId,
+        moduleTypeId: typeId,
+        position,
+      });
+      
+      return moduleInstance;
+    } catch (error) {
+      console.error('创建模块失败:', error);
+      throw new Error(`创建模块失败: ${(error as Error).message}`);
+    }
   }
 
   /**

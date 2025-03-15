@@ -3,8 +3,7 @@ import { Parameter, ParameterType } from '@/interfaces/parameter';
 import { ParameterValue } from '@/interfaces/event';
 import { eventBus } from '@/core/events/EventBus';
 import { errorHandler, ErrorCode } from '@/core/events/ErrorHandler';
-import { container } from '../di/Container';
-import { ModuleRegistry } from '@/interfaces/module';
+import { services } from '@/core/services/ServiceAccessor';
 
 /**
  * 参数服务 - 提供模块参数管理功能
@@ -16,16 +15,6 @@ export class ParametersService {
       'PARAMETER.CHANGE_REQUESTED',
       this.handleParameterChangeRequest.bind(this)
     );
-  }
-
-  /**
-   * 初始化参数服务
-   */
-  async initialize(): Promise<void> {
-    // 将自身注册到容器
-    container.register('parameterService', this);
-
-    return Promise.resolve();
   }
 
   /**
@@ -212,7 +201,7 @@ export class ParametersService {
     }
 
     // 获取模块配置
-    const moduleRegistry = container.get<ModuleRegistry>('moduleRegistry');
+    const moduleRegistry = services.moduleRegistry;
     if (!moduleRegistry) {
       errorHandler.moduleError(
         moduleId,
@@ -233,7 +222,7 @@ export class ParametersService {
     }
 
     // 查找预设
-    const preset = moduleConfig.presets?.find((p) => p.id === presetId);
+    const preset = moduleConfig.presets?.find((p: { id: string; }) => p.id === presetId);
     if (!preset) {
       errorHandler.moduleError(
         moduleId,
@@ -270,91 +259,6 @@ export class ParametersService {
     });
   }
 
-  /**
-   * 设置参数调制
-   * @param moduleId 模块ID
-   * @param parameterId 参数ID
-   * @param sourceId 调制源ID
-   * @param amount 调制量
-   * @returns 是否成功设置了调制
-   */
-  setModulation(
-    moduleId: string,
-    parameterId: string,
-    sourceId: string | null,
-    amount: number
-  ): boolean {
-    const activeModule = useModulesStore.getState().getModule(moduleId);
-    if (!activeModule) {
-      console.warn(`模块不存在: ${moduleId}`);
-      return false;
-    }
-
-    const parameter = activeModule.parameters[parameterId];
-    if (!parameter) {
-      console.warn(`参数不存在: ${moduleId}.${parameterId}`);
-      return false;
-    }
-
-    // 检查参数是否支持调制
-    if (parameter.modulatable === false) {
-      errorHandler.parameterError(
-        moduleId,
-        parameterId,
-        ErrorCode.PARAMETER_INVALID_VALUE, // 使用已存在的错误代码
-        `参数不支持调制: ${moduleId}.${parameterId}`
-      );
-      return false;
-    }
-
-    // 设置调制源和调制量
-    parameter.modulationSource = sourceId;
-    parameter.modulationAmount = amount;
-
-    // 发布调制变更事件
-    eventBus.emit('PARAMETER.MODULATION_CHANGED', {
-      moduleId,
-      parameterId,
-      source: sourceId,
-      amount,
-    });
-
-    return true;
-  }
-
-  /**
-   * 应用调制到参数值
-   * @param moduleId 模块ID
-   * @param parameterId 参数ID
-   * @param modulationValue 调制值（通常在-1到1之间）
-   * @returns 是否成功应用了调制
-   */
-  applyModulation(
-    moduleId: string,
-    parameterId: string,
-    modulationValue: number
-  ): boolean {
-    const parameter = this.getParameters(moduleId)[parameterId];
-    if (!parameter || !parameter.modulatable || !parameter.modulationSource) {
-      return false;
-    }
-
-    // 根据调制量和调制值计算最终值
-    const baseValue = parameter.value as number;
-    const modAmount = parameter.modulationAmount;
-
-    // 计算调制范围
-    const range =
-      parameter.max !== undefined && parameter.min !== undefined
-        ? parameter.max - parameter.min
-        : 1;
-
-    // 计算最终值 = 基础值 + 调制量 * 调制值 * 调制范围
-    const finalValue = baseValue + modAmount * modulationValue * range;
-
-    // 设置参数值（不使用事件总线，避免循环）
-    return this.setParameterValue(moduleId, parameterId, finalValue);
-  }
 
   /**
    * 创建模块参数列表
@@ -377,14 +281,14 @@ export class ParametersService {
         type: paramDef.type as string,
         value: paramDef.default as ParameterValue,
         defaultValue: paramDef.default as ParameterValue,
-        modulationAmount: 0,
-        modulationSource: null,
+        automationAmount: 0,
+        automationSource: null,
         min: paramDef.min as number | undefined,
         max: paramDef.max as number | undefined,
         step: paramDef.step as number | undefined,
         unit: paramDef.unit as string | undefined,
         options: paramDef.options as Array<string | number> | undefined,
-        modulatable:
+        automatable:
           paramDef.modulatable !== undefined
             ? (paramDef.modulatable as boolean)
             : false,

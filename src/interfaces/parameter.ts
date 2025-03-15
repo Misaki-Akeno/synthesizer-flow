@@ -31,11 +31,11 @@ export interface Parameter {
   /** 默认值 */
   defaultValue: ParameterValue;
 
-  /** 调制量 */
-  modulationAmount: number;
+  /** 自动化量 */
+  automationAmount: number;
 
-  /** 调制源 */
-  modulationSource: string | null;
+  /** 自动化源 */
+  automationSource: string | null;
 
   /** 最小值（数值类型参数） */
   min?: number;
@@ -52,8 +52,8 @@ export interface Parameter {
   /** 可选值列表（枚举类型参数） */
   options?: Array<string | number>;
 
-  /** 是否可调制 */
-  modulatable?: boolean;
+  /** 是否可自动化 */
+  automatable?: boolean;
 
   /** 显示条件 */
   visibleWhen?: {
