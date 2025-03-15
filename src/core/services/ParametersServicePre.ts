@@ -3,12 +3,12 @@ import { Parameter, ParameterType } from '@/interfaces/parameter';
 import { ParameterValue } from '@/interfaces/event';
 import { eventBus } from '@/core/events/EventBus';
 import { errorHandler, ErrorCode } from '@/core/events/ErrorHandler';
-import { services } from '@/core/services/ServiceAccessor';
+import { services } from '@/core/services/ServiceManager';
 
 /**
  * 参数服务 - 提供模块参数管理功能
  */
-export class ParametersService {
+export class ParametersServicePre {
   constructor() {
     // 监听参数变更请求
     eventBus.on(
@@ -413,4 +413,4 @@ export class ParametersService {
 }
 
 // 创建单例实例
-export const parametersService = new ParametersService();
+export const parametersService = new ParametersServicePre();

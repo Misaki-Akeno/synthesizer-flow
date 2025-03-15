@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import ContextMenu from '../menu/ContextMenu';
-import { Services } from '@/core/services/ServiceAccessor';
+import ContextMenu from '../workbench/menu/ContextMenu';
+import { Services } from '@/core/services/ServiceManager';
 
 interface ContextMenuProviderProps {
   children: React.ReactNode;

@@ -1,12 +1,14 @@
 import { ModuleService } from './ModuleService';
 import { ConnectionService } from './ConnectionService';
 import { FlowService } from './FlowService';
-import { ParametersService } from './ParametersService';
+import { ParametersServicePre } from './ParametersServicePre';
 import { ContextMenuService } from './ContextMenuService';
 import { errorHandler } from '../events/ErrorHandler';
 import { eventBus } from '../events/EventBus';
 import { moduleLifecycleManager } from '../domain/ModuleLifecycle';
 import { moduleRegistry, discoverAndRegisterModules } from '../factory/ModuleRegistry';
+// 导入新的参数系统
+import { parameterStream, initializeParameterSystem } from './parameters';
 import type { ModuleBase } from '@/interfaces/module';
 import type { ModuleLifecycleState } from '@/interfaces/lifecycle';
 import type { Position } from '@/interfaces/event';
@@ -23,8 +25,10 @@ class ServiceManager {
   private _moduleService: ModuleService | null = null;
   private _connectionService: ConnectionService | null = null;
   private _flowService: FlowService | null = null;
-  private _parameterService: ParametersService | null = null;
+  private _parameterServicePre: ParametersServicePre | null = null;
   private _contextMenuService: ContextMenuService | null = null;
+  // 新增参数系统实例
+  private _parameterSystem: typeof parameterStream | null = null;
   
   // 系统初始化状态
   private _initialized = false;
@@ -46,7 +50,11 @@ class ServiceManager {
       this._moduleService = new ModuleService();
       this._connectionService = new ConnectionService();
       this._flowService = new FlowService();
-      this._parameterService = new ParametersService();
+      this._parameterServicePre = new ParametersServicePre();
+      
+      // 初始化新的参数系统
+      initializeParameterSystem();
+      this._parameterSystem = parameterStream;
       
       // 注册核心实例，确保所有服务都能互相访问到
       this.registerCoreServices();
@@ -121,11 +129,22 @@ class ServiceManager {
   /**
    * 获取参数服务
    */
-  get parameterService(): ParametersService {
-    if (!this._parameterService) {
+  get parameterServicePre(): ParametersServicePre {
+    if (!this._parameterServicePre) {
       throw new Error('ParametersService未初始化，请先调用bootstrap()');
     }
-    return this._parameterService;
+    return this._parameterServicePre;
+  }
+
+  /**
+   * 获取新的参数系统
+   * 基于RxJS的响应式参数管理
+   */
+  get parameterSystem() {
+    if (!this._parameterSystem) {
+      throw new Error('参数系统未初始化，请先调用bootstrap()');
+    }
+    return this._parameterSystem;
   }
 
   /**
@@ -205,4 +224,104 @@ export async function initializeApplication(): Promise<void> {
  *
  * // 使用服务
  * const module = await Services.createModule('oscillator');
+ */
+
+/**
+ * =====================================================
+ * 新参数系统文档 (RxJS-based Parameter System)
+ * =====================================================
+ * 
+ * 概述：
+ * 新的参数系统采用了响应式编程模型，基于RxJS构建。相比旧系统，新系统提供了更强大的参数状态管理、
+ * 订阅机制和自动化能力，同时降低了系统各部分之间的耦合度。
+ * 
+ * 主要组件：
+ * 
+ * 1. ParameterSubject - 单个参数的响应式封装
+ *    - 维护参数状态（值、可见性、禁用状态等）
+ *    - 提供参数值变化的Observable流
+ *    - 处理参数验证和值调整
+ * 
+ * 2. ParameterStream - 全局参数管理器
+ *    - 注册和管理所有模块的参数
+ *    - 提供参数变更事件的全局流
+ *    - 实现参数自动化（一个参数控制另一个）
+ *    - 处理模块销毁时的参数清理
+ * 
+ * 使用示例：
+ * 
+ * 1. 获取参数值并订阅变化
+ *    ```typescript
+ *    // 获取单个参数值的流
+ *    Services.parameterSystem.getParameterValue$<number>('moduleId', 'frequency')
+ *      .subscribe(value => {
+ *        console.log(`频率变更为: ${value}Hz`);
+ *      });
+ *    ```
+ * 
+ * 2. 监听所有参数变更
+ *    ```typescript
+ *    Services.parameterSystem.getParameterChanges$()
+ *      .subscribe(change => {
+ *        console.log(`参数 ${change.moduleId}.${change.parameterId} 变更为 ${change.value}`);
+ *      });
+ *    ```
+ * 
+ * 3. 更新参数值
+ *    ```typescript
+ *    Services.parameterSystem.updateParameterValue(
+ *      'moduleId',
+ *      'frequency',
+ *      440,
+ *      'ui' // 指定更新来源（ui, automation, preset, api, internal）
+ *    );
+ *    ```
+ * 
+ * 4. 创建参数自动化（例如LFO控制滤波器截止频率）
+ *    ```typescript
+ *    Services.parameterSystem.createParameterAutomation({
+ *      sourceModuleId: 'lfo1',
+ *      sourceParameterId: 'output',
+ *      targetModuleId: 'filter1',
+ *      targetParameterId: 'cutoff',
+ *      amount: 0.5, // 影响程度（0-1）
+ *    });
+ *    ```
+ * 
+ * 5. 注册模块参数
+ *    ```typescript
+ *    Services.parameterSystem.registerModuleParameters('oscillator1', {
+ *      frequency: {
+ *        id: 'frequency',
+ *        type: 'number',
+ *        label: '频率',
+ *        value: 440,
+ *        defaultValue: 440,
+ *        min: 20,
+ *        max: 20000,
+ *        unit: 'Hz'
+ *      },
+ *      // 更多参数...
+ *    });
+ *    ```
+ * 
+ * 与旧系统兼容性：
+ * - 新参数系统与旧系统可以并行运行
+ * - 模块可以逐步从旧系统迁移到新系统
+ * - 提供兼容层以便旧代码可以与新参数系统交互
+ * 
+ * 未来改进计划：
+ * - 参数历史记录和撤销功能
+ * - 参数分组和层次结构
+ * - UI组件与参数系统的直接集成
+ * - 参数预设保存与加载
+ * - 序列器和时间轴控制集成
+ * 
+ * 开发状态：
+ * [✅] 核心参数流设计
+ * [✅] 参数状态管理
+ * [✅] 参数自动化
+ * [  ] UI组件集成
+ * [  ] 预设系统
+ * [  ] 持久化存储
  */

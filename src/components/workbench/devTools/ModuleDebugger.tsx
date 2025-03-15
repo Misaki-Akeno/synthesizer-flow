@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { moduleRegistry } from '@/core/factory/ModuleRegistry';
 import { eventBus } from '@/core/events/EventBus';
 import { Button } from '@/components/ui/button';
-import { Services } from '@/core/services/ServiceAccessor';
+import { Services } from '@/core/services/ServiceManager';
 
 export default function ModuleDebugger() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

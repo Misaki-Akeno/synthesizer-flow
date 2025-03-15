@@ -20,7 +20,7 @@ import {
 } from '@xyflow/react';
 import DevTools from './devTools/DevTools';
 import ModuleNode from './ModuleNode';
-import { Services, initializeApplication } from '@/core/services/ServiceAccessor';
+import { Services, initializeApplication } from '@/core/services/ServiceManager';
 import { eventBus } from '@/core/events/EventBus';
 
 // 注册自定义节点类型

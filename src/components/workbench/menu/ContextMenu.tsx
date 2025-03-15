@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { MenuItem, MenuContext } from '@/core/services/ContextMenuService';
-import { Services } from '@/core/services/ServiceAccessor';
+import { Services } from '@/core/services/ServiceManager';
 import { useObservable } from '@/hooks/useObservable';
 
 // 菜单项组件
