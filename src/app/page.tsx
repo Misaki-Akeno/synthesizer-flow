@@ -3,6 +3,7 @@ import { Metadata } from 'next';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import Canvas from '@/components/workbench/Canvas';
+import ClientProviders from '@/components/providers/ClientProviders';
 
 export const metadata: Metadata = {
   title: 'Synthsizer Playground',
@@ -14,9 +15,11 @@ export default function PlaygroundPage() {
     <div className="h-screen flex flex-col">
       <div className="hidden h-full flex-col md:flex flex-1">
         <div className="flex-1 overflow-hidden">
-          <ReactFlowProvider>
-            <Canvas />
-          </ReactFlowProvider>
+          <ClientProviders>
+            <ReactFlowProvider>
+              <Canvas />
+            </ReactFlowProvider>
+          </ClientProviders>
         </div>
       </div>
     </div>

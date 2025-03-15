@@ -66,28 +66,6 @@ Synthesizer Flow 致力于构建模块化合成器。可以通过菜单来添加
 状态事件：STATE.{ENTITY}.{ACTION} (状态变化)
 结果事件：{DOMAIN}.{ACTION}\_COMPLETED/FAILED (操作结果)
 
-├── UI 事件
-│ ├── NODE.CREATED（节点创建）
-│ ├── NODE.DELETED（节点删除）
-│ ├── NODE.MOVED（节点移动）
-│ ├── CONNECTION.REQUESTED（连接请求）
-│ ├── CONNECTION.CREATED（连接创建）
-│ └── PARAMETER.UI_CHANGED（UI 参数变更）
-├── 领域事件
-│ ├── MODULE.INSTANTIATED（模块实例化）
-│ ├── MODULE.DISPOSED（模块销毁）
-│ ├── CONNECTION.ESTABLISHED（连接建立）
-│ ├── CONNECTION.BROKEN（连接断开）
-│ ├── PARAMETER.CHANGED（参数变更）
-│ └── PARAMETER.MODULATION_CHANGED（调制参数变更）
-├── 系统事件
-│ ├── SYSTEM.INITIALIZED（系统初始化）
-│ ├── SYSTEM.ERROR（系统错误）
-│ ├── AUDIO.STARTED（音频开始）
-│ └── AUDIO.STOPPED（音频停止）
-└── 持久化事件
-├── STATE.SAVE_REQUESTED（状态保存请求）
-└── STATE.LOADED（状态加载）
 
 ## 事件流程
 
@@ -218,6 +196,31 @@ UI状态：ReactFlow节点位置、选择状态等(派生自核心状态)
 音频引擎连接：执行实际的Tone.js连接
 状态更新：更新连接状态
 UI反馈：更新连接视觉表示
+
+# 参数设计
+## 连接类型
+1. 音频连接 (Audio Signal)
+用途: 音频流传输
+特点: 采样率级别运算，通常为 44.1kHz 或 48kHz
+应用: 振荡器输出、滤波器链、效果处理链
+2. 数字连接 (Control Signal / Number)
+用途: 参数控制、调制、自动化
+特点: 通常为低频率信号，但在 Tone.js 中依然以音频采样率处理
+应用场景:
+LFO 调制
+参数自动化曲线
+MIDI 音符/力度值 (0-127 的数字)
+包络输出 (ADSR)
+调制轮、弯音轮数据
+3. 触发/布尔连接 (Trigger/Boolean)
+用途: 触发事件、开关状态
+特点: 表示二进制状态或瞬时触发
+应用场景:
+序列器触发信号
+按键按下/释放状态
+门限信号 (Gate)
+触发包络的信号
+
 
 # 合成器流模块设计
 

@@ -337,6 +337,26 @@ export interface EventTypes {
   'UI.CONNECTION.DELETED': {
     connectionId: string;
   };
+  
+  // 右键菜单相关事件
+  'UI.CONTEXT_MENU.OPEN': {
+    sourceId: string;
+    position: Position;
+    nodeType?: string;
+    sourceType: 'node' | 'edge' | 'pane';
+  };
+  'UI.CONTEXT_MENU.CLOSE': {
+    sourceId?: string;
+  };
+  'UI.MODULE.PIN': {
+    moduleId: string;
+  };
+  'UI.MODULE.UNPIN': {
+    moduleId: string;
+  };
+  'UI.MODULE.CLOSE': {
+    moduleId: string;
+  };
 
   // 系统事件
   'SYSTEM.INITIALIZED': Record<string, never>;

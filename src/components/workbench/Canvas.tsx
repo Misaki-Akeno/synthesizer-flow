@@ -135,6 +135,48 @@ const Canvas = () => {
     }
   }, []);
 
+  // 处理右键菜单
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      // 阻止默认的右键菜单
+      event.preventDefault();
+      // 发送打开右键菜单事件
+      eventBus.emit('UI.CONTEXT_MENU.OPEN', {
+        sourceId: node.id,
+        position: { x: event.clientX, y: event.clientY },
+        nodeType: node.type,
+        sourceType: 'node',
+      });
+    },
+    []
+  );
+
+  // 处理边缘右键菜单
+  const onEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      eventBus.emit('UI.CONTEXT_MENU.OPEN', {
+        sourceId: edge.id,
+        position: { x: event.clientX, y: event.clientY },
+        sourceType: 'edge',
+      });
+    },
+    []
+  );
+
+  // 处理画布右键菜单
+  const onPaneContextMenu = useCallback(
+    (event: MouseEvent | React.MouseEvent<Element, MouseEvent>) => {
+      event.preventDefault();
+      eventBus.emit('UI.CONTEXT_MENU.OPEN', {
+        sourceId: 'canvas',
+        position: { x: event.clientX, y: event.clientY },
+        sourceType: 'pane',
+      });
+    },
+    []
+  );
+
   return (
     <div style={{ width: '100%', height: '100%' }} ref={reactFlowWrapper}>
       <ReactFlow
@@ -144,6 +186,9 @@ const Canvas = () => {
         onEdgesChange={handleEdgesChange}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
+        onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
+        onPaneContextMenu={onPaneContextMenu}
         nodeTypes={nodeTypes}
         fitView
         deleteKeyCode={['Backspace', 'Delete']} // 同时支持 Backspace 和 Delete 键

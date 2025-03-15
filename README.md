@@ -9,7 +9,8 @@ Synthesizer Flow 致力于构建模块化合成器。可以通过菜单来添加
 - ✔️优化数据流：User Input → Store Action → State Update → UI Render → Audio Engine Update
 - ✔️提供基础声音支持
 - ✔️修改节点ui参数，使得其支持更灵活的调整
-- 添加删除功能，仍需修复
+- ✔️添加删除功能
+- 优化类型系统
 - 添加通用的右键菜单，右键模块可以弹出可固定的参数，右键空白出跳出模块选单
 - 左侧边栏提供保存，预设加载，用户服务
 

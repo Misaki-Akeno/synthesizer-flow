@@ -3,6 +3,7 @@ import type { ModuleService } from './ModuleService';
 import type { ConnectionService } from './ConnectionService';
 import type { FlowService } from './FlowService';
 import type { ParametersService } from './ParametersService';
+import { ContextMenuService } from './ContextMenuService';
 
 /**
  * 服务访问器
@@ -115,6 +116,18 @@ export class ServiceAccessor {
    */
   static get parameterService(): ParametersService {
     return container.get<ParametersService>('parameterService');
+  }
+
+  /**
+   * 获取上下文菜单服务
+   */
+  private static _contextMenuService: ContextMenuService | null = null;
+
+  public static get contextMenuService(): ContextMenuService {
+    if (!this._contextMenuService) {
+      this._contextMenuService = new ContextMenuService();
+    }
+    return this._contextMenuService;
   }
 }
 
