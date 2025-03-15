@@ -147,18 +147,18 @@ export class OutputModule extends Module {
 
   // 创建音频节点
   protected async createAudioNodes(): Promise<void> {
+    // 从参数系统获取初始值
+    const volumeValue = this.getParameterValue('volume') as number;
+    const muteState = Boolean(this.getParameterValue('mute'));
+    
     // 创建音量控制节点
-    this.volumeNode = new Tone.Volume(
-      this.getParameterValue('volume') as number
-    );
+    this.volumeNode = new Tone.Volume(volumeValue);
 
     // 连接到主输出
     this.volumeNode.toDestination();
 
     // 根据静音状态设置
-    if (this.getParameterValue('mute') === true) {
-      this.volumeNode.mute = true;
-    }
+    this.volumeNode.mute = muteState;
 
     // 存储音频节点引用
     this._audioNodes = {

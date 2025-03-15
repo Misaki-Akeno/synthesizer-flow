@@ -17,6 +17,7 @@ import {
   ModuleParametersState,
   ParameterAutomationConfig
 } from './types';
+import { ParameterValue } from '@/interfaces/event';
 
 /**
  * 参数流管理类
@@ -42,15 +43,21 @@ export class ParameterStream {
    */
   registerModuleParameters(
     moduleId: string, 
-    parameters: Record<string, ParameterState | unknown>
+    parameters: Record<string, Partial<ParameterState> | unknown>
   ): void {
     // 创建一个新的模块参数Map
     const moduleParams = new Map<string, ParameterSubject>();
     
     // 为每个参数创建一个Subject
     for (const [parameterId, parameter] of Object.entries(parameters)) {
-      const paramState = parameter as ParameterState;
-      const paramSubject = new ParameterSubject(moduleId, paramState);
+      const paramState = parameter as Partial<ParameterState>;
+      const paramSubject = new ParameterSubject(moduleId, {
+        ...paramState,
+        id: paramState.id || parameterId, // 确保参数有ID
+        name: parameterId, // 参数名称使用参数ID
+        automationAmount: 1.0, // 默认自动化量
+        automationSource: undefined, // 初始为未定义以匹配期望类型
+      });
       // 订阅参数变更并将其转发到全局变更流
       paramSubject.getChanges$()
         .pipe(takeUntil(this.getModuleDisposeSignal$(moduleId)))
@@ -127,6 +134,25 @@ export class ParameterStream {
     }
     
     return subject.getValue$<T>();
+  }
+
+  /**
+   * 获取参数的当前值
+   * @param moduleId 模块ID
+   * @param parameterId 参数ID
+   * @returns 参数的当前值
+   */
+  getParameterValue(
+    moduleId: string,
+    parameterId: string
+  ): ParameterValue {
+    const subject = this.getParameterSubject(moduleId, parameterId);
+    if (!subject) {
+      console.warn(`Parameter not found: ${moduleId}.${parameterId}`);
+      return null; // Return null instead of undefined to match ParameterValue type
+    }
+    
+    return subject.getValue();
   }
 
   /**
@@ -302,34 +328,145 @@ export class ParameterStream {
 
   /**
    * 删除参数自动化
-   * @param sourceModuleId 源模块ID
-   * @param sourceParameterId 源参数ID
-   * @param targetModuleId 目标模块ID
-   * @param targetParameterId 目标参数ID
+   * @param moduleId 模块ID 
+   * @param parameterId 参数ID
+   * @param sourceModuleId 可选，特定源模块ID
+   * @param sourceParameterId 可选，特定源参数ID
+   * @returns 是否成功删除自动化
    */
   removeParameterAutomation(
-    sourceModuleId: string,
-    sourceParameterId: string,
-    targetModuleId: string,
-    targetParameterId: string
+    moduleId: string, 
+    parameterId: string,
+    sourceModuleId?: string,
+    sourceParameterId?: string
   ): boolean {
-    const key = `${sourceModuleId}:${sourceParameterId}->${targetModuleId}:${targetParameterId}`;
-    
-    // 检查自动化是否存在
-    if (!this.automations.has(key)) {
-      return false;
-    }
-    
-    // 删除自动化配置
-    this.automations.delete(key);
-    
-    // 获取目标参数并禁用自动化
-    const targetSubject = this.getParameterSubject(targetModuleId, targetParameterId);
-    if (targetSubject) {
-      targetSubject.disableAutomation();
+    // 如果提供了源模块ID和参数ID，仅删除特定自动化
+    if (sourceModuleId && sourceParameterId) {
+      const key = `${sourceModuleId}:${sourceParameterId}->${moduleId}:${parameterId}`;
+      
+      // 检查自动化是否存在
+      if (!this.automations.has(key)) {
+        return false;
+      }
+      
+      // 删除自动化配置
+      this.automations.delete(key);
+      
+      // 获取目标参数并禁用自动化
+      const targetSubject = this.getParameterSubject(moduleId, parameterId);
+      if (targetSubject) {
+        targetSubject.disableAutomation();
+      }
+    } else {
+      // 否则删除所有相关的自动化
+      const subject = this.getParameterSubject(moduleId, parameterId);
+      if (!subject) {
+        return false;
+      }
+      
+      // 查找所有相关自动化并删除
+      let found = false;
+      for (const [key, config] of this.automations.entries()) {
+        if (
+          (config.targetModuleId === moduleId && config.targetParameterId === parameterId) ||
+          (config.sourceModuleId === moduleId && config.sourceParameterId === parameterId)
+        ) {
+          this.automations.delete(key);
+          found = true;
+        }
+      }
+      
+      if (found) {
+        subject.disableAutomation();
+      }
     }
     
     return true;
+  }
+
+  /**
+   * 获取参数自动化范围
+   * @param moduleId 模块ID
+   * @param parameterId 参数ID
+   * @returns 自动化范围 [min, max]
+   */
+  getParameterAutomationRange(
+    moduleId: string,
+    parameterId: string
+  ): [number, number] {
+    const subject = this.getParameterSubject(moduleId, parameterId);
+    if (!subject) {
+      return [0, 1]; // 默认范围
+    }
+    
+    const state = subject.getCurrentState();
+    return state.automationRange || [state.min || 0, state.max || 1];
+  }
+
+  /**
+   * 设置参数自动化范围
+   * @param moduleId 模块ID
+   * @param parameterId 参数ID
+   * @param minValue 最小值
+   * @param maxValue 最大值
+   */
+  setParameterAutomationRange(
+    moduleId: string,
+    parameterId: string,
+    minValue: number,
+    maxValue: number
+  ): void {
+    const subject = this.getParameterSubject(moduleId, parameterId);
+    if (!subject) {
+      console.warn(`Cannot set automation range, parameter not found: ${moduleId}.${parameterId}`);
+      return;
+    }
+    
+    subject.setAutomationRange([minValue, maxValue]);
+  }
+
+  /**
+   * 获取参数自动化信息
+   * @param moduleId 模块ID
+   * @param parameterId 参数ID
+   */
+  getParameterAutomationInfo(
+    moduleId: string,
+    parameterId: string
+  ) {
+    const subject = this.getParameterSubject(moduleId, parameterId);
+    if (!subject) {
+      return null;
+    }
+    
+    const state = subject.getCurrentState();
+    return {
+      isAutomated: state.automated || false,
+      range: state.automationRange || [state.min || 0, state.max || 1]
+    };
+  }
+  
+  /**
+   * 删除模块所有参数的自动化
+   * @param moduleId 模块ID
+   */
+  removeAllParameterAutomations(moduleId: string): void {
+    const moduleParams = this.parameterSubjects.get(moduleId);
+    if (!moduleParams) {
+      return;
+    }
+    
+    for (const [paramId, subject] of moduleParams.entries()) {
+      for (const [key, config] of this.automations.entries()) {
+        if (
+          (config.sourceModuleId === moduleId && config.sourceParameterId === paramId) ||
+          (config.targetModuleId === moduleId && config.targetParameterId === paramId)
+        ) {
+          this.automations.delete(key);
+          subject.disableAutomation();
+        }
+      }
+    }
   }
 }
 

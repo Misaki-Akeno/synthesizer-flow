@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Position, NodeProps } from '@xyflow/react';
 import { ModuleInterface, ModuleConfiguration } from '@/interfaces/module';
 import { Parameter } from '@/interfaces/parameter';
 import { Services } from '@/core/services/ServiceManager';
 import { moduleRegistry } from '@/core/factory/ModuleRegistry';
+import { ParameterValue } from '@/interfaces/event';
 
 // 新增 DefaultModuleComponents 的引用
 import {
@@ -20,6 +21,7 @@ interface ModuleNodeData {
   label: string;
 }
 
+
 const ModuleNode: React.FC<NodeProps> = ({ data }) => {
   // 数据类型转换
   const nodeData = data as unknown as ModuleNodeData;
@@ -27,6 +29,79 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
     null
   );
   const [parameters, setParameters] = useState<Record<string, Parameter>>({});
+  
+  // 使用 useRef 存储订阅，以便在组件卸载时取消订阅
+  const subscriptions = useRef<{ unsubscribe: () => void }[]>([]);
+
+  // 加载模块的所有参数
+  const loadModuleParameters = useCallback(() => {
+    // 清理之前的订阅
+    subscriptions.current.forEach(sub => sub.unsubscribe());
+    subscriptions.current = [];
+    
+    // 获取模块参数 - 通过新的参数系统
+    const moduleParamsSub = Services.parameterSystem.getModuleParameters$(nodeData.moduleId)
+      .subscribe(params => {
+        // 将参数对象转换为UI组件所需的格式
+        const parameterMap: Record<string, Parameter> = {};
+        
+        Object.entries(params || {}).forEach(([paramId, paramData]) => {
+          // 构建带有UI状态的参数对象
+          const param: Parameter = {
+            id: paramId,
+            name: paramId,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            type: (paramData.type || 'number') as any,
+            value: paramData.value,
+            defaultValue: paramData.defaultValue,
+            min: paramData.min,
+            max: paramData.max,
+            step: paramData.step,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            options: paramData.options as any,
+            unit: paramData.unit,
+            label: paramData.label || paramId,
+            isAutomated: paramData.automated || false,
+            automationRange: paramData.automationRange,
+            displayValue: paramData.value,
+            automationAmount: 1.0,
+            automationSource: null,
+            // 其他UI相关状态
+            visible: paramData.visible !== false,
+            disabled: paramData.disabled || false,
+            automatable: paramData.automatable || false
+          };
+          
+          // 添加到参数映射
+          parameterMap[paramId] = param;
+          
+          // 获取参数的自动化状态
+          const stateSub = Services.parameterSystem.getParameterState$(
+            nodeData.moduleId,
+            paramId
+          ).subscribe(state => {
+            setParameters(prevParams => ({
+              ...prevParams,
+              [paramId]: {
+                ...(prevParams[paramId] || {}),
+                // 动态更新值和状态
+                value: state.value,
+                isAutomated: state.automated || false,
+                automationRange: state.automationRange,
+                displayValue: state.value,
+              } as Parameter
+            }));
+          });
+          
+          subscriptions.current.push(stateSub);
+        });
+        
+        // 初始设置参数
+        setParameters(parameterMap);
+      });
+    
+    subscriptions.current.push(moduleParamsSub);
+  }, [nodeData.moduleId]);
 
   useEffect(() => {
     // 根据 moduleTypeId 获取模块配置
@@ -34,29 +109,119 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
     if (config) {
       setModuleConfig(config);
     }
+    
     // 获取模块参数
-    const moduleParams = Services.parameterServicePre.getParameters(
-      nodeData.moduleId
-    );
-    setParameters(moduleParams);
-  }, [nodeData.moduleTypeId, nodeData.moduleId]);
+    loadModuleParameters();
+    
+    // 订阅参数变化
+    const subscription = Services.parameterSystem.getModuleParameterChanges$(nodeData.moduleId)
+      .subscribe(() => {
+        // 当参数发生变化时重新加载参数状态
+        loadModuleParameters();
+      });
+      
+    subscriptions.current.push(subscription);
+    
+    return () => {
+      // 清理所有订阅
+      subscriptions.current.forEach(sub => sub.unsubscribe());
+      subscriptions.current = [];
+    };
+  }, [nodeData.moduleTypeId, nodeData.moduleId, loadModuleParameters]);
 
   // 处理参数控制器变化
   const handleSliderChange = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (key: string, newValue: any) => {
-      Services.parameterServicePre.requestParameterChange(
+    (key: string, newValue: ParameterValue) => {
+      Services.parameterSystem.updateParameterValue(
         nodeData.moduleId,
         key,
-        newValue
+        newValue,
+        'ui'
       );
+      
       // 本地状态更新，用于即时UI反馈
-      setParameters({
-        ...parameters,
-        [key]: { ...parameters[key], value: newValue },
+      setParameters(prev => {
+        const updated = { ...prev };
+        if (updated[key]) {
+          updated[key] = {
+            ...updated[key],
+            value: newValue,
+            displayValue: newValue
+          };
+        }
+        return updated;
       });
     },
-    [nodeData.moduleId, parameters]
+    [nodeData.moduleId]
+  );
+  
+  // 处理自动化范围变化
+  const handleModRangeChange = useCallback(
+    (paramId: string, range: number[]) => {
+      if (range.length !== 2) return;
+      
+      // 更新自动化范围
+      Services.parameterSystem.setParameterAutomationRange(
+        nodeData.moduleId,
+        paramId,
+        range[0],
+        range[1]
+      );
+      
+      // 更新本地状态用于UI反馈
+      setParameters(prev => {
+        const updated = { ...prev };
+        if (updated[paramId]) {
+          updated[paramId] = {
+            ...updated[paramId],
+            automationRange: range as [number, number]
+          };
+        }
+        return updated;
+      });
+    },
+    [nodeData.moduleId]
+  );
+  
+  // 处理自动化开关
+  const handleAutomationToggle = useCallback(
+    (paramId: string, enabled: boolean) => {
+      if (enabled) {
+        // 这里只是启用自动化准备，实际的自动化连接需要在连线时创建
+        setParameters(prev => {
+          const updated = { ...prev };
+          if (updated[paramId]) {
+            updated[paramId] = {
+              ...updated[paramId],
+              isAutomationEnabled: true
+            };
+          }
+          return updated;
+        });
+      } else {
+        // 禁用自动化
+        Services.parameterSystem.removeParameterAutomation(
+          nodeData.moduleId,
+          paramId,
+          '', // 源模块ID，空字符串表示移除所有
+          '' // 源参数ID，空字符串表示移除所有
+        );
+        
+        // 更新本地状态
+        setParameters(prev => {
+          const updated = { ...prev };
+          if (updated[paramId]) {
+            updated[paramId] = {
+              ...updated[paramId],
+              isAutomated: false,
+              isAutomationEnabled: false
+            };
+          }
+          return updated;
+        });
+      }
+    },
+    [nodeData.moduleId]
   );
 
   return (
@@ -66,7 +231,7 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
         backgroundColor: moduleConfig?.ui?.color
           ? String(moduleConfig.ui.color)
           : '#cccccc',
-        borderRadius: '8px', // 修改 borderRadius 从 6px 改为 8px
+        borderRadius: '8px',
         minWidth: '240px',
         width: '100%',
         boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
@@ -124,10 +289,11 @@ const ModuleNode: React.FC<NodeProps> = ({ data }) => {
                 key={key}
                 paramKey={key}
                 param={param}
-                isModulatable={param.automatable || false}
+                isAutomatable={param.automatable || false}
                 modInputId={`mod_${key}`}
                 handleSliderChange={handleSliderChange}
-                handleModRangeChange={() => {}}
+                handleModRangeChange={handleModRangeChange}
+                handleAutomationToggle={handleAutomationToggle}
               />
             ))}
           </div>

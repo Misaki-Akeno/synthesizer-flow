@@ -16,13 +16,26 @@ import { ParameterState } from './types';
  * @returns 参数状态
  */
 export function createInitialParameterState(parameter: Parameter): ParameterState {
-  return {
-    ...parameter,
+  // Create a new object without spreading parameter directly
+  const state: ParameterState = {
+    id: parameter.id,
+    name: parameter.name,
+    type: parameter.type,
+    value: parameter.value,
+    defaultValue: parameter.defaultValue,
+    min: parameter.min,
+    max: parameter.max,
+    step: parameter.step,
+    options: parameter.options,
+    unit: parameter.unit,
+    automationRange: parameter.automationRange,
+    automationSource: parameter.automationSource ? undefined : undefined,
     visible: true,
     disabled: false,
     lastUpdated: Date.now(),
-    automationActive: false
+    automated: false
   };
+  return state;
 }
 
 /**

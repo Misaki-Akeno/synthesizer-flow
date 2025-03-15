@@ -8,7 +8,6 @@ import {
   observeOn
 } from 'rxjs/operators';
 import { animationFrameScheduler } from 'rxjs';
-import { Parameter } from '@/interfaces/parameter';
 import { ParameterValue } from '@/interfaces/event';
 import { 
   ParameterState, 
@@ -37,15 +36,27 @@ export class ParameterSubject {
    */
   constructor(
     private readonly moduleId: string,
-    parameter: Parameter
+    parameter: Partial<ParameterState>
   ) {
     // 初始化参数状态
     const initialState: ParameterState = {
-      ...parameter,
-      visible: this.determineVisibility(parameter),
+      id: parameter.id || '',
+      type: parameter.type || 'number',
+      value: parameter.value !== undefined ? parameter.value : null,
+      defaultValue: parameter.defaultValue !== undefined ? parameter.defaultValue : null,
+      min: parameter.min,
+      max: parameter.max,
+      step: parameter.step,
+      options: parameter.options,
+      unit: parameter.unit,
+      label: parameter.label || parameter.id || '',
+      visible: true,
       disabled: false,
-      lastUpdated: Date.now(),
-      automationActive: false
+      automatable: parameter.automatable || false,
+      automated: false,
+      automationRange: parameter.automationRange,
+      automationSource: parameter.automationSource,
+      lastUpdated: 0
     };
 
     // 创建主要subjects
@@ -128,9 +139,7 @@ export class ParameterSubject {
     // 更新状态
     const newState: ParameterState = {
       ...currentState,
-      value: validValue,
-      lastUpdated: Date.now(),
-      lastUpdateSource: source
+      value: validValue
     };
     
     // 发出值变更事件
@@ -139,8 +148,6 @@ export class ParameterSubject {
       parameterId: currentState.id,
       value: validValue,
       previousValue: currentState.value,
-      timestamp: newState.lastUpdated,
-      unit: currentState.unit,
       source
     });
     
@@ -157,8 +164,7 @@ export class ParameterSubject {
     // 合并状态
     const newState: ParameterState = {
       ...currentState,
-      ...partialState,
-      lastUpdated: Date.now()
+      ...partialState
     };
     
     // 如果值发生变化，发出变更事件
@@ -169,8 +175,6 @@ export class ParameterSubject {
         parameterId: currentState.id,
         value: partialState.value,
         previousValue: currentState.value,
-        timestamp: newState.lastUpdated,
-        unit: currentState.unit,
         source: 'internal'
       });
     }
@@ -206,8 +210,11 @@ export class ParameterSubject {
    */
   enableAutomation(sourceModuleId: string, sourceParameterId: string): void {
     this.updateState({
-      automationActive: true,
-      automationSource: `${sourceModuleId}:${sourceParameterId}`
+      automated: true,
+      automationSource: {
+        moduleId: sourceModuleId,
+        parameterId: sourceParameterId
+      }
     });
   }
 
@@ -216,24 +223,22 @@ export class ParameterSubject {
    */
   disableAutomation(): void {
     this.updateState({
-      automationActive: false,
-      automationSource: null,
-      automationAmount: 0
+      automated: false,
+      automationSource: undefined
     });
   }
 
   /**
-   * 检查参数是否可见
+   * 设置自动化范围
+   * @param range 自动化范围 [min, max]
    */
-  private determineVisibility(parameter: Parameter): boolean {
-    // 如果没有visibleWhen条件，则参数可见
-    if (!parameter.visibleWhen) {
-      return true;
-    }
-
-    // 具体的可见性逻辑待实现
-    // 这需要访问其他参数的值，因此完整实现需要在ParameterService中
-    return true;
+  setAutomationRange(range: [number, number]): void {
+    const currentState = this.state$.getValue();
+    
+    this.state$.next({
+      ...currentState,
+      automationRange: range
+    });
   }
 
   /**
@@ -295,8 +300,12 @@ export class ParameterSubject {
         break;
         
       case 'enum':
-        if (state.options && !state.options.includes(value as string | number)) {
-          return state.defaultValue;
+        // 类型安全的检查
+        if (state.options && Array.isArray(state.options)) {
+          const options = state.options as Array<string | number>;
+          if (!options.some(opt => opt === value)) {
+            return state.defaultValue;
+          }
         }
         break;
     }

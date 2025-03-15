@@ -9,15 +9,14 @@ import {
   Port,
   ModuleParams,
 } from '@/interfaces/module';
-import { Parameter } from '@/interfaces/parameter';
 import { moduleLifecycleManager } from './ModuleLifecycle';
 import { ModuleLifecycleState } from '@/interfaces/lifecycle';
+import { services } from '../services/ServiceManager';
 
 export abstract class Module implements ModuleBase {
   id: string;
   typeId: string;
   metadata: ModuleMetadata;
-  parameters: Record<string, Parameter> = {};
   position: { x: number; y: number };
   protected _initialized: boolean = false;
   private _presets: Record<string, Preset> = {};
@@ -37,8 +36,7 @@ export abstract class Module implements ModuleBase {
   abstract getInputPorts(): Port[];
   abstract getOutputPorts(): Port[];
 
-  // 参数定义与值
-  protected _paramValues: Record<string, ParameterValue> = {};
+  // 参数定义
   abstract getParameterDefinitions(): Record<
     string,
     {
@@ -48,6 +46,8 @@ export abstract class Module implements ModuleBase {
       default: ParameterValue;
       min?: number;
       max?: number;
+      unit?: string;
+      label?: string;
     }
   >;
 
@@ -60,68 +60,62 @@ export abstract class Module implements ModuleBase {
     // 注册到生命周期管理器，简化状态追踪
     moduleLifecycleManager.registerModule(this.id, this);
 
-    // 初始化参数值为默认值
-    const paramDefs = this.getParameterDefinitions();
-    Object.keys(paramDefs).forEach((paramId) => {
-      const paramDef = paramDefs[paramId];
-      this._paramValues[paramId] = paramDef.default;
-
-      // 使用标准Parameter对象
-      this.parameters[paramId] = {
-        id: paramId,
-        name: paramId, // 名称，可以改进为更友好的名称
-        type: this.mapParamTypeToParameterType(paramDef.type),
-        value: paramDef.default as string | number,
-        defaultValue: paramDef.default,
-        automationAmount: 0,
-        automationSource: null,
-        min: paramDef.min,
-        max: paramDef.max,
-        step: paramDef.step,
-        options:
-          paramDef.type.toString().toUpperCase() === 'ENUM'
-            ? paramDef.options || []
-            : undefined,
-        automatable: true,
-      };
-    });
+    // 初始化参数并注册到新的参数系统
+    this.registerParametersWithSystem();
 
     // 初始化预设
     if (this.metadata.presets && Array.isArray(this.metadata.presets)) {
-      // 添加类型断言确保类型兼容性
       (this.metadata.presets as Preset[]).forEach((preset: Preset) => {
         this._presets[preset.id] = preset;
       });
     }
   }
 
-  // 将参数类型映射到ParameterType枚举
-  private mapParamTypeToParameterType(type: string): string {
-    // 确保类型字符串有值
-    if (!type) {
-      console.warn(
-        'Parameter type is undefined or empty, defaulting to "number"'
-      );
-      return 'number';
-    }
+  /**
+   * 向参数系统注册模块的所有参数
+   */
+  private registerParametersWithSystem(): void {
+    const paramDefs = this.getParameterDefinitions();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const moduleParameters: Record<string, any> = {};
+    
+    Object.entries(paramDefs).forEach(([paramId, def]) => {
+      // 转换参数定义到参数系统需要的格式
+      moduleParameters[paramId] = {
+        id: paramId,
+        type: this.normalizeParameterType(def.type),
+        value: def.default,
+        defaultValue: def.default,
+        min: def.min,
+        max: def.max,
+        step: def.step,
+        unit: def.unit || '',
+        label: def.label || paramId,
+        options: def.type.toString().toLowerCase() === 'enum' ? def.options : undefined,
+        automatable: true
+      };
+    });
+    
+    // 向参数系统注册模块参数
+    services.parameterSystem.registerModuleParameters(this.id, moduleParameters);
+  }
+  
+  /**
+   * 标准化参数类型
+   */
+  private normalizeParameterType(type: string): string {
+    if (!type) return 'number';
 
-    // 标准化类型字符串 (转为小写并去除空格)
     const normalizedType = type.toLowerCase().trim();
 
-    // 映射类型字符串到ParameterType
     switch (normalizedType) {
       case 'number':
-        return 'number';
       case 'integer':
-        return 'integer';
       case 'boolean':
-        return 'boolean';
       case 'string':
-        return 'string';
       case 'enum':
-        return 'enum';
+        return normalizedType;
       default:
-        // 对于未知类型，尝试智能匹配
         if (normalizedType.includes('int')) {
           return 'integer';
         } else if (normalizedType.includes('bool')) {
@@ -133,12 +127,8 @@ export abstract class Module implements ModuleBase {
           normalizedType.includes('option')
         ) {
           return 'enum';
-        } else {
-          console.warn(
-            `Unknown parameter type: ${type}, defaulting to "number"`
-          );
-          return 'number';
         }
+        return 'number';
     }
   }
 
@@ -154,6 +144,10 @@ export abstract class Module implements ModuleBase {
       );
 
       await this.createAudioNodes();
+      
+      // 添加参数变更订阅，自动应用到音频节点
+      this.setupParameterSubscriptions();
+      
       this._initialized = true;
 
       // 更新状态到已初始化
@@ -170,11 +164,25 @@ export abstract class Module implements ModuleBase {
       throw error;
     }
   }
+  
+  /**
+   * 设置参数变更订阅，当参数变化时应用到音频节点
+   */
+  private setupParameterSubscriptions(): void {
+    // 获取模块定义的所有参数ID
+    const paramDefs = this.getParameterDefinitions();
+    
+    Object.keys(paramDefs).forEach(paramId => {
+      // 订阅参数变更
+      services.parameterSystem.getParameterValue$(this.id, paramId)
+        .subscribe(value => {
+          this.applyParameterToAudioNode(paramId, value);
+        });
+    });
+  }
 
   // 创建音频节点（子类实现）
   protected abstract createAudioNodes(): Promise<void>;
-
-  // 简化连接方法，直接连接音频节点
   connect(
     targetModule: ModuleBase,
     outputPortId: string = 'default',
@@ -241,12 +249,6 @@ export abstract class Module implements ModuleBase {
       } else {
         // 对于其他错误，重试使用全断开然后重连其他连接的方式
         try {
-          // 获取当前模块的所有输出节点
-          // const outputNodes = this.getOutputPorts().map(port =>
-          //   this.getAudioNodeForPort(port.id, 'output')
-          // ).filter(Boolean);
-
-          // 断开当前输出节点的所有连接
           if (outputNode && typeof outputNode.disconnect === 'function') {
             outputNode.disconnect();
             console.log(`断开 ${outputPortId} 的所有连接并将重新连接其他连接`);
@@ -266,56 +268,104 @@ export abstract class Module implements ModuleBase {
     return this._audioNodes[portId] || null;
   }
 
-  // 获取参数值
+  // 获取参数值 - 使用新参数系统
   getParameterValue(paramId: string): ParameterValue {
-    return this._paramValues[paramId];
+    return services.parameterSystem.getParameterValue(this.id, paramId);
   }
 
-  // 设置参数值
+  // 设置参数值 - 使用新参数系统
   setParameterValue(
     paramId: string,
     value: ParameterValue,
     skipEvent: boolean = false
   ): void {
-    const paramDef = this.getParameterDefinitions()[paramId];
-    if (!paramDef) {
-      console.error(`Parameter ${paramId} not found in module ${this.id}`);
-      return;
-    }
-
-    // 验证参数值
-    const validatedValue = this.validateParameterValue(paramId, value);
-
-    // 更新内部参数值
-    this._paramValues[paramId] = validatedValue;
-
-    // 更新Parameter对象的值
-    const parameter = this.parameters[paramId];
-    if (parameter) {
-      parameter.value = validatedValue;
-    }
-
-    // 确保应用参数到音频节点 - 这是关键步骤
-    if (this._initialized && this._audioNodes) {
-      this.applyParameterToAudioNode(paramId, validatedValue);
-    } else {
-      console.warn(
-        `Module ${this.id} not initialized or no audio nodes available`
-      );
-    }
-
-    // 只有当skipEvent为false时才发送事件，避免重复事件
-    if (!skipEvent) {
-      eventBus.emit('PARAMETER.CHANGED', {
-        moduleId: this.id,
-        parameterId: paramId,
-        value: validatedValue,
-        previousValue: parameter?.value,
-      });
-    }
+    services.parameterSystem.updateParameterValue(
+      this.id, 
+      paramId, 
+      value, 
+      skipEvent ? 'internal' : 'ui'
+    );
   }
 
-  // 加载预设
+  /**
+   * 设置参数自动化范围
+   * @param paramId 参数ID
+   * @param minValue 最小值
+   * @param maxValue 最大值
+   */
+  setParameterAutomationRange(
+    paramId: string,
+    minValue: number,
+    maxValue: number
+  ): void {
+    services.parameterSystem.setParameterAutomationRange(
+      this.id,
+      paramId,
+      minValue,
+      maxValue
+    );
+  }
+
+  /**
+   * 获取参数自动化范围
+   * @param paramId 参数ID
+   * @returns 自动化范围 [min, max]，如果未设置则返回默认全范围
+   */
+  getParameterAutomationRange(paramId: string): [number, number] {
+    return services.parameterSystem.getParameterAutomationRange(this.id, paramId);
+  }
+
+  /**
+   * 启用参数自动化
+   * @param paramId 参数ID
+   * @param sourceModuleId 源模块ID
+   * @param sourceParamId 源参数ID
+   * @param amount 自动化强度 (0-1)
+   */
+  enableParameterAutomation(
+    paramId: string,
+    sourceModuleId: string,
+    sourceParamId: string,
+    amount = 1
+  ): void {
+    services.parameterSystem.createParameterAutomation({
+      sourceModuleId,
+      sourceParameterId: sourceParamId,
+      targetModuleId: this.id,
+      targetParameterId: paramId,
+      amount
+    });
+    
+    eventBus.emit('PARAMETER.AUTOMATION_ENABLED', {
+      moduleId: this.id,
+      parameterId: paramId,
+      sourceModuleId,
+      sourceParameterId: sourceParamId,
+      amount
+    });
+  }
+
+  /**
+   * 禁用参数自动化
+   * @param paramId 参数ID
+   * @param sourceModuleId 可选，特定源模块ID
+   */
+  disableParameterAutomation(paramId: string, sourceModuleId?: string): void {
+    services.parameterSystem.removeParameterAutomation(
+      this.id,
+      paramId,
+      sourceModuleId,
+      undefined  // 添加第四个参数，sourceParameterId 可以为 undefined
+    );
+    
+    eventBus.emit('PARAMETER.AUTOMATION_DISABLED', {
+      moduleId: this.id,
+      parameterId: paramId,
+      sourceModuleId
+    });
+  }
+
+  // 加载预设 - 改用参数系统实现
   loadPreset(presetId: string): void {
     const preset = this._presets[presetId];
     if (!preset) {
@@ -323,9 +373,14 @@ export abstract class Module implements ModuleBase {
       return;
     }
 
-    // 应用预设中的所有参数值
+    // 不使用不存在的批量更新方法，而是逐个更新参数
     Object.entries(preset.values).forEach(([paramId, value]) => {
-      this.setParameterValue(paramId, value);
+      services.parameterSystem.updateParameterValue(
+        this.id,
+        paramId,
+        value,
+        'preset'
+      );
     });
 
     eventBus.emit('PRESET.LOADED', {
@@ -333,35 +388,6 @@ export abstract class Module implements ModuleBase {
       presetId: presetId,
       presetName: preset.name,
     });
-  }
-
-  // 验证参数值（确保在允许范围内）
-  protected validateParameterValue(
-    paramId: string,
-    value: ParameterValue
-  ): ParameterValue {
-    const paramDef = this.getParameterDefinitions()[paramId];
-    if (!paramDef) return value;
-
-    if (paramDef.type === 'NUMBER' || paramDef.type === 'INTEGER') {
-      let numValue = Number(value);
-
-      if (paramDef.min !== undefined && numValue < paramDef.min) {
-        numValue = paramDef.min;
-      }
-
-      if (paramDef.max !== undefined && numValue > paramDef.max) {
-        numValue = paramDef.max;
-      }
-
-      if (paramDef.type === 'INTEGER') {
-        numValue = Math.round(numValue);
-      }
-
-      return numValue;
-    }
-
-    return value;
   }
 
   // 应用参数到音频节点（子类实现）
@@ -374,8 +400,11 @@ export abstract class Module implements ModuleBase {
   async dispose(): Promise<void> {
     // 更新状态
     moduleLifecycleManager.setState(this.id, ModuleLifecycleState.DISPOSING);
-
-    // 销毁音频节点
+    
+    // 先移除所有参数自动化
+    services.parameterSystem.removeAllParameterAutomations(this.id);
+    
+    services.parameterSystem.unregisterModuleParameters(this.id);
     Object.values(this._audioNodes).forEach((node) => {
       if (node && typeof node.dispose === 'function') {
         node.dispose();
@@ -388,6 +417,32 @@ export abstract class Module implements ModuleBase {
     // 更新状态到已销毁
     moduleLifecycleManager.setState(this.id, ModuleLifecycleState.DISPOSED);
     eventBus.emit('MODULE.DISPOSED', { moduleId: this.id });
+  }
+  
+  // 移除对parameters属性的支持，改为通过参数系统获取
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get parameters(): Record<string, any> {
+    console.warn('直接访问module.parameters已废弃，请使用参数系统API');
+    // 返回一个代理对象，将操作转发到参数系统
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return new Proxy({} as Record<string, any>, {
+      get: (_, prop: string) => {
+        if (typeof prop === 'string') {
+          const value = this.getParameterValue(prop);
+          return {
+            id: prop,
+            value,
+          };
+        }
+        return undefined;
+      },
+      set: (_, prop: string, value) => {
+        if (typeof prop === 'string') {
+          this.setParameterValue(prop, value);
+        }
+        return true;
+      }
+    });
   }
 }
 

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React from 'react';
+import React, { useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Slider } from '@/components/ui/slider';
 
@@ -76,27 +76,36 @@ export const PortContainer: React.FC<PortContainerProps> = ({
 interface ParameterControlProps {
   paramKey: string;
   param: any;
-  isModulatable: boolean;
+  isAutomatable: boolean;
   modInputId: string;
   handleSliderChange: (key: string, newValue: any) => void;
   handleModRangeChange: (key: string, newRange: any) => void;
+  handleAutomationToggle?: (key: string, enabled: boolean) => void;
 }
 
 export const ParameterControl: React.FC<ParameterControlProps> = ({
   paramKey,
   param,
-  isModulatable,
+  isAutomatable: isAutomatable,
   modInputId,
   handleSliderChange,
   handleModRangeChange,
+  handleAutomationToggle,
 }) => {
+  const [showAutomationControls, setShowAutomationControls] = useState(false);
+
+  // 是否为数值类型参数
+  const isNumericParam = param.type && 
+    (param.type.toString().toUpperCase() === 'NUMBER' || 
+     param.type.toString().toUpperCase() === 'INTEGER');
+
   return (
     <div className="parameter-control relative mb-2">
       {/* 参数标签和控件的水平布局 */}
       <div className="flex items-center">
-        {/* 左侧: 调制输入端口和标签 */}
+        {/* 左侧: 自动化输入端口和标签 */}
         <div className="flex items-center w-10 min-w-[5rem] flex-shrink-0">
-          {isModulatable && (
+          {isAutomatable && (
             <div
               className="relative flex items-center justify-center mr-1"
               style={{ width: '2px', height: '16px' }}
@@ -114,6 +123,20 @@ export const ParameterControl: React.FC<ParameterControlProps> = ({
                   transform: 'translateY(-50%)',
                 }}
               />
+              {isNumericParam && (
+                <button 
+                  className={`absolute -left-1 top-8 text-xs p-0.5 rounded-sm ${showAutomationControls || param.isAutomated ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+                  onClick={() => {
+                    setShowAutomationControls(!showAutomationControls);
+                    if (handleAutomationToggle && !showAutomationControls && !param.isAutomated) {
+                      handleAutomationToggle(paramKey, true);
+                    }
+                  }}
+                  title="自动化设置"
+                >
+                  A
+                </button>
+              )}
             </div>
           )}
           <label
@@ -130,42 +153,77 @@ export const ParameterControl: React.FC<ParameterControlProps> = ({
             param,
             paramKey,
             handleSliderChange,
-            handleModRangeChange
+            handleModRangeChange,
+            showAutomationControls || param.isAutomated
           )}
 
           {/* 当前值显示 - 修正条件判断 */}
-          {param.type &&
-            (param.type.toString().toUpperCase() === 'NUMBER' ||
-              param.type.toString().toUpperCase() === 'INTEGER') && (
-              <div className="ml-2 w-14 flex-shrink-0">
-                <input
-                  type="number"
-                  className="w-full text-xs p-1 border rounded"
-                  value={param.value || 0}
-                  min={param.min || 0}
-                  max={param.max || 100}
-                  step={
-                    param.step ||
-                    (param.type.toString().toUpperCase() === 'INTEGER'
-                      ? 1
-                      : 0.01)
-                  }
-                  onChange={(e) =>
-                    handleSliderChange(paramKey, parseFloat(e.target.value))
-                  }
-                />
-              </div>
-            )}
+          {isNumericParam && (
+            <div className="ml-2 w-14 flex-shrink-0">
+              <input
+                type="number"
+                className="w-full text-xs p-1 border rounded"
+                value={param.value || 0}
+                min={param.min || 0}
+                max={param.max || 100}
+                step={
+                  param.step ||
+                  (param.type.toString().toUpperCase() === 'INTEGER'
+                    ? 1
+                    : 0.01)
+                }
+                onChange={(e) =>
+                  handleSliderChange(paramKey, parseFloat(e.target.value))
+                }
+              />
+            </div>
+          )}
 
           {/* 单位显示 */}
           {param.unit && <span className="text-xs ml-1">{param.unit}</span>}
 
-          {/* 调制指示器 */}
-          {param.isModulated && (
-            <span className="text-blue-500 ml-1 text-xs">~</span>
+          {/* 自动化指示器 */}
+          {param.isAutomated && (
+            <span className="text-blue-500 ml-1 text-xs animate-pulse">~</span>
           )}
         </div>
       </div>
+      
+      {/* 自动化范围控制区域 */}
+      {isNumericParam && showAutomationControls && (
+        <div className="ml-12 mt-1 text-xs">
+          <div className="flex items-center">
+            <span className="mr-2">范围:</span>
+            <div className="flex-1">
+              <Slider
+                min={param.min || 0}
+                max={param.max || 100}
+                step={param.step || (param.type.toString().toUpperCase() === 'INTEGER' ? 1 : 0.01)}
+                value={[
+                  param.automationRange ? param.automationRange[0] : (param.min || 0),
+                  param.automationRange ? param.automationRange[1] : (param.max || 100)
+                ]}
+                onValueChange={(values) => handleModRangeChange(paramKey, values)}
+                className="h-2"
+              />
+            </div>
+            <div className="ml-2 w-20 flex text-xs items-center justify-between">
+              <span>{param.automationRange ? param.automationRange[0].toFixed(1) : (param.min || 0)}</span>
+              <span>{param.automationRange ? param.automationRange[1].toFixed(1) : (param.max || 100)}</span>
+            </div>
+          </div>
+          {handleAutomationToggle && (
+            <div className="mt-1 flex justify-end">
+              <button
+                className="text-xs bg-red-100 text-red-700 rounded px-2 py-0.5"
+                onClick={() => handleAutomationToggle(paramKey, false)}
+              >
+                关闭自动化
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -175,7 +233,8 @@ const renderParameterControl = (
   param: any,
   key: string,
   handleSliderChange: (key: string, newValue: any) => void,
-  handleModRangeChange: (key: string, newRange: any) => void
+  handleModRangeChange: (key: string, newRange: any) => void,
+  showAutomationControls: boolean
 ): React.ReactNode => {
   // 根据参数类型渲染不同控件
   switch (param.type.toString().toUpperCase()) {
@@ -239,7 +298,7 @@ const renderParameterControl = (
     case 'INTEGER':
       return (
         <div className="flex-1 relative">
-          {!param.isModulated ? (
+          {!showAutomationControls ? (
             <Slider
               min={param.min || 0}
               max={param.max || 100}
@@ -262,22 +321,19 @@ const renderParameterControl = (
                   param.step ||
                   (param.type.toString().toUpperCase() === 'INTEGER' ? 1 : 0.01)
                 }
-                value={[
-                  param.modRange ? param.modRange[0] : param.min,
-                  param.modRange ? param.modRange[1] : param.max,
-                ]}
+                value={[param.value || 0]}
                 onValueChange={(newValue: number[]) =>
-                  handleModRangeChange(key, newValue)
+                  handleSliderChange(key, newValue[0])
                 }
                 className="h-3"
               />
 
-              {param.isModulated && param.displayValue && (
+              {param.isAutomated && param.displayValue !== undefined && (
                 <div className="absolute top-0 left-0 right-0 bottom-0 pointer-events-none">
                   <div
-                    className="absolute w-2 h-2 bg-red-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                    className="absolute w-2 h-2 bg-blue-500 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
                     style={{
-                      left: `${((parseFloat(param.displayValue) - param.min) / (param.max - param.min)) * 100}%`,
+                      left: `${((parseFloat(param.displayValue) - (param.min || 0)) / ((param.max || 100) - (param.min || 0))) * 100}%`,
                       top: '50%',
                       zIndex: 2,
                     }}

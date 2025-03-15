@@ -54,7 +54,7 @@ export const oscillatorBasicConfig: ModuleConfiguration = {
       unit: 'Hz',
       label: '频率',
       description: '振荡器频率',
-      modulatable: true,
+      automatable: true,
     },
     waveform: {
       type: ParamType.ENUM,
@@ -71,7 +71,7 @@ export const oscillatorBasicConfig: ModuleConfiguration = {
       step: 0.01,
       label: '振幅',
       description: '振荡器输出音量',
-      modulatable: true,
+      automatable: true,
     },
     detune: {
       type: ParamType.NUMBER,
@@ -82,7 +82,7 @@ export const oscillatorBasicConfig: ModuleConfiguration = {
       unit: 'cents',
       label: '失谐',
       description: '振荡器失谐量（以音分为单位）',
-      modulatable: true,
+      automatable: true,
     },
   },
 
@@ -196,17 +196,22 @@ export class OscillatorBasic extends Module {
   protected async createAudioNodes(): Promise<void> {
     // 创建并配置振荡器
     this.oscillator = new Tone.Oscillator();
+    
+    // 使用参数系统获取初始值
+    const frequency = this.getParameterValue('frequency') as number;
+    const detune = this.getParameterValue('detune') as number;
+    const waveform = this.getParameterValue('waveform') as Tone.ToneOscillatorType;
+    const amplitude = this.getParameterValue('amplitude') as number;
+    
     this.oscillator.set({
-      frequency: this.getParameterValue('frequency') as number,
-      detune: this.getParameterValue('detune') as number,
-      type: this.getParameterValue('waveform') as Tone.ToneOscillatorType,
+      frequency: frequency,
+      detune: detune,
+      type: waveform,
     });
     this.oscillator.start();
 
     // 创建输出增益节点
-    this.outputGain = new Tone.Gain(
-      this.getParameterValue('amplitude') as number
-    );
+    this.outputGain = new Tone.Gain(amplitude);
 
     // 连接振荡器到增益节点
     this.oscillator.connect(this.outputGain);
@@ -257,7 +262,6 @@ export class OscillatorBasic extends Module {
 
   // 验证波形值是否有效
   private isValidWaveform(value: string): boolean {
-    // 检查是否是基本波形或带有分量数字的格式(如"sine2", "triangle4"等)
     const basicTypeValid = VALID_WAVEFORMS.includes(value);
     const typeWithPartialsValid = VALID_WAVEFORMS.some((type) => {
       return (

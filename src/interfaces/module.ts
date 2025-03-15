@@ -110,7 +110,7 @@ export interface ParameterDefinition {
   label: string;
   description?: string;
   options?: Array<string | number>;
-  modulatable?: boolean;
+  automatable?: boolean;
   visibleWhen?: {
     parameter: string;
     equals: ParameterValue | ParameterValue[];
