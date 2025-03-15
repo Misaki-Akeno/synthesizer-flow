@@ -31,11 +31,18 @@ export class FlowService {
   private nodes: FlowNode[] = [];
   private edges: FlowEdge[] = [];
   private listeners: Set<() => void> = new Set();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private connectionService: any; // 会在初始化后获取
 
   constructor() {
     this.registerEventListeners();
     // 将自身注册到容器
     container.register('flowService', this);
+
+    // 异步获取连接服务
+    setTimeout(() => {
+      this.connectionService = container.get('connectionService');
+    }, 0);
   }
 
   private registerEventListeners(): void {
@@ -67,6 +74,20 @@ export class FlowService {
     // 监听连接删除事件
     eventBus.on('UI.CONNECTION.DELETED', (event) => {
       this.removeEdge(event.connectionId);
+    });
+
+    // 监听连接创建完成事件
+    eventBus.on('UI.CONNECTION.CREATED', (event) => {
+      // 通知连接服务关于UI连接ID
+      if (this.connectionService) {
+        this.connectionService.updateUIConnectionId(
+          event.sourceId,
+          event.targetId,
+          event.connectionId,
+          event.sourceHandle,
+          event.targetHandle
+        );
+      }
     });
   }
 
@@ -120,6 +141,17 @@ export class FlowService {
       sourceHandle,
       targetHandle,
     });
+
+    // 告诉连接服务关于这个UI连接ID
+    if (this.connectionService) {
+      this.connectionService.updateUIConnectionId(
+        source,
+        target,
+        edgeId,
+        sourceHandle,
+        targetHandle
+      );
+    }
 
     // 删除此处的CONNECTION.ESTABLISHED事件
     // 由ConnectionService负责发送此事件
