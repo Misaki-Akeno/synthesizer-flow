@@ -16,7 +16,7 @@ import ViewportLogger from './ViewportLogger';
 
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(true);
-  const [position, setPosition] = useState({ x: 20, y: 20 });
+  const [position, setPosition] = useState({ x: 20, y: 100 });
   const nodeRef = useRef<HTMLDivElement>(
     null
   ) as React.RefObject<HTMLDivElement>;
