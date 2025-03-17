@@ -1,8 +1,10 @@
 import React from 'react';
 import { useFlowStore } from '../../store/store';
+import { presetManager } from '../../core/PresetManager';
 
 const PresetLoader: React.FC = () => {
-  const { presets, currentPresetId, loadPreset } = useFlowStore();
+  const { currentPresetId, loadPreset } = useFlowStore();
+  const presets = presetManager.getPresets();
 
   return (
     <div className="preset-loader" style={{ 

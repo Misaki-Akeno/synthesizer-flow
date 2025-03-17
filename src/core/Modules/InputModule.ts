@@ -1,0 +1,19 @@
+import { ModuleBase, ModuleInterface } from '../ModuleBase';
+
+/**
+ * 基本输入模块，生成信号并根据gain参数调整输出
+ */
+export class InputModule extends ModuleBase {
+    constructor(id: string, name: string = '输入模块') {
+        // 初始化基本参数
+        const moduleType = 'input';
+        const parameters = { gain: 1.0 };  // 增益参数，默认值1.0
+        const inputInterfaces = {};  // 输入模块没有输入接口
+        const outputInterfaces = { output: 0 as ModuleInterface };  // 输出接口
+        
+        super(moduleType, id, name, parameters, inputInterfaces, outputInterfaces);
+    }
+    
+    // 这里可以添加生成输出信号的方法
+    // generateSignal() { ... }
+}
