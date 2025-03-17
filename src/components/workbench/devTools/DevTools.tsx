@@ -13,8 +13,6 @@ import Draggable from 'react-draggable';
 import NodeInspector from './NodeInspector';
 import ChangeLogger from './ChangeLogger';
 import ViewportLogger from './ViewportLogger';
-import ModuleStoreLogger from './ModuleStoreLogger';
-import ModuleDebugger from './ModuleDebugger';
 
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(true);
@@ -69,26 +67,7 @@ export default function DevTools() {
         {/* 内容区域 */}
         {isOpen && (
           <div className="overflow-y-auto max-h-[80vh]">
-            <Accordion
-              type="multiple"
-              defaultValue={[
-                'viewport-logger',
-                'module-store',
-                'module-debugger',
-              ]}
-            >
-              <DevToolSection id="module-debugger" title="合成器调试">
-                <div className="px-4 py-2">
-                  <ModuleDebugger />
-                </div>
-              </DevToolSection>
-
-              <DevToolSection id="module-store" title="模块存储">
-                <div className="px-4 py-2">
-                  <ModuleStoreLogger />
-                </div>
-              </DevToolSection>
-
+            <Accordion type="multiple" defaultValue={['viewport-logger']}>
               <DevToolSection id="viewport-logger" title="视口信息">
                 <div className="px-4 py-2">
                   <ViewportLogger />
