@@ -21,7 +21,7 @@ export class OutputModule extends ModuleBase {
                 min: -60, 
                 max: 0 
             },
-            mute: {
+            enabled: {
                 type: ParameterType.BOOLEAN,
                 value: false
             }
@@ -62,12 +62,26 @@ export class OutputModule extends ModuleBase {
             const gainValue = this.dbToLinear(levelDB);
             this.gain = new this.Tone.Gain(gainValue).toDestination();
             
-            // 设置静音状态
-            if (this.getParameterValue('mute') as boolean) {
+            // 设置启用状态
+            if (!(this.getParameterValue('enabled') as boolean)) {
                 this.gain.gain.value = 0;
             }
         } catch (error) {
             console.error('Failed to initialize Tone.js:', error);
+        }
+    }
+    
+    /**
+     * 启动音频上下文
+     */
+    private startAudioContext(): void {
+        if (this.Tone && this.Tone.context.state !== "running") {
+            try {
+                this.Tone.start();
+                console.debug(`[OutputModule ${this.id}] Audio context started`);
+            } catch (error) {
+                console.warn(`[OutputModule ${this.id}] Error starting audio context:`, error);
+            }
         }
     }
     
@@ -123,7 +137,7 @@ export class OutputModule extends ModuleBase {
             if (typeof levelValue === 'number') {
                 // 更新音频增益，将dB值转换为线性值
                 if (this.gain) {
-                    const gainValue = this.getParameterValue('mute') ? 0 : this.dbToLinear(levelValue);
+                    const gainValue = this.getParameterValue('enabled') ? this.dbToLinear(levelValue) : 0;
                     this.gain.gain.value = gainValue;
                 }
                 
@@ -133,14 +147,23 @@ export class OutputModule extends ModuleBase {
         });
         this.addInternalSubscription(levelSubscription);
         
-        // 监听mute参数变化
-        const muteSubscription = this.parameters.mute.subscribe((muteValue: number | boolean | string) => {
-            if (typeof muteValue === 'boolean' && this.gain) {
-                const levelDB = this.getParameterValue('level') as number;
-                this.gain.gain.value = muteValue ? 0 : this.dbToLinear(levelDB);
+        // 监听enabled参数变化
+        const enabledSubscription = this.parameters.enabled.subscribe((enabledValue: number | boolean | string) => {
+            if (typeof enabledValue === 'boolean' && this.gain) {
+                if (enabledValue) {
+                    // 当启用时，尝试启动音频上下文
+                    this.startAudioContext();
+                    
+                    // 恢复音量
+                    const levelDB = this.getParameterValue('level') as number;
+                    this.gain.gain.value = this.dbToLinear(levelDB);
+                } else {
+                    // 当禁用时，将音量设置为0
+                    this.gain.gain.value = 0;
+                }
             }
         });
-        this.addInternalSubscription(muteSubscription);
+        this.addInternalSubscription(enabledSubscription);
     }
     
     /**
@@ -151,7 +174,8 @@ export class OutputModule extends ModuleBase {
         
         const levelDB = this.getParameterValue('level') as number;
         const gainValue = this.dbToLinear(levelDB);
-        const processedValue = inputValue * gainValue;
+        const isEnabled = this.getParameterValue('enabled') as boolean;
+        const processedValue = isEnabled ? inputValue * gainValue : 0;
         
         if (this.gain) {
             this.gain.gain.value = processedValue;
@@ -167,6 +191,11 @@ export class OutputModule extends ModuleBase {
         try {
             // 检查是否已经连接到此gain节点，避免重复连接
             audioInput.connect(this.gain);
+            
+            // 如果有音频输入并且已启用，尝试启动音频上下文
+            if (this.getParameterValue('enabled') as boolean) {
+                this.startAudioContext();
+            }
             
             console.debug(`[OutputModule ${this.id}] Connected audio input to gain node`);
         } catch (error) {
