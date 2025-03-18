@@ -107,6 +107,17 @@
     box-shadow: none;
   }
   
+  /* 清除选中节点的黑边 */
+  .react-flow__node.selected,
+  .react-flow__node-default.selected,
+  .react-flow__node-selected,
+  .react-flow__node:focus,
+  .react-flow__node-default:focus {
+    outline: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  
   .react-flow__handle {
     width: 10px;
     height: 10px;

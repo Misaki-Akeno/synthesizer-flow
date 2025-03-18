@@ -33,79 +33,98 @@ const { nodes: initialNodes, edges: initialEdges } = defaultPreset ?
   presetManager.loadPresetWithModules(defaultPreset.id) : 
   { nodes: [], edges: [] };
 
-export const useFlowStore = create<FlowState>((set, get) => ({
-  nodes: initialNodes,
-  edges: initialEdges,
-  currentPresetId: defaultPreset?.id || '',
-
-  onNodesChange: (changes) => {
-    set({
-      nodes: applyNodeChanges(changes, get().nodes) as FlowNode[],
-    });
-  },
-
-  onEdgesChange: (changes) => {
-    set({
-      edges: applyEdgeChanges(changes, get().edges),
-    });
-  },
-
-  onConnect: (connection) => {
-    set({
-      edges: addEdge(connection, get().edges),
-    });
-  },
-
-  loadPreset: (presetId) => {
-    const { nodes, edges } = presetManager.loadPresetWithModules(presetId);
-    set({
-      nodes,
-      edges,
-      currentPresetId: presetId,
-    });
-  },
+export const useFlowStore = create<FlowState>((set, get) => {
+  // 设置节点获取函数
+  moduleManager.setNodesGetter(() => get().nodes);
   
-  getPresets: () => presetManager.getPresets,
+  return {
+    nodes: initialNodes,
+    edges: initialEdges,
+    currentPresetId: defaultPreset?.id || '',
   
-  updateModuleParameter: (nodeId, paramKey, value) => {
-    set({
-      nodes: get().nodes.map(node => {
-        if (node.id === nodeId && node.data?.module?.parameters) {
-          const updatedModule = { ...node.data.module };
-          updatedModule.parameters = { ...updatedModule.parameters, [paramKey]: value };
-          
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              module: updatedModule
-            }
-          };
-        }
-        return node;
-      })
-    });
-  },
-
-  // 添加新节点
-  addNode: (type, label, position) => {
-    const nodeId = `node_${Date.now()}`;
-    const newNode = moduleManager.createNode(nodeId, type, label, position);
-    
-    set({
-      nodes: [...get().nodes, newNode]
-    });
-
-    return nodeId;
-  },
-
-  // 添加新边
-  addEdge: (source, target) => {
-    const edgeId = `edge_${source}_${target}_${Date.now()}`;
-    const newEdge = moduleManager.createEdge(edgeId, source, target);
-    
-    set({
-      edges: [...get().edges, newEdge]
-    });
-  }
-}));
+    onNodesChange: (changes) => {
+      set({
+        nodes: applyNodeChanges(changes, get().nodes) as FlowNode[],
+      });
+    },
+  
+    onEdgesChange: (changes) => {
+      // 处理边的删除，解除相应的绑定
+      const edgesToRemove = changes
+        .filter(change => change.type === 'remove')
+        .map(change => get().edges.find(edge => edge.id === change.id))
+        .filter((edge): edge is Edge => edge !== undefined);
+      
+      // 解除绑定
+      edgesToRemove.forEach(edge => {
+        moduleManager.removeEdgeBinding(edge);
+      });
+      
+      set({
+        edges: applyEdgeChanges(changes, get().edges),
+      });
+    },
+  
+    onConnect: (connection) => {
+      const _edgeId = `edge_${connection.source}_${connection.target}_${Date.now()}`;
+      
+      // 添加边并建立绑定
+      moduleManager.bindModules(
+        connection.source || '', 
+        connection.target || '',
+        connection.sourceHandle ?? undefined,
+        connection.targetHandle ?? undefined
+      );
+      
+      set({
+        edges: addEdge(connection, get().edges),
+      });
+    },
+  
+    loadPreset: (presetId) => {
+      const { nodes, edges } = presetManager.loadPresetWithModules(presetId);
+      set({
+        nodes,
+        edges,
+        currentPresetId: presetId,
+      });
+    },
+  
+    getPresets: () => presetManager.getPresets,
+  
+    updateModuleParameter: (nodeId, paramKey, value) => {
+      set({
+        nodes: get().nodes.map(node => {
+          if (node.id === nodeId && node.data?.module) {
+            // 使用RxJS方式更新参数
+            node.data.module.updateParameter(paramKey, value);
+            return { ...node }; // 触发React更新
+          }
+          return node;
+        })
+      });
+    },
+  
+    // 添加新节点
+    addNode: (type, label, position) => {
+      const nodeId = `node_${Date.now()}`;
+      const newNode = moduleManager.createNode(nodeId, type, label, position);
+      
+      set({
+        nodes: [...get().nodes, newNode]
+      });
+  
+      return nodeId;
+    },
+  
+    // 添加新边
+    addEdge: (source, target) => {
+      const edgeId = `edge_${source}_${target}_${Date.now()}`;
+      const newEdge = moduleManager.createEdge(edgeId, source, target);
+      
+      set({
+        edges: [...get().edges, newEdge]
+      });
+    }
+  };
+});

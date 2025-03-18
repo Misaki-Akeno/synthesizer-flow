@@ -52,6 +52,56 @@ export class ModuleManager {
     };
   }
 
+  // 创建边并建立模块间的绑定
+  createEdgeWithBinding(id: string, source: string, target: string, sourceHandle?: string, targetHandle?: string): Edge {
+    const edge = this.createEdge(id, source, target);
+    
+    // 将边绑定对应的两个节点
+    this.bindModules(source, target, sourceHandle, targetHandle);
+    
+    return edge;
+  }
+  
+  // 绑定两个模块
+  bindModules(sourceId: string, targetId: string, sourceHandle?: string, targetHandle?: string): void {
+    // 查找源节点和目标节点
+    const nodes = this.getNodes();
+    const sourceNode = nodes.find(node => node.id === sourceId);
+    const targetNode = nodes.find(node => node.id === targetId);
+    
+    if (sourceNode?.data?.module && targetNode?.data?.module) {
+      // 默认使用主要端口
+      const sourcePort = sourceHandle || 'output';
+      const targetPort = targetHandle || 'input';
+      
+      // 建立绑定
+      targetNode.data.module.bindInputToOutput(targetPort, sourceNode.data.module, sourcePort);
+    }
+  }
+  
+  // 移除边并解除绑定
+  removeEdgeBinding(edge: Edge): void {
+    const nodes = this.getNodes();
+    const targetNode = nodes.find(node => node.id === edge.target);
+    
+    if (targetNode?.data?.module) {
+      // 解除输入绑定
+      const targetPort = edge.targetHandle || 'input';
+      targetNode.data.module.unbindInput(targetPort);
+    }
+  }
+  
+  // 通过节点存储，用于查找节点
+  private nodesGetter: (() => FlowNode[]) | null = null;
+  
+  setNodesGetter(getter: () => FlowNode[]): void {
+    this.nodesGetter = getter;
+  }
+  
+  private getNodes(): FlowNode[] {
+    return this.nodesGetter ? this.nodesGetter() : [];
+  }
+
   // 从预设数据创建流程图
   createFlowFromPreset(presetNodes: PresetNode[], presetEdges: Edge[]): { nodes: FlowNode[], edges: Edge[] } {
     // 将预设节点转换为带有模块的流程节点
@@ -67,14 +117,34 @@ export class ModuleManager {
         position,
         type: 'default',
         data: {
-          module: moduleInstance
+          module: moduleInstance,
+          label,
+          type
         }
       } as FlowNode;
     });
     
+    // 注意：我们不在这里建立绑定关系，而是在组件加载后触发
+    
     return { nodes, edges: presetEdges };
   }
+  
+  // 添加一个公共方法，专门用于建立所有边的绑定关系
+  setupAllEdgeBindings(edges: Edge[]): void {
+    console.log('Setting up all edge bindings:', edges.length, 'edges');
+    edges.forEach(edge => {
+      try {
+        this.bindModules(
+          edge.source,
+          edge.target,
+          edge.sourceHandle ?? undefined,
+          edge.targetHandle ?? undefined
+        );
+      } catch (error) {
+        console.error(`Failed to bind edge from ${edge.source} to ${edge.target}:`, error);
+      }
+    });
+  }
 }
-
 
 export const moduleManager = new ModuleManager();

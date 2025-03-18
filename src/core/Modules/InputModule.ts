@@ -9,11 +9,18 @@ export class InputModule extends ModuleBase {
         const moduleType = 'input';
         const parameters = { gain: 1.0 };  // 增益参数，默认值1.0
         const inputPorts = {};  // 输入模块没有输入接口
-        const outputIPorts = { output: 0 as ModuleInterface };  // 输出接口
+        const outputPorts = { output: 0 as ModuleInterface };  // 输出接口
         
-        super(moduleType, id, name, parameters, inputPorts, outputIPorts);
+        super(moduleType, id, name, parameters, inputPorts, outputPorts);
     }
     
-    // 这里可以添加生成输出信号的方法
-    // generateSignal() { ... }
+    /**
+     * 设置模块内部参数与输出之间的订阅关系
+     */
+    protected setupInternalSubscriptions(): void {
+        // 将gain参数与output输出连接起来
+        this.parameters.gain.subscribe(value => {
+            this.outputPorts.output.next(value);
+        });
+    }
 }
