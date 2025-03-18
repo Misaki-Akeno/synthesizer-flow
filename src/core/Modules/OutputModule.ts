@@ -4,6 +4,9 @@ import { ModuleBase, ModuleInterface } from '../ModuleBase';
  * 基本输出模块，接收输入并根据level参数处理
  */
 export class OutputModule extends ModuleBase {
+    // 存储最近的输入值，用于在level改变时重新计算
+    private lastInputValue: number = 0;
+
     constructor(id: string, name: string = '输出模块') {
         // 初始化基本参数
         const moduleType = 'output';
@@ -15,33 +18,44 @@ export class OutputModule extends ModuleBase {
     }
     
     /**
-     * 设置模块内部订阅，处理输入信号
+     * 设置模块内部绑定，处理输入信号
      */
-    protected setupInternalSubscriptions(): void {
-        // 当输入或level参数改变时，处理信号
-        this.inputPorts.input.subscribe(inputValue => {
+    protected setupInternalBindings(): void {
+        console.debug(`[OutputModule ${this.id}] Setting up internal bindings`);
+        
+        // 监听输入端口
+        const inputSubscription = this.inputPorts.input.subscribe(inputValue => {
             if (typeof inputValue === 'number') {
-                const levelValue = this.getParameterValue('level');
-                const processedValue = inputValue * levelValue;
-                console.log(`Output module ${this.id} processed: ${processedValue}`);
-                
-                // 在这里可以添加更多处理逻辑，例如播放音频等
+                this.lastInputValue = inputValue;
+                this.processInput(inputValue);
             }
         });
+        this.addInternalSubscription(inputSubscription);
         
-        // 另一种实现方式：使用RxJS操作符结合输入和参数
-        /* 
-        this.inputPorts.input.pipe(
-            withLatestFrom(this.parameters.level),
-            map(([input, level]) => {
-                if (typeof input === 'number') {
-                    return input * level;
-                }
-                return input;
-            })
-        ).subscribe(processedValue => {
-            console.log(`Output module ${this.id} processed: ${processedValue}`);
+        // 监听level参数变化
+        const levelSubscription = this.parameters.level.subscribe(_levelValue => {
+            // 当level改变时，使用最近的输入值重新处理
+            this.processInput(this.lastInputValue);
         });
-        */
+        this.addInternalSubscription(levelSubscription);
+    }
+    
+    /**
+     * 处理输入信号
+     */
+    private processInput(inputValue: number): void {
+        if (typeof inputValue !== 'number') return;
+        
+        const levelValue = this.getParameterValue('level');
+        const _processedValue = inputValue * levelValue;
+        
+        // 在这里可以添加更多处理逻辑，例如播放音频等
+    }
+    
+    /**
+     * 重写更新参数方法，添加调试日志
+     */
+    updateParameter(paramKey: string, value: number): void {
+        super.updateParameter(paramKey, value);
     }
 }

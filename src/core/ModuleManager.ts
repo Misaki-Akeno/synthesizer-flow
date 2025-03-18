@@ -124,14 +124,13 @@ export class ModuleManager {
       } as FlowNode;
     });
     
-    // 注意：我们不在这里建立绑定关系，而是在组件加载后触发
+    // 注意：边的绑定应该在所有节点创建完毕后进行
     
     return { nodes, edges: presetEdges };
   }
   
   // 添加一个公共方法，专门用于建立所有边的绑定关系
   setupAllEdgeBindings(edges: Edge[]): void {
-    console.log('Setting up all edge bindings:', edges.length, 'edges');
     edges.forEach(edge => {
       try {
         this.bindModules(

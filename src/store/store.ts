@@ -83,11 +83,18 @@ export const useFlowStore = create<FlowState>((set, get) => {
   
     loadPreset: (presetId) => {
       const { nodes, edges } = presetManager.loadPresetWithModules(presetId);
+      
+      // 设置状态
       set({
         nodes,
         edges,
         currentPresetId: presetId,
       });
+      
+      // 在下一个事件循环中设置边绑定，确保节点已正确加载
+      setTimeout(() => {
+        moduleManager.setupAllEdgeBindings(edges);
+      }, 0);
     },
   
     getPresets: () => presetManager.getPresets,
@@ -96,7 +103,6 @@ export const useFlowStore = create<FlowState>((set, get) => {
       set({
         nodes: get().nodes.map(node => {
           if (node.id === nodeId && node.data?.module) {
-            // 使用RxJS方式更新参数
             node.data.module.updateParameter(paramKey, value);
             return { ...node }; // 触发React更新
           }

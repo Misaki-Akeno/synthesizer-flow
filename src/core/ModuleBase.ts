@@ -26,6 +26,9 @@ export abstract class ModuleBase {
     // 存储订阅关系以便取消订阅
     private subscriptions: { [key: string]: Subscription } = {};
 
+    // 存储内部订阅关系
+    private internalSubscriptions: Subscription[] = [];
+
     constructor(
         moduleType: string,
         id: string,
@@ -37,6 +40,8 @@ export abstract class ModuleBase {
         this.moduleType = moduleType;
         this.id = id;
         this.name = name;
+        
+        console.debug(`[ModuleBase] Creating module: ${id} (${moduleType})`);
         
         // 转换参数为BehaviorSubject
         this.parameters = {};
@@ -56,15 +61,88 @@ export abstract class ModuleBase {
             this.outputPorts[key] = new BehaviorSubject<ModuleInterface>(value);
         }
         
-        // 设置内部订阅关系，实现模块内部逻辑
-        this.setupInternalSubscriptions();
+        // 设置内部绑定
+        console.debug(`[ModuleBase] Setting up internal bindings for: ${id}`);
+        this.setupInternalBindings();
     }
     
     /**
-     * 设置模块内部订阅关系，子类可以重写此方法
+     * 设置模块内部订阅关系，子类必须重写此方法
      */
-    protected setupInternalSubscriptions(): void {
-        // 子类可以重写此方法来建立内部参数与输出之间的关系
+    protected setupInternalBindings(): void {
+        console.debug(`[ModuleBase] Base setupInternalBindings called for ${this.id}`);
+        // 子类应该重写此方法
+    }
+    
+    /**
+     * 绑定参数到输出端口
+     * @param paramKey 参数名
+     * @param outputPortName 输出端口名
+     */
+    protected bindParameterToOutput(paramKey: string, outputPortName: string): void {
+        if (!this.parameters[paramKey]) {
+            throw new Error(`Parameter '${paramKey}' not found on module ${this.id}`);
+        }
+        if (!this.outputPorts[outputPortName]) {
+            throw new Error(`Output port '${outputPortName}' not found on module ${this.id}`);
+        }
+        
+        const subscription = this.parameters[paramKey].subscribe(value => {
+            this.outputPorts[outputPortName].next(value);
+        });
+        
+        this.internalSubscriptions.push(subscription);
+    }
+    
+    /**
+     * 绑定输入端口到参数
+     * @param inputPortName 输入端口名
+     * @param paramKey 参数名
+     */
+    protected bindInputToParameter(inputPortName: string, paramKey: string): void {
+        if (!this.inputPorts[inputPortName]) {
+            throw new Error(`Input port '${inputPortName}' not found on module ${this.id}`);
+        }
+        if (!this.parameters[paramKey]) {
+            throw new Error(`Parameter '${paramKey}' not found on module ${this.id}`);
+        }
+        
+        const subscription = this.inputPorts[inputPortName].subscribe(value => {
+            if (typeof value === 'number') {
+                this.parameters[paramKey].next(value);
+            }
+        });
+        
+        this.internalSubscriptions.push(subscription);
+    }
+    
+    /**
+     * 绑定输入端口到输出端口，可以添加处理函数
+     * @param inputPortName 输入端口名
+     * @param outputPortName 输出端口名
+     * @param processor 可选的处理函数
+     */
+    protected bindInputToOutputPort(
+        inputPortName: string, 
+        outputPortName: string, 
+        processor?: (input: ModuleInterface) => ModuleInterface
+    ): void {
+        if (!this.inputPorts[inputPortName]) {
+            throw new Error(`Input port '${inputPortName}' not found on module ${this.id}`);
+        }
+        if (!this.outputPorts[outputPortName]) {
+            throw new Error(`Output port '${outputPortName}' not found on module ${this.id}`);
+        }
+        
+        const subscription = this.inputPorts[inputPortName].subscribe(value => {
+            if (processor) {
+                this.outputPorts[outputPortName].next(processor(value));
+            } else {
+                this.outputPorts[outputPortName].next(value);
+            }
+        });
+        
+        this.internalSubscriptions.push(subscription);
     }
     
     /**
@@ -159,5 +237,27 @@ export abstract class ModuleBase {
             subscription.unsubscribe();
         });
         this.subscriptions = {};
+        
+        // 取消内部订阅
+        this.internalSubscriptions.forEach(subscription => {
+            subscription.unsubscribe();
+        });
+        this.internalSubscriptions = [];
+    }
+
+    /**
+     * 添加内部订阅到管理列表
+     * @param subscription 要添加的订阅
+     */
+    protected addInternalSubscription(subscription: Subscription): void {
+        this.internalSubscriptions.push(subscription);
+    }
+    
+    /**
+     * 添加多个内部订阅到管理列表
+     * @param subscriptions 要添加的订阅列表
+     */
+    protected addInternalSubscriptions(subscriptions: Subscription[]): void {
+        subscriptions.forEach(sub => this.internalSubscriptions.push(sub));
     }
 }

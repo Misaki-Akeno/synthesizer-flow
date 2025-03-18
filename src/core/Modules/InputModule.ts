@@ -15,12 +15,10 @@ export class InputModule extends ModuleBase {
     }
     
     /**
-     * 设置模块内部参数与输出之间的订阅关系
+     * 设置模块内部参数与输出之间的绑定关系
      */
-    protected setupInternalSubscriptions(): void {
-        // 将gain参数与output输出连接起来
-        this.parameters.gain.subscribe(value => {
-            this.outputPorts.output.next(value);
-        });
+    protected setupInternalBindings(): void {
+        // 将gain参数直接绑定到output输出
+        this.bindParameterToOutput('gain', 'output');
     }
 }

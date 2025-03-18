@@ -13,7 +13,6 @@ const PresetLoader: React.FC = () => {
       // 稍微延迟执行，确保节点已经完全渲染
       const timer = setTimeout(() => {
         moduleManager.setupAllEdgeBindings(edges);
-        console.log('Edge bindings setup complete for', edges.length, 'edges');
       }, 100);
       
       return () => clearTimeout(timer);
