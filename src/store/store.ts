@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  Node,
+  Node as ReactFlowNode,
   Edge,
   Connection,
   EdgeChange,
@@ -10,6 +10,17 @@ import {
   applyEdgeChanges,
 } from '@xyflow/react';
 import { presetManager } from '../core/PresetManager';
+import { ModuleBase } from '../core/ModuleBase';
+
+// 扩展 Node 类型，添加我们自定义的 module 属性
+interface NodeData {
+  module?: ModuleBase;
+  type?: string;
+  label?: string;
+  [key: string]: unknown;
+}
+
+type Node = ReactFlowNode<NodeData>;
 
 // --------------------------------
 //        Reactflow管理部分
@@ -23,6 +34,7 @@ interface FlowState {
   onConnect: (connection: Connection) => void;
   loadPreset: (presetId: string) => void;
   getPresets: () => typeof presetManager.getPresets;
+  updateModuleParameter: (nodeId: string, paramKey: string, value: number) => void;
 }
 
 const defaultPreset = presetManager.getPreset('default');
@@ -63,4 +75,24 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
   
   getPresets: () => presetManager.getPresets,
+  
+  updateModuleParameter: (nodeId, paramKey, value) => {
+    set({
+      nodes: get().nodes.map(node => {
+        if (node.id === nodeId && node.data?.module?.parameters) {
+          const updatedModule = { ...node.data.module };
+          updatedModule.parameters = { ...updatedModule.parameters, [paramKey]: value };
+          
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              module: updatedModule
+            }
+          };
+        }
+        return node;
+      })
+    });
+  }
 }));

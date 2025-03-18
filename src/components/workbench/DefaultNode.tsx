@@ -1,155 +1,78 @@
-import { memo, useState } from 'react';
+import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { ModuleBase } from '../../core/ModuleBase';
 import { Slider } from '@/components/ui/slider';
+import { useFlowStore } from '../../store/store';
 
 interface DefaultNodeProps {
   data: {
     label: string;
     type: string;
     module?: ModuleBase;
-  }
+  };
+  id: string;
 }
 
-const DefaultNode: React.FC<DefaultNodeProps> = ({ data }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [paramExpanded, setParamExpanded] = useState(false);
-  const [interfacesExpanded, setInterfacesExpanded] = useState(false);
-  const moduleInstance = data.module;
-
-  // 渲染参数控件
-  const renderParameters = () => {
-    if (!moduleInstance || !moduleInstance.parameters) return null;
-    
-    return (
-      <div className="w-full">
-        <div 
-          className="flex justify-between items-center py-1 px-2 bg-gray-100 hover:bg-gray-200 cursor-pointer rounded"
-          onClick={() => setParamExpanded(!paramExpanded)}
-        >
-          <h4 className="text-xs font-medium">参数</h4>
-          <span>{paramExpanded ? '▲' : '▼'}</span>
-        </div>
-        
-        {paramExpanded && (
-          <div className="p-2 text-xs border-t border-gray-200 nodrag">
-            {Object.entries(moduleInstance.parameters).map(([key, value]) => (
-              <div key={key} className="mb-3 last:mb-0">
-                <div className="flex justify-between mb-1">
-                  <label className="text-gray-700">{key}:</label>
-                  <span className="text-gray-700">{value.toFixed(2)}</span>
-                </div>
-                <Slider
-                  className="w-full"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={[value]}
-                  onValueChange={(newValue) => {
-                    if (moduleInstance) {
-                      moduleInstance.parameters[key] = newValue[0];
-                    }
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
+const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
+  const { module: moduleInstance } = data;
+  const updateModuleParameter = useFlowStore(state => state.updateModuleParameter);
+  
+  // 更新参数的处理函数
+  const handleParameterChange = (paramKey: string, value: number[]) => {
+    if (moduleInstance && moduleInstance.parameters) {
+      // 使用store中的方法来更新参数，确保状态更新并触发重渲染
+      updateModuleParameter(id, paramKey, value[0]);
+    }
   };
-
-  // 渲染接口列表
-  const renderInterfaces = () => {
-    if (!moduleInstance) return null;
-    const hasInput = moduleInstance.inputInterfaces && Object.keys(moduleInstance.inputInterfaces).length > 0;
-    const hasOutput = moduleInstance.outputInterfaces && Object.keys(moduleInstance.outputInterfaces).length > 0;
-    
-    if (!hasInput && !hasOutput) return null;
-    
-    return (
-      <div className="w-full">
-        <div 
-          className="flex justify-between items-center py-1 px-2 bg-gray-100 hover:bg-gray-200 cursor-pointer rounded"
-          onClick={() => setInterfacesExpanded(!interfacesExpanded)}
-        >
-          <h4 className="text-xs font-medium">接口</h4>
-          <span>{interfacesExpanded ? '▲' : '▼'}</span>
-        </div>
-        
-        {interfacesExpanded && (
-          <div className="p-2 text-xs border-t border-gray-200 nodrag">
-            {hasInput && (
-              <div className="mb-2">
-                <h5 className="font-medium text-gray-700 mb-1">输入</h5>
-                <ul className="pl-2">
-                  {Object.entries(moduleInstance.inputInterfaces).map(([key, value]) => (
-                    <li key={key} className="text-gray-600">
-                      {key}: {typeof value === 'number' ? value.toFixed(2) : '音频信号'}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            
-            {hasOutput && (
-              <div>
-                <h5 className="font-medium text-gray-700 mb-1">输出</h5>
-                <ul className="pl-2">
-                  {Object.entries(moduleInstance.outputInterfaces).map(([key, value]) => (
-                    <li key={key} className="text-gray-600">
-                      {key}: {typeof value === 'number' ? value.toFixed(2) : '音频信号'}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
+  
   return (
-    <div className={`module-node ${data.type}-node bg-white overflow-hidden rounded-[2px] shadow-md border border-gray-200 min-w-[180px]`}>
-      {/* 标题栏 */}
-      <div 
-        className="bg-gradient-to-r from-blue-500 to-blue-600 text-white py-2 px-3 flex justify-between items-center cursor-move"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <strong className="text-sm truncate">{data.label}</strong>
-        <span>{expanded ? '▲' : '▼'}</span>
+    <div className="node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px]">
+      {/* 模块标题 */}
+      <div className="font-medium text-sm mb-2 pb-1 border-b">
+        {data.label || moduleInstance?.name || "模块"}
       </div>
-
-      {/* 可折叠内容 */}
-      {expanded && moduleInstance && (
-        <div className="nodrag divide-y divide-gray-200">
-          <div className="p-2 text-xs">
-            <div className="flex justify-between">
-              <span className="text-gray-500">类型:</span>
-              <span className="text-gray-700">{moduleInstance.moduleType}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">ID:</span>
-              <span className="text-gray-700">{moduleInstance.id.substring(0, 6)}...</span>
-            </div>
+      
+      {/* 参数控制 */}
+      {moduleInstance && Object.keys(moduleInstance.parameters).map((paramKey) => (
+        <div key={paramKey} className="mb-3">
+          <div className="flex justify-between text-xs mb-1">
+            <span>{paramKey}:</span>
+            <span>{moduleInstance.parameters[paramKey].toFixed(2)}</span>
           </div>
-          
-          {renderParameters()}
-          {renderInterfaces()}
+          <Slider
+            value={[moduleInstance.parameters[paramKey]]}
+            max={1}
+            step={0.01}
+            onValueChange={(value) => handleParameterChange(paramKey, value)}
+          />
         </div>
-      )}
+      ))}
       
-      {/* 连接点 */}
-      {moduleInstance && moduleInstance.inputInterfaces && Object.keys(moduleInstance.inputInterfaces).length > 0 && (
-        <Handle type="target" position={Position.Left} className="w-3 h-3 !bg-blue-400 !border !border-white" />
-      )}
+      {/* 输入接口 */}
+      {moduleInstance && Object.keys(moduleInstance.inputInterfaces).map((inputKey, index) => (
+        <Handle
+          key={`input-${inputKey}`}
+          type="target"
+          position={Position.Left}
+          id={inputKey}
+          style={{ top: 40 + index * 20 }}
+          className="w-2 h-2 bg-blue-500"
+        />
+      ))}
       
-      {moduleInstance && moduleInstance.outputInterfaces && Object.keys(moduleInstance.outputInterfaces).length > 0 && (
-        <Handle type="source" position={Position.Right} className="w-3 h-3 !bg-green-400 !border !border-white" />
-      )}
+      {/* 输出接口 */}
+      {moduleInstance && Object.keys(moduleInstance.outputInterfaces).map((outputKey, index) => (
+        <Handle
+          key={`output-${outputKey}`}
+          type="source"
+          position={Position.Right}
+          id={outputKey}
+          style={{ top: 40 + index * 20 }}
+          className="w-2 h-2 bg-green-500"
+        />
+      ))}
     </div>
   );
-};
+}
  
 export default memo(DefaultNode);
