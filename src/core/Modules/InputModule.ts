@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ModuleBase, ModuleInterface } from '../ModuleBase';
+import { ModuleBase, ParameterType, PortType } from '../ModuleBase';
 
 /**
  * 基本输入模块，生成信号并根据gain参数调整输出
@@ -9,18 +9,45 @@ export class InputModule extends ModuleBase {
   private Tone: any;
 
   constructor(id: string, name: string = '输入模块') {
-    // 初始化基本参数，包含范围定义
+    // 初始化基本参数，使用新的参数定义格式
     const moduleType = 'input';
     const parameters = {
-      gain: { value: 1.0, min: 0, max: 2.0 },
-      freq: { value: 440, min: 20, max: 20000 },
-      waveform: { value: 0, min: 0, max: 3 }, // 0:sine, 1:square, 2:sawtooth, 3:triangle
+      gain: { 
+        type: ParameterType.NUMBER, 
+        value: 1.0, 
+        min: 0, 
+        max: 2.0 
+      },
+      freq: { 
+        type: ParameterType.NUMBER, 
+        value: 440, 
+        min: 20, 
+        max: 20000 
+      },
+      waveform: { 
+        type: ParameterType.LIST, 
+        value: 'sine', 
+        options: ['sine', 'square', 'sawtooth', 'triangle'] 
+      },
+      enabled: {
+        type: ParameterType.BOOLEAN,
+        value: true
+      }
     };
+    
+    // 使用新的端口定义格式
     const inputPorts = {}; // 输入模块没有输入接口
+    
     const outputPorts = {
-      output: 0 as ModuleInterface,
-      audio: null as ModuleInterface, // 音频输出端口
-    }; // 输出接口
+      output: { 
+        type: PortType.NUMBER, 
+        value: 0 
+      },
+      audio: { 
+        type: PortType.AUDIO, 
+        value: null 
+      }
+    };
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts);
 
@@ -35,21 +62,30 @@ export class InputModule extends ModuleBase {
    * 动态初始化Tone.js
    */
   private async initializeTone(): Promise<void> {
-    const ToneModule = await import('tone');
-    this.Tone = ToneModule;
+    try {
+      const ToneModule = await import('tone');
+      this.Tone = ToneModule;
 
-    // 初始化Tone.js振荡器
-    this.oscillator = new this.Tone.Oscillator({
-      frequency: this.getParameterValue('freq'),
-      volume: this.Tone.gainToDb(this.getParameterValue('gain')),
-      type: 'sine',
-    }).start();
+      // 初始化Tone.js振荡器
+      this.oscillator = new this.Tone.Oscillator({
+        frequency: this.getParameterValue('freq') as number,
+        volume: this.Tone.gainToDb(this.getParameterValue('gain') as number),
+        type: this.getParameterValue('waveform') as string,
+      });
+      
+      // 根据enabled参数决定是否启动
+      if (this.getParameterValue('enabled') as boolean) {
+        this.oscillator.start();
+      }
 
-    // 设置音频输出
-    this.outputPorts['audio'].next(this.oscillator);
+      // 设置音频输出
+      this.outputPorts['audio'].next(this.oscillator);
 
-    // 设置参数变更监听
-    this.setupOscillatorBindings();
+      // 设置参数变更监听
+      this.setupOscillatorBindings();
+    } catch (error) {
+      console.error('Failed to initialize Tone.js:', error);
+    }
   }
 
   /**
@@ -58,32 +94,41 @@ export class InputModule extends ModuleBase {
   private setupOscillatorBindings(): void {
     if (!this.oscillator || !this.Tone) return;
 
-    const freqSubscription = this.parameters['freq'].subscribe((value) => {
-      if (this.oscillator) {
+    const freqSubscription = this.parameters['freq'].subscribe((value: number | boolean | string) => {
+      if (this.oscillator && typeof value === 'number') {
         this.oscillator.frequency.value = value;
       }
     });
 
-    const gainSubscription = this.parameters['gain'].subscribe((value) => {
-      if (this.oscillator) {
+    const gainSubscription = this.parameters['gain'].subscribe((value: number | boolean | string) => {
+      if (this.oscillator && typeof value === 'number') {
         this.oscillator.volume.value = this.Tone.gainToDb(value);
       }
     });
 
-    const waveformSubscription = this.parameters['waveform'].subscribe(
-      (value) => {
-        if (this.oscillator) {
-          const waveforms = ['sine', 'square', 'sawtooth', 'triangle'];
-          const index = Math.min(Math.floor(value), waveforms.length - 1);
-          this.oscillator.type = waveforms[index] as any;
+    const waveformSubscription = this.parameters['waveform'].subscribe((value: number | boolean | string) => {
+      if (this.oscillator && typeof value === 'string') {
+        this.oscillator.type = value;
+      }
+    });
+    
+    const enabledSubscription = this.parameters['enabled'].subscribe((value: number | boolean | string) => {
+      if (!this.oscillator) return;
+
+      if (typeof value === 'boolean') {
+        if (value && this.oscillator.state !== 'started') {
+          this.oscillator.start();
+        } else if (!value && this.oscillator.state === 'started') {
+          this.oscillator.stop();
         }
       }
-    );
+    });
 
     this.addInternalSubscriptions([
       freqSubscription,
       gainSubscription,
       waveformSubscription,
+      enabledSubscription
     ]);
   }
 
@@ -99,8 +144,14 @@ export class InputModule extends ModuleBase {
    * 释放资源方法
    */
   public dispose(): void {
-    this.oscillator.stop();
-    this.oscillator.dispose();
+    if (this.oscillator) {
+      try {
+        this.oscillator.stop();
+        this.oscillator.dispose();
+      } catch (error) {
+        console.warn('Error disposing oscillator', error);
+      }
+    }
     super.dispose();
   }
 }

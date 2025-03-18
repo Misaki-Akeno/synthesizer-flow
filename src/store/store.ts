@@ -23,7 +23,7 @@ interface FlowState {
   onConnect: (connection: Connection) => void;
   loadPreset: (presetId: string) => void;
   getPresets: () => typeof presetManager.getPresets;
-  updateModuleParameter: (nodeId: string, paramKey: string, value: number) => void;
+  updateModuleParameter: (nodeId: string, paramKey: string, value: number | boolean | string) => void;
   addNode: (type: string, label: string, position: { x: number, y: number }) => void;
   addEdge: (source: string, target: string) => void;
 }
@@ -103,6 +103,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
       set({
         nodes: get().nodes.map(node => {
           if (node.id === nodeId && node.data?.module) {
+            // 使用修改后的 updateParameter 方法，它可以处理所有类型的参数
             node.data.module.updateParameter(paramKey, value);
             return { ...node }; // 触发React更新
           }

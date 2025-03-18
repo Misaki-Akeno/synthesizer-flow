@@ -1,4 +1,5 @@
-import { ModuleBase, ModuleInterface } from '../ModuleBase';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { ModuleBase, ModuleInterface, ParameterType, PortType } from '../ModuleBase';
 
 /**
  * 基本输出模块，接收输入并根据level参数处理
@@ -6,17 +7,75 @@ import { ModuleBase, ModuleInterface } from '../ModuleBase';
 export class OutputModule extends ModuleBase {
     // 存储最近的输入值，用于在level改变时重新计算
     private lastInputValue: number = 0;
+    private lastAudioInput: any = null;
+    private gain: any = null;
+    private Tone: any;
 
     constructor(id: string, name: string = '输出模块') {
-        // 初始化基本参数，包含范围定义
+        // 初始化基本参数，使用新的参数定义格式
         const moduleType = 'output';
         const parameters = { 
-            level: { value: 0.5, min: 0, max: 1.0 } 
+            level: { 
+                type: ParameterType.NUMBER, 
+                value: -12, 
+                min: -60, 
+                max: 0 
+            },
+            mute: {
+                type: ParameterType.BOOLEAN,
+                value: false
+            }
         };
-        const inputPorts = { input: 0 as ModuleInterface };  // 输入接口
-        const outputPorts = {};  // 输出模块没有输出接口
+        
+        // 使用新的端口定义格式
+        const inputPorts = { 
+            input: { 
+                type: PortType.NUMBER, 
+                value: 0 
+            },
+            audioIn: {
+                type: PortType.AUDIO,
+                value: null
+            }
+        };
+        
+        const outputPorts = {}; // 输出模块没有输出接口
         
         super(moduleType, id, name, parameters, inputPorts, outputPorts);
+
+        // 初始化音频处理
+        if (typeof window !== 'undefined') {
+            this.initializeAudio();
+        }
+    }
+    
+    /**
+     * 初始化音频处理组件
+     */
+    private async initializeAudio(): Promise<void> {
+        try {
+            const ToneModule = await import('tone');
+            this.Tone = ToneModule;
+            
+            // 创建增益节点用于音量控制，将dB值转换为线性值
+            const levelDB = this.getParameterValue('level') as number;
+            const gainValue = this.dbToLinear(levelDB);
+            this.gain = new this.Tone.Gain(gainValue).toDestination();
+            
+            // 设置静音状态
+            if (this.getParameterValue('mute') as boolean) {
+                this.gain.gain.value = 0;
+            }
+        } catch (error) {
+            console.error('Failed to initialize Tone.js:', error);
+        }
+    }
+    
+    /**
+     * 将分贝值转换为线性增益值
+     */
+    private dbToLinear(dbValue: number): number {
+        return Math.pow(10, dbValue / 20);
     }
     
     /**
@@ -25,8 +84,8 @@ export class OutputModule extends ModuleBase {
     protected setupInternalBindings(): void {
         console.debug(`[OutputModule ${this.id}] Setting up internal bindings`);
         
-        // 监听输入端口
-        const inputSubscription = this.inputPorts.input.subscribe(inputValue => {
+        // 监听数字输入端口
+        const inputSubscription = this.inputPorts.input.subscribe((inputValue: ModuleInterface) => {
             if (typeof inputValue === 'number') {
                 this.lastInputValue = inputValue;
                 this.processInput(inputValue);
@@ -34,30 +93,108 @@ export class OutputModule extends ModuleBase {
         });
         this.addInternalSubscription(inputSubscription);
         
+        // 监听音频输入端口
+        const audioSubscription = this.inputPorts.audioIn.subscribe((audioInput: ModuleInterface) => {
+            // 先断开上一个音频连接
+            if (this.lastAudioInput) {
+                try {
+                    this.lastAudioInput.disconnect(this.gain);
+                    console.debug(`[OutputModule ${this.id}] Disconnected previous audio input`);
+                } catch (error) {
+                    console.warn(`[OutputModule ${this.id}] Error disconnecting previous audio:`, error);
+                }
+            }
+            
+            // 如果有新的音频输入，则进行连接
+            if (audioInput) {
+                this.processAudioInput(audioInput);
+                this.lastAudioInput = audioInput;
+                console.debug(`[OutputModule ${this.id}] Connected new audio input`);
+            } else {
+                // 如果输入为null，清空lastAudioInput
+                this.lastAudioInput = null;
+                console.debug(`[OutputModule ${this.id}] Audio input removed`);
+            }
+        });
+        this.addInternalSubscription(audioSubscription);
+        
         // 监听level参数变化
-        const levelSubscription = this.parameters.level.subscribe(_levelValue => {
-            // 当level改变时，使用最近的输入值重新处理
-            this.processInput(this.lastInputValue);
+        const levelSubscription = this.parameters.level.subscribe((levelValue: number | boolean | string) => {
+            if (typeof levelValue === 'number') {
+                // 更新音频增益，将dB值转换为线性值
+                if (this.gain) {
+                    const gainValue = this.getParameterValue('mute') ? 0 : this.dbToLinear(levelValue);
+                    this.gain.gain.value = gainValue;
+                }
+                
+                // 重新处理数值输入
+                this.processInput(this.lastInputValue);
+            }
         });
         this.addInternalSubscription(levelSubscription);
+        
+        // 监听mute参数变化
+        const muteSubscription = this.parameters.mute.subscribe((muteValue: number | boolean | string) => {
+            if (typeof muteValue === 'boolean' && this.gain) {
+                const levelDB = this.getParameterValue('level') as number;
+                this.gain.gain.value = muteValue ? 0 : this.dbToLinear(levelDB);
+            }
+        });
+        this.addInternalSubscription(muteSubscription);
     }
     
     /**
-     * 处理输入信号
+     * 处理数值输入信号
      */
     private processInput(inputValue: number): void {
         if (typeof inputValue !== 'number') return;
         
-        const levelValue = this.getParameterValue('level');
-        const _processedValue = inputValue * levelValue;
+        const levelDB = this.getParameterValue('level') as number;
+        const gainValue = this.dbToLinear(levelDB);
+        const processedValue = inputValue * gainValue;
         
-        // 在这里可以添加更多处理逻辑，例如播放音频等
+        if (this.gain) {
+            this.gain.gain.value = processedValue;
+        }
     }
     
     /**
-     * 重写更新参数方法，添加调试日志
+     * 处理音频输入信号
      */
-    updateParameter(paramKey: string, value: number): void {
-        super.updateParameter(paramKey, value);
+    private processAudioInput(audioInput: any): void {
+        if (!audioInput || !this.gain) return;
+        
+        try {
+            // 检查是否已经连接到此gain节点，避免重复连接
+            audioInput.connect(this.gain);
+            
+            console.debug(`[OutputModule ${this.id}] Connected audio input to gain node`);
+        } catch (error) {
+            console.error(`[OutputModule ${this.id}] Error connecting audio:`, error);
+        }
+    }
+    
+    /**
+     * 释放资源
+     */
+    public dispose(): void {
+        if (this.gain) {
+            try {
+                this.gain.dispose();
+            } catch (error) {
+                console.warn('Error disposing gain node', error);
+            }
+        }
+        
+        // 断开音频连接
+        if (this.lastAudioInput) {
+            try {
+                this.lastAudioInput.disconnect();
+            } catch (error) {
+                console.warn('Error disconnecting audio input', error);
+            }
+        }
+        
+        super.dispose();
     }
 }

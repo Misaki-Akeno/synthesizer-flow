@@ -74,8 +74,28 @@ export class ModuleManager {
       const sourcePort = sourceHandle || 'output';
       const targetPort = targetHandle || 'input';
       
-      // 建立绑定
-      targetNode.data.module.bindInputToOutput(targetPort, sourceNode.data.module, sourcePort);
+      try {
+        // 检查端口类型并建立绑定
+        const sourceModule = sourceNode.data.module;
+        const targetModule = targetNode.data.module;
+        
+        // 获取端口类型
+        const sourceType = sourceModule.getOutputPortType(sourcePort);
+        const targetType = targetModule.getInputPortType(targetPort);
+        
+        // 检查类型兼容性
+        if (sourceType !== targetType) {
+          console.error(
+            `Type mismatch: Cannot connect ${sourceType} output to ${targetType} input`
+          );
+          return; // 阻止连接
+        }
+        
+        // 建立绑定
+        targetNode.data.module.bindInputToOutput(targetPort, sourceNode.data.module, sourcePort);
+      } catch (error) {
+        console.error(`Failed to bind modules: ${error}`);
+      }
     }
   }
   
