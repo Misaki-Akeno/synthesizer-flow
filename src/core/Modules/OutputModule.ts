@@ -17,9 +17,10 @@ export class OutputModule extends ModuleBase {
         const parameters = { 
             level: { 
                 type: ParameterType.NUMBER, 
-                value: -12, 
+                value: -24, 
                 min: -60, 
-                max: 0 
+                max: 0,
+                step: 0.1
             },
             enabled: {
                 type: ParameterType.BOOLEAN,
