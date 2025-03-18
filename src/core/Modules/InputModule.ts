@@ -8,10 +8,10 @@ export class InputModule extends ModuleBase {
         // 初始化基本参数
         const moduleType = 'input';
         const parameters = { gain: 1.0 };  // 增益参数，默认值1.0
-        const inputInterfaces = {};  // 输入模块没有输入接口
-        const outputInterfaces = { output: 0 as ModuleInterface };  // 输出接口
+        const inputPorts = {};  // 输入模块没有输入接口
+        const outputIPorts = { output: 0 as ModuleInterface };  // 输出接口
         
-        super(moduleType, id, name, parameters, inputInterfaces, outputInterfaces);
+        super(moduleType, id, name, parameters, inputPorts, outputIPorts);
     }
     
     // 这里可以添加生成输出信号的方法

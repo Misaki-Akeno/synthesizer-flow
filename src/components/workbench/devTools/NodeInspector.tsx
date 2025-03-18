@@ -83,7 +83,10 @@ function NodeInfo({
       <div>
         dimensions: {width} × {height}
       </div>
-      <div>data: {JSON.stringify(data, null, 2)}</div>
+      <div>
+        data:
+        <pre style={{ margin: 0 }}>{JSON.stringify(data, null, 2)}</pre>
+      </div>
     </div>
   );
 }

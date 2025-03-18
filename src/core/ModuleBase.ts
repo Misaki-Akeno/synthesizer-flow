@@ -18,24 +18,24 @@ export abstract class ModuleBase {
     public parameters: { [key: string]: number };
 
     // 输入接口，支持 number 或 audio
-    public inputInterfaces: { [key: string]: ModuleInterface };
+    public inputPorts: { [key: string]: ModuleInterface };
 
     // 输出接口，支持 number 或 audio
-    public outputInterfaces: { [key: string]: ModuleInterface };
+    public outputPorts: { [key: string]: ModuleInterface };
 
     constructor(
         moduleType: string,
         id: string,
         name: string,
         parameters: { [key: string]: number } = {},
-        inputInterfaces: { [key: string]: ModuleInterface } = {},
-        outputInterfaces: { [key: string]: ModuleInterface } = {}
+        inputPorts: { [key: string]: ModuleInterface } = {},
+        outputPorts: { [key: string]: ModuleInterface } = {}
     ) {
         this.moduleType = moduleType;
         this.id = id;
         this.name = name;
         this.parameters = parameters;
-        this.inputInterfaces = inputInterfaces;
-        this.outputInterfaces = outputInterfaces;
+        this.inputPorts = inputPorts;
+        this.outputPorts = outputPorts;
     }
 }

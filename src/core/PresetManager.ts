@@ -1,13 +1,21 @@
-import { Node, Edge } from '@xyflow/react';
-import { InputModule } from './Modules/InputModule';
-import { OutputModule } from './Modules/OutputModule';
-import { ModuleBase } from './ModuleBase';
+import { Edge } from '@xyflow/react';
+import { moduleManager, FlowNode } from './ModuleManager';
 
 export interface Preset {
   id: string;
   name: string;
-  nodes: Node[];
+  nodes: PresetNode[];
   edges: Edge[];
+}
+
+export interface PresetNode {
+  id: string;
+  position: { x: number; y: number };
+  data: {
+    type: string;
+    label?: string;
+    [key: string]: unknown;
+  };
 }
 
 export class PresetManager {
@@ -28,43 +36,17 @@ export class PresetManager {
     return this.presets.find((p) => p.id === presetId);
   }
 
-  // 添加预设
-  addPreset(preset: Preset): void {
-    this.presets.push(JSON.parse(JSON.stringify(preset)));
-  }
-
-  // 加载预设时注入模块实例
-  loadPresetWithModules(presetId: string): { nodes: Node[]; edges: Edge[] } {
+  // 加载预设
+  loadPresetWithModules(presetId: string): { nodes: FlowNode[]; edges: Edge[] } {
     const preset = this.getPreset(presetId) || this.presets[0];
     if (!preset) {
       throw new Error("No presets available");
     }
+    const presetNodes = JSON.parse(JSON.stringify(preset.nodes));
+    const presetEdges = JSON.parse(JSON.stringify(preset.edges));
 
-    // 深拷贝节点和边，避免修改原始预设
-    const nodes: Node[] = JSON.parse(JSON.stringify(preset.nodes));
-    const edges: Edge[] = JSON.parse(JSON.stringify(preset.edges));
-
-    // 为每个节点注入对应模块实例
-    nodes.forEach(node => {
-      const moduleType = node.data?.type as string;
-      if (moduleType) {
-        node.data.module = this.createModuleInstance(moduleType, node.id, node.data.label as string);
-      }
-    });
-
-    return { nodes, edges };
-  }
-
-  // 根据类型创建对应模块实例
-  private createModuleInstance(type: string, id: string, name: string): ModuleBase {
-    switch (type) {
-      case 'input':
-        return new InputModule(id, name);
-      case 'output':
-        return new OutputModule(id, name);
-      default:
-        throw new Error(`Unknown module type: ${type}`);
-    }
+    // 使用 ModuleManager 创建带有模块实例的完整流程
+    return moduleManager.createFlowFromPreset(presetNodes, presetEdges);
   }
 }
 
@@ -80,7 +62,7 @@ const defaultPreset: Preset = {
     },
     {
       id: '2',
-      position: { x: 700, y: 500 },
+      position: { x: 800, y: 500 },
       data: { type: 'output', label: '输出节点' },
     },
   ],
@@ -88,4 +70,6 @@ const defaultPreset: Preset = {
 };
 
 // 创建并导出预设管理器实例
-export const presetManager = new PresetManager([defaultPreset]);
+export const presetManager = new PresetManager([defaultPreset]);// 预设节点接口
+
+

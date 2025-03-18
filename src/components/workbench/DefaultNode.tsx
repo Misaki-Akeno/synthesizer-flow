@@ -20,7 +20,6 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
   // 更新参数的处理函数
   const handleParameterChange = (paramKey: string, value: number[]) => {
     if (moduleInstance && moduleInstance.parameters) {
-      // 使用store中的方法来更新参数，确保状态更新并触发重渲染
       updateModuleParameter(id, paramKey, value[0]);
     }
   };
@@ -49,7 +48,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
       ))}
       
       {/* 输入接口 */}
-      {moduleInstance && Object.keys(moduleInstance.inputInterfaces).map((inputKey, index) => (
+      {moduleInstance && Object.keys(moduleInstance.inputPorts).map((inputKey, index) => (
         <Handle
           key={`input-${inputKey}`}
           type="target"
@@ -61,7 +60,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
       ))}
       
       {/* 输出接口 */}
-      {moduleInstance && Object.keys(moduleInstance.outputInterfaces).map((outputKey, index) => (
+      {moduleInstance && Object.keys(moduleInstance.outputPorts).map((outputKey, index) => (
         <Handle
           key={`output-${outputKey}`}
           type="source"
