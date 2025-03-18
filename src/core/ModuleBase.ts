@@ -317,4 +317,37 @@ export abstract class ModuleBase {
     console.debug(`[ModuleBase] 模块 ${this.id} 的输入端口 '${inputPortName}' 没有活跃的绑定`);
     return false;
   }
+
+  /**
+   * 释放模块资源
+   * 取消所有订阅并清理资源
+   */
+  public dispose(): void {
+    console.debug(`[ModuleBase] Disposing module: ${this.id} (${this.moduleType})`);
+    
+    // 取消所有外部订阅
+    Object.values(this.subscriptions).forEach(subscription => {
+      subscription.unsubscribe();
+    });
+    this.subscriptions = {};
+    
+    // 取消所有内部订阅
+    this.internalSubscriptions.forEach(subscription => {
+      subscription.unsubscribe();
+    });
+    this.internalSubscriptions = [];
+    
+    // 完成所有BehaviorSubject
+    Object.values(this.parameters).forEach(param => {
+      param.complete();
+    });
+    
+    Object.values(this.inputPorts).forEach(port => {
+      port.complete();
+    });
+    
+    Object.values(this.outputPorts).forEach(port => {
+      port.complete();
+    });
+  }
 }

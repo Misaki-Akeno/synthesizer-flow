@@ -2,15 +2,10 @@ import React, { useEffect } from 'react';
 import { useFlowStore } from '../../store/store';
 import { presetManager } from '../../core/PresetManager';
 import { moduleManager } from '../../core/ModuleManager';
-import * as Tone from 'tone';
 
 const PresetLoader: React.FC = () => {
   const { currentPresetId, loadPreset, edges } = useFlowStore();
   const presets = presetManager.getPresets();
-
-  if (Tone.Transport.state !== 'started') {
-    Tone.start();
-  }
 
   // 在预设加载后或edges变化时，重新建立模块间绑定
   useEffect(() => {
