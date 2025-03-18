@@ -13,6 +13,7 @@ import Draggable from 'react-draggable';
 import NodeInspector from './NodeInspector';
 import ChangeLogger from './ChangeLogger';
 import ViewportLogger from './ViewportLogger';
+import Debugger from './Debugger';
 
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(true);
@@ -68,6 +69,12 @@ export default function DevTools() {
         {isOpen && (
           <div className="overflow-y-auto max-h-[80vh]">
             <Accordion type="multiple" defaultValue={['viewport-logger']}>
+              <DevToolSection id="audio-debugger" title="音频调试器">
+                <div className="px-4 py-2">
+                  <Debugger />
+                </div>
+              </DevToolSection>
+              
               <DevToolSection id="viewport-logger" title="视口信息">
                 <div className="px-4 py-2">
                   <ViewportLogger />

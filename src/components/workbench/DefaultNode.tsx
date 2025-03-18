@@ -19,10 +19,14 @@ interface DefaultNodeProps {
 const ParameterControl = ({ 
   paramKey, 
   value, 
+  min,
+  max,
   updateParameter 
 }: { 
   paramKey: string, 
   value: number, 
+  min: number,
+  max: number,
   updateParameter: (key: string, value: number[]) => void 
 }) => (
   <div className="mb-3">
@@ -32,8 +36,9 @@ const ParameterControl = ({
     </div>
     <Slider
       value={[value || 0]}
-      max={1}
-      step={0.01}
+      min={min}
+      max={max}
+      step={(max - min) / 100} // 动态计算合适的步长
       onValueChange={(newValue) => updateParameter(paramKey, newValue)}
     />
   </div>
@@ -111,14 +116,19 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
       </div>
       
       {/* 参数控制列表 */}
-      {moduleInstance && Object.keys(moduleInstance.parameters).map((paramKey) => (
-        <ParameterControl
-          key={paramKey}
-          paramKey={paramKey}
-          value={paramValues[paramKey] || 0}
-          updateParameter={handleParameterChange}
-        />
-      ))}
+      {moduleInstance && Object.keys(moduleInstance.parameters).map((paramKey) => {
+        const meta = moduleInstance.getParameterMeta(paramKey);
+        return (
+          <ParameterControl
+            key={paramKey}
+            paramKey={paramKey}
+            value={paramValues[paramKey] || 0}
+            min={meta.min}
+            max={meta.max}
+            updateParameter={handleParameterChange}
+          />
+        );
+      })}
       
       {/* 输入端口列表 */}
       {moduleInstance && Object.keys(moduleInstance.inputPorts).map((inputKey, index) => (

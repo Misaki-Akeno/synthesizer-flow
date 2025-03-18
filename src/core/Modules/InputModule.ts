@@ -5,9 +5,12 @@ import { ModuleBase, ModuleInterface } from '../ModuleBase';
  */
 export class InputModule extends ModuleBase {
     constructor(id: string, name: string = '输入模块') {
-        // 初始化基本参数
+        // 初始化基本参数，包含范围定义
         const moduleType = 'input';
-        const parameters = { gain: 1.0 };  // 增益参数，默认值1.0
+        const parameters = { 
+            gain: { value: 1.0, min: 0, max: 2.0 },
+            freq: { value: 1.0, min: 0.1, max: 10.0 }
+        };  
         const inputPorts = {};  // 输入模块没有输入接口
         const outputPorts = { output: 0 as ModuleInterface };  // 输出接口
         

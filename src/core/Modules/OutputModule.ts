@@ -8,9 +8,11 @@ export class OutputModule extends ModuleBase {
     private lastInputValue: number = 0;
 
     constructor(id: string, name: string = '输出模块') {
-        // 初始化基本参数
+        // 初始化基本参数，包含范围定义
         const moduleType = 'output';
-        const parameters = { level: 0.5 };  // 输出级别参数，默认值0.5
+        const parameters = { 
+            level: { value: 0.5, min: 0, max: 1.0 } 
+        };
         const inputPorts = { input: 0 as ModuleInterface };  // 输入接口
         const outputPorts = {};  // 输出模块没有输出接口
         
