@@ -49,17 +49,18 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
   
     onEdgesChange: (changes) => {
-      // 处理边的删除，解除相应的绑定
+      // 只处理 'remove' 类型的变更，忽略 'select' 等其他类型
       const edgesToRemove = changes
         .filter(change => change.type === 'remove')
         .map(change => get().edges.find(edge => edge.id === change.id))
         .filter((edge): edge is Edge => edge !== undefined);
       
-      // 解除绑定
+      // 只对要删除的边解除绑定
       edgesToRemove.forEach(edge => {
         moduleManager.removeEdgeBinding(edge);
       });
       
+      // 正常应用所有边变更（包括select）以保持视觉状态
       set({
         edges: applyEdgeChanges(changes, get().edges),
       });

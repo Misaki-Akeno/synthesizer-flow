@@ -18,29 +18,31 @@ interface DefaultNodeProps {
 }
 
 // 数值参数控制组件
-const NumberParameterControl = ({ 
-  paramKey, 
-  value, 
+const NumberParameterControl = ({
+  paramKey,
+  value,
   min,
   max,
-  updateParameter 
-}: { 
-  paramKey: string, 
-  value: number, 
-  min: number,
-  max: number,
-  updateParameter: (key: string, value: number) => void 
+  step,
+  updateParameter,
+}: {
+  paramKey: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  updateParameter: (key: string, value: number) => void;
 }) => (
   <div className="mb-3">
     <div className="flex justify-between text-xs mb-1">
       <span>{paramKey}:</span>
-      <span>{typeof value === 'number' ? value.toFixed(2) : "0.00"}</span>
+      <span>{typeof value === 'number' ? value.toFixed(2) : '0.00'}</span>
     </div>
     <Slider
       value={[typeof value === 'number' ? value : 0]}
       min={min}
       max={max}
-      step={(max - min) / 100} // 动态计算合适的步长
+      step={step} 
       onValueChange={(newValue) => updateParameter(paramKey, newValue[0])}
     />
   </div>
@@ -208,6 +210,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
                 value={typeof value === 'number' ? value : 0}
                 min={meta.min || 0}
                 max={meta.max || 1}
+                step={meta.step || 0.1}
                 updateParameter={handleParameterChange}
               />
             );

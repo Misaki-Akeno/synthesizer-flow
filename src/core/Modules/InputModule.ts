@@ -16,13 +16,15 @@ export class InputModule extends ModuleBase {
         type: ParameterType.NUMBER, 
         value: 1.0, 
         min: 0, 
-        max: 2.0 
+        max: 2.0,
+        step: 0.1
       },
       freq: { 
         type: ParameterType.NUMBER, 
         value: 440, 
         min: 20, 
-        max: 20000 
+        max: 2000,
+        step: 100
       },
       waveform: { 
         type: ParameterType.LIST, 

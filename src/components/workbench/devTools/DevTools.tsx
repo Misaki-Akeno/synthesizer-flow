@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, type ReactNode, useRef } from 'react';
+import { useState, type ReactNode, useRef, useEffect } from 'react';
 import {
   Accordion,
   AccordionContent,
@@ -13,17 +13,34 @@ import Draggable from 'react-draggable';
 import NodeInspector from './NodeInspector';
 import ChangeLogger from './ChangeLogger';
 import ViewportLogger from './ViewportLogger';
+import EdgeModuleLogger from './EdgeModuleLogger';
 
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(true);
-  const [position, setPosition] = useState({ x: 20, y: 100 });
+  const [position, setPosition] = useState({ x: 0, y: 100 }); // 初始位置将被useEffect更新
+  const [isPositioned, setIsPositioned] = useState(false); // 添加位置计算完成状态
   const nodeRef = useRef<HTMLDivElement>(
     null
   ) as React.RefObject<HTMLDivElement>;
+  
+  // 计算右上角位置
+  useEffect(() => {
+    const updatePosition = () => {
+      const rightPosition = window.innerWidth - 340; // 320px宽度 + 20px边距
+      setPosition({ x: rightPosition, y: 20 });
+      setIsPositioned(true); // 标记位置已计算完成
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => window.removeEventListener('resize', updatePosition);
+  }, []);
 
   const handleDrag = (_e: any, data: { x: number; y: number }) => {
     setPosition({ x: data.x, y: data.y });
   };
+
+  // 如果位置未计算完成，则不渲染组件
+  if (!isPositioned) return null;
 
   return (
     <Draggable
@@ -78,6 +95,12 @@ export default function DevTools() {
               <DevToolSection id="node-inspector" title="节点检查器">
                 <div className="px-4 py-2">
                   <NodeInspector />
+                </div>
+              </DevToolSection>
+
+              <DevToolSection id="edge-module-logger" title="边和模块信息">
+                <div className="px-4 py-2">
+                  <EdgeModuleLogger />
                 </div>
               </DevToolSection>
 
