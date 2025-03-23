@@ -13,6 +13,7 @@ import Draggable from 'react-draggable';
 import NodeInspector from './NodeInspector';
 import ChangeLogger from './ChangeLogger';
 import ViewportLogger from './ViewportLogger';
+import EdgeModuleLogger from './EdgeModuleLogger';
 
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(true);
@@ -94,6 +95,12 @@ export default function DevTools() {
               <DevToolSection id="node-inspector" title="节点检查器">
                 <div className="px-4 py-2">
                   <NodeInspector />
+                </div>
+              </DevToolSection>
+
+              <DevToolSection id="edge-module-logger" title="边和模块信息">
+                <div className="px-4 py-2">
+                  <EdgeModuleLogger />
                 </div>
               </DevToolSection>
 

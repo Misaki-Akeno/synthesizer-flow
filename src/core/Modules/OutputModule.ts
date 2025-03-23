@@ -190,7 +190,12 @@ export class OutputModule extends ModuleBase {
         if (!audioInput || !this.gain) return;
         
         try {
-            // 检查是否已经连接到此gain节点，避免重复连接
+            // 检查是否为同一个音频输入，避免重复连接和日志输出
+            if (audioInput === this.lastAudioInput) {
+                return; // 如果是同一个输入源，不需要重新连接
+            }
+            
+            // 连接到gain节点
             audioInput.connect(this.gain);
             
             // 如果有音频输入并且已启用，尝试启动音频上下文

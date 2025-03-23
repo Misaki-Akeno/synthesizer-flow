@@ -73,6 +73,7 @@ export abstract class ModuleBase {
 
   // 存储内部订阅关系
   private internalSubscriptions: Subscription[] = [];
+    type: string | undefined;
 
   constructor(
     moduleType: string,
@@ -487,7 +488,6 @@ export abstract class ModuleBase {
         // 这样可以确保音频处理模块停止处理
         this.inputPorts[inputPortName].next(null);
       }
-
       console.debug(
         `[ModuleBase] 已解除模块 ${this.id} 的输入端口 '${inputPortName}' 的绑定并重置值`
       );
