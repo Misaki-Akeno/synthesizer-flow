@@ -24,7 +24,7 @@ export class InputModule extends ModuleBase {
         value: 440, 
         min: 20, 
         max: 2000,
-        step: 100
+        step: 10
       },
       waveform: { 
         type: ParameterType.LIST, 
