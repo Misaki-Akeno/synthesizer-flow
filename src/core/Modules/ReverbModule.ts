@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { ModuleBase, ParameterType, PortType } from '../ModuleBase';
+import { AudioInputHandler } from '../AudioInputHandler';
+import { moduleInitManager } from '../ModuleInitManager';
 
 /**
  * 混响效果器模块，处理音频信号并添加混响效果
@@ -7,6 +9,16 @@ import { ModuleBase, ParameterType, PortType } from '../ModuleBase';
 export class ReverbModule extends ModuleBase {
   private reverb: any;
   private Tone: any;
+  private audioInputHandler: AudioInputHandler | null = null;
+  private bypassEnabled: boolean = false;
+  // 添加待处理的音频输入队列
+  private pendingAudioInputs: Array<{
+    sourceModuleId: string;
+    sourcePortName: string;
+    audioInput: any;
+  }> = [];
+  // 初始化完成标志
+  private initialized: boolean = false;
 
   constructor(id: string, name: string = '混响效果器') {
     // 初始化基本参数
@@ -55,6 +67,10 @@ export class ReverbModule extends ModuleBase {
     };
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts);
+    this.bypassEnabled = this.getParameterValue('bypass') as boolean;
+
+    // 注册为待初始化模块
+    moduleInitManager.registerPendingModule(this.id);
 
     // 仅在浏览器环境下初始化Tone.js
     if (typeof window !== 'undefined') {
@@ -80,47 +96,103 @@ export class ReverbModule extends ModuleBase {
       // 生成混响卷积响应（必须等待此操作完成）
       await this.reverb.generate();
       
+      // 创建音频输入处理器
+      this.audioInputHandler = new AudioInputHandler(this.reverb, this.Tone);
+      
       // 设置音频输出
-      this.outputPorts['output'].next(this.reverb);
-
-      // 监听输入端口变化
-      this.setupInputHandling();
+      this.updateOutputConnection();
       
       // 设置参数变更监听
       this.setupReverbBindings();
+      
+      // 标记初始化完成
+      this.initialized = true;
+      moduleInitManager.markModuleAsInitialized(this.id);
+      
+      // 处理待处理的音频输入
+      this.processPendingInputs();
     } catch (error) {
-      console.error('Failed to initialize Tone.js Reverb:', error);
+      console.error(`[ReverbModule ${this.id}] Failed to initialize Tone.js Reverb:`, error);
     }
   }
 
   /**
-   * 设置输入处理
+   * 处理初始化期间累积的待处理输入
    */
-  private setupInputHandling(): void {
-    if (!this.reverb) return;
-
-    const audioInputSubscription = this.inputPorts['input'].subscribe((audioSource: any) => {
-      if (!audioSource || !this.reverb) return;
-      
-      try {
-        // 断开现有连接
-        this.reverb.disconnect();
-        
-        // 连接新的音频源到混响
-        audioSource.connect(this.reverb);
-        
-        // 如果启用了bypass，则直接将输入连接到输出
-        if (this.getParameterValue('bypass') as boolean) {
-          this.outputPorts['output'].next(audioSource);
-        } else {
-          this.outputPorts['output'].next(this.reverb);
-        }
-      } catch (error) {
-        console.error('Error connecting audio to reverb:', error);
+  private processPendingInputs(): void {
+    if (!this.initialized || !this.audioInputHandler) return;
+    
+    // 处理所有待处理的输入
+    this.pendingAudioInputs.forEach(({sourceModuleId, sourcePortName, audioInput}) => {
+      if (this.audioInputHandler) {
+        this.audioInputHandler.handleInput(audioInput, sourceModuleId, sourcePortName);
       }
     });
+    
+    // 清空队列
+    this.pendingAudioInputs = [];
+  }
 
-    this.addInternalSubscription(audioInputSubscription);
+  /**
+   * 更新输出连接，根据bypass设置选择直通或混响输出
+   */
+  private updateOutputConnection(): void {
+    if (!this.audioInputHandler || !this.reverb) return;
+    
+    if (this.bypassEnabled) {
+      // 在bypass模式下，直接输出混合器
+      this.outputPorts['output'].next(this.audioInputHandler.getMixerOutput());
+    } else {
+      // 正常模式下，输出混响效果
+      this.outputPorts['output'].next(this.reverb);
+    }
+  }
+
+  /**
+   * 重写音频输入处理方法
+   */
+  protected handleAudioInput(
+    inputPortName: string,
+    audioInput: any,
+    sourceModuleId: string,
+    sourcePortName: string
+  ): void {
+    if (inputPortName !== 'input') {
+      console.warn(`[ReverbModule ${this.id}] Cannot handle audio input: Wrong port name`);
+      return;
+    }
+    
+    if (!this.initialized || !this.audioInputHandler) {
+      // 将音频输入添加到待处理队列
+      this.pendingAudioInputs.push({
+        sourceModuleId,
+        sourcePortName,
+        audioInput
+      });
+      // 更新输入端口状态
+      this.inputPorts[inputPortName].next(audioInput);
+      return;
+    }
+    
+    // 更新输入端口状态
+    this.inputPorts[inputPortName].next(audioInput);
+  }
+  
+  /**
+   * 重写音频断开连接处理方法
+   */
+  protected handleAudioDisconnect(
+    inputPortName: string,
+    sourceModuleId?: string,
+    sourcePortName?: string
+  ): void {
+    if (inputPortName !== 'input' || !this.audioInputHandler) {
+      console.warn(`[ReverbModule ${this.id}] Cannot handle audio disconnect: ${inputPortName !== 'input' ? 'Wrong port name' : 'AudioInputHandler not initialized'}`);
+      return;
+    }
+    
+    // 使用音频输入处理器处理断开连接
+    this.audioInputHandler.handleDisconnect(sourceModuleId, sourcePortName);
   }
 
   /**
@@ -150,17 +222,11 @@ export class ReverbModule extends ModuleBase {
     });
     
     const bypassSubscription = this.parameters['bypass'].subscribe((value: number | boolean | string) => {
-      if (!this.reverb) return;
+      if (!this.reverb || !this.audioInputHandler) return;
       
       if (typeof value === 'boolean') {
-        const inputSource = this.getInputValue('input');
-        if (inputSource) {
-          if (value) { // Bypass enabled
-            this.outputPorts['output'].next(inputSource);
-          } else { // Bypass disabled
-            this.outputPorts['output'].next(this.reverb);
-          }
-        }
+        this.bypassEnabled = value;
+        this.updateOutputConnection();
       }
     });
 
@@ -173,16 +239,14 @@ export class ReverbModule extends ModuleBase {
   }
 
   /**
-   * 设置模块内部参数与输出之间的绑定关系
-   */
-  protected setupInternalBindings(): void {
-    // 混响模块不需要将参数直接绑定到输出
-  }
-
-  /**
    * 释放资源方法
    */
   public dispose(): void {
+    if (this.audioInputHandler) {
+      this.audioInputHandler.dispose();
+      this.audioInputHandler = null;
+    }
+    
     if (this.reverb) {
       try {
         this.reverb.dispose();

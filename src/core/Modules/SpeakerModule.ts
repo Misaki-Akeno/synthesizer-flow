@@ -5,6 +5,8 @@ import {
   ParameterType,
   PortType,
 } from '../ModuleBase';
+import { AudioInputHandler } from '../AudioInputHandler';
+import { moduleInitManager } from '../ModuleInitManager';
 
 /**
  * 音频输出模块，接收音频信号并输出到扬声器
@@ -12,10 +14,16 @@ import {
 export class SpeakerModule extends ModuleBase {
   // 存储最近的输入值，用于在level改变时重新计算
   private lastInputValue: number = 0;
-  private lastAudioInput: any = null;
   private gain: any = null;
   private Tone: any;
   private fadeTime = 0.01; // 爆破音
+  private audioInputHandler: AudioInputHandler | null = null;
+  private initialized: boolean = false;
+  private pendingAudioInputs: Array<{
+    sourceModuleId: string;
+    sourcePortName: string;
+    audioInput: ModuleInterface;
+  }> = [];
 
   constructor(id: string, name: string = '扬声器') {
     // 初始化基本参数，使用新的参数定义格式
@@ -50,6 +58,9 @@ export class SpeakerModule extends ModuleBase {
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts);
 
+    // 注册为待初始化模块
+    moduleInitManager.registerPendingModule(this.id);
+
     // 初始化音频处理
     if (typeof window !== 'undefined') {
       this.initializeAudio();
@@ -71,13 +82,97 @@ export class SpeakerModule extends ModuleBase {
       // 初始时设置为0，稍后根据enabled参数决定是否渐变到目标音量
       this.gain = new this.Tone.Gain(0).toDestination();
 
+      // 创建音频输入处理器
+      this.audioInputHandler = new AudioInputHandler(this.gain, this.Tone);
+
       // 设置启用状态
       if (this.getParameterValue('enabled') as boolean) {
         this.gain.gain.rampTo(gainValue, this.fadeTime);
       }
+
+      // 标记初始化完成
+      this.initialized = true;
+      moduleInitManager.markModuleAsInitialized(this.id);
+
+      // 处理待处理的音频输入
+      this.processPendingInputs();
     } catch (error) {
-      console.error('Failed to initialize Tone.js:', error);
+      console.error(`[SpeakerModule ${this.id}] Failed to initialize Tone.js:`, error);
     }
+  }
+
+  /**
+   * 处理初始化期间累积的待处理输入
+   */
+  private processPendingInputs(): void {
+    if (!this.initialized || !this.audioInputHandler) return;
+
+    // 处理所有待处理的输入
+    this.pendingAudioInputs.forEach(({ sourceModuleId, sourcePortName, audioInput }) => {
+      if (this.audioInputHandler) {
+        this.audioInputHandler.handleInput(audioInput, sourceModuleId, sourcePortName);
+      }
+    });
+
+    // 清空队列
+    this.pendingAudioInputs = [];
+  }
+
+  /**
+   * 重写处理音频输入的方法，使用AudioInputHandler
+   */
+  protected handleAudioInput(
+    inputPortName: string,
+    audioInput: ModuleInterface,
+    sourceModuleId: string,
+    sourcePortName: string
+  ): void {
+    if (inputPortName !== 'audioIn') {
+      console.warn(`[SpeakerModule ${this.id}] Cannot handle audio input: Wrong port name`);
+      return;
+    }
+
+    if (!this.initialized || !this.audioInputHandler) {
+      this.pendingAudioInputs.push({
+        sourceModuleId,
+        sourcePortName,
+        audioInput,
+      });
+      // 更新输入端口状态
+      this.inputPorts[inputPortName].next(audioInput);
+      return;
+    }
+
+    const result = this.audioInputHandler.handleInput(audioInput, sourceModuleId, sourcePortName);
+
+    if (result) {
+      // 如果模块已启用，确保音频上下文已启动
+      const enabled = this.getParameterValue('enabled') as boolean;
+
+      if (enabled) {
+        this.startAudioContext();
+      }
+    }
+
+    // 更新输入端口状态
+    this.inputPorts[inputPortName].next(audioInput);
+  }
+
+  /**
+   * 重写处理音频断开连接的方法
+   */
+  protected handleAudioDisconnect(
+    inputPortName: string,
+    sourceModuleId?: string,
+    sourcePortName?: string
+  ): void {
+    if (inputPortName !== 'audioIn' || !this.audioInputHandler) {
+      console.warn(`[SpeakerModule ${this.id}] Cannot handle audio disconnect: ${inputPortName !== 'audioIn' ? 'Wrong port name' : 'AudioInputHandler not initialized'}`);
+      return;
+    }
+
+    // 使用音频输入处理器处理断开连接
+    this.audioInputHandler.handleDisconnect(sourceModuleId, sourcePortName);
   }
 
   /**
@@ -87,7 +182,6 @@ export class SpeakerModule extends ModuleBase {
     if (this.Tone && this.Tone.context.state !== 'running') {
       try {
         this.Tone.start();
-        console.debug(`[SpeakerModule ${this.id}] Audio context started`);
       } catch (error) {
         console.warn(
           `[SpeakerModule ${this.id}] Error starting audio context:`,
@@ -108,8 +202,6 @@ export class SpeakerModule extends ModuleBase {
    * 设置模块内部绑定，处理输入信号
    */
   protected setupInternalBindings(): void {
-    console.debug(`[SpeakerModule ${this.id}] Setting up internal bindings`);
-
     // 监听数字输入端口
     const inputSubscription = this.inputPorts.input.subscribe(
       (inputValue: ModuleInterface) => {
@@ -120,53 +212,6 @@ export class SpeakerModule extends ModuleBase {
       }
     );
     this.addInternalSubscription(inputSubscription);
-
-    // 监听音频输入端口
-    const audioSubscription = this.inputPorts.audioIn.subscribe(
-      (audioInput: ModuleInterface) => {
-        // 先断开上一个音频连接
-        if (this.lastAudioInput && this.gain) {
-          try {
-            this.lastAudioInput.disconnect(this.gain);
-            console.debug(
-              `[SpeakerModule ${this.id}] Disconnected previous audio input`
-            );
-          } catch (error) {
-            console.warn(
-              `[SpeakerModule ${this.id}] Error disconnecting previous audio:`,
-              error
-            );
-          }
-        }
-
-        // 如果有新的音频输入，则进行连接
-        if (audioInput && this.gain) {
-          try {
-            audioInput.connect(this.gain);
-            this.lastAudioInput = audioInput;
-
-            // 如果模块已启用，确保音频上下文已启动
-            if (this.getParameterValue('enabled') as boolean) {
-              this.startAudioContext();
-            }
-
-            console.debug(
-              `[SpeakerModule ${this.id}] Connected new audio input`
-            );
-          } catch (error) {
-            console.error(
-              `[SpeakerModule ${this.id}] Error connecting audio:`,
-              error
-            );
-          }
-        } else {
-          // 如果输入为null，清空lastAudioInput
-          this.lastAudioInput = null;
-          console.debug(`[SpeakerModule ${this.id}] Audio input removed`);
-        }
-      }
-    );
-    this.addInternalSubscription(audioSubscription);
 
     // 监听level参数变化
     const levelSubscription = this.parameters.level.subscribe(
@@ -213,20 +258,16 @@ export class SpeakerModule extends ModuleBase {
    * 释放资源
    */
   public dispose(): void {
+    if (this.audioInputHandler) {
+      this.audioInputHandler.dispose();
+      this.audioInputHandler = null;
+    }
+
     if (this.gain) {
       try {
         this.gain.dispose();
       } catch (error) {
         console.warn('Error disposing gain node', error);
-      }
-    }
-
-    // 断开音频连接
-    if (this.lastAudioInput) {
-      try {
-        this.lastAudioInput.disconnect();
-      } catch (error) {
-        console.warn('Error disconnecting audio input', error);
       }
     }
 

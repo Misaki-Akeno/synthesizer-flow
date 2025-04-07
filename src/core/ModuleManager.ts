@@ -94,7 +94,6 @@ export class ModuleManager {
     sourceHandle?: string,
     targetHandle?: string
   ): void {
-    // 查找源节点和目标节点
     const nodes = this.getNodes();
     const sourceNode = nodes.find((node) => node.id === sourceId);
     const targetNode = nodes.find((node) => node.id === targetId);
@@ -130,18 +129,26 @@ export class ModuleManager {
       } catch (error) {
         console.error(`Failed to bind modules: ${error}`);
       }
+    } else {
+      console.warn(`[ModuleManager] Could not find modules for binding: ${sourceId} -> ${targetId}`);
+      if (!sourceNode) console.warn(`[ModuleManager] Source node ${sourceId} not found`);
+      if (!targetNode) console.warn(`[ModuleManager] Target node ${targetId} not found`);
     }
   }
 
   // 移除边并解除绑定
   removeEdgeBinding(edge: Edge): void {
     const nodes = this.getNodes();
+    const _sourceNode = nodes.find((node) => node.id === edge.source);
     const targetNode = nodes.find((node) => node.id === edge.target);
 
     if (targetNode?.data?.module) {
-      // 解除输入绑定
+      // 解除输入绑定，现在可以指定源模块ID
       const targetPort = edge.targetHandle || 'input';
-      targetNode.data.module.unbindInput(targetPort);
+      const sourceId = edge.source;
+      const sourcePort = edge.sourceHandle || 'output';
+      
+      targetNode.data.module.unbindInput(targetPort, sourceId, sourcePort);
     }
   }
 
@@ -205,7 +212,9 @@ export class ModuleManager {
 
   // 添加一个公共方法，专门用于建立所有边的绑定关系
   setupAllEdgeBindings(edges: Edge[]): void {
-    edges.forEach((edge) => {
+    const sortedEdges = this.sortEdgesByDependency(edges);
+    
+    sortedEdges.forEach((edge, _index) => {
       try {
         this.bindModules(
           edge.source,
@@ -219,6 +228,58 @@ export class ModuleManager {
           error
         );
       }
+    });
+  }
+  
+  /**
+   * 根据依赖关系对边进行排序，确保源节点先于目标节点
+   */
+  private sortEdgesByDependency(edges: Edge[]): Edge[] {
+    // 创建一个依赖图
+    const dependencyGraph: Record<string, string[]> = {};
+    
+    // 初始化图
+    edges.forEach(edge => {
+      if (!dependencyGraph[edge.source]) {
+        dependencyGraph[edge.source] = [];
+      }
+      if (!dependencyGraph[edge.target]) {
+        dependencyGraph[edge.target] = [edge.source];
+      } else {
+        dependencyGraph[edge.target].push(edge.source);
+      }
+    });
+    
+    // 为所有节点分配处理顺序
+    const processed: Record<string, number> = {};
+    let order = 0;
+    
+    // 递归处理节点
+    const processNode = (nodeId: string) => {
+      // 如果已处理，跳过
+      if (processed[nodeId] !== undefined) return;
+      
+      // 处理所有依赖
+      (dependencyGraph[nodeId] || []).forEach(depId => {
+        processNode(depId);
+      });
+      
+      // 标记为已处理
+      processed[nodeId] = order++;
+    };
+    
+    // 处理所有节点
+    Object.keys(dependencyGraph).forEach(nodeId => {
+      processNode(nodeId);
+    });
+    
+    // 根据节点处理顺序对边进行排序
+    return [...edges].sort((a, b) => {
+      // 源节点顺序相同时，比较目标节点
+      if (processed[a.source] === processed[b.source]) {
+        return processed[a.target] - processed[b.target];
+      }
+      return processed[a.source] - processed[b.source];
     });
   }
 }

@@ -45,7 +45,7 @@ export const useFlowContextMenu = () => {
               x: clientX,
               y: clientY,
             });
-            console.log('添加节点在位置', position);
+            console.info('添加节点在位置', position);
           },
         },
         {
@@ -72,14 +72,14 @@ export const useFlowContextMenu = () => {
           id: 'edit-node',
           label: '编辑节点',
           onClick: () => {
-            console.log('编辑节点', node.id);
+            console.info('编辑节点', node.id);
           },
         },
         {
           id: 'delete-node',
           label: '删除节点',
           onClick: () => {
-            console.log('删除节点', node.id);
+            console.info('删除节点', node.id);
           },
         },
         { id: 'divider', divider: true, onClick: () => {} },
@@ -87,7 +87,7 @@ export const useFlowContextMenu = () => {
           id: 'duplicate-node',
           label: '复制节点',
           onClick: () => {
-            console.log('复制节点', node.id);
+            console.info('复制节点', node.id);
           },
         },
       ];
@@ -107,14 +107,14 @@ export const useFlowContextMenu = () => {
           id: 'delete-edge',
           label: '删除连接',
           onClick: () => {
-            console.log('删除连接', edge.id);
+            console.info('删除连接', edge.id);
           },
         },
         {
           id: 'edit-edge',
           label: '编辑连接',
           onClick: () => {
-            console.log('编辑连接', edge.id);
+            console.info('编辑连接', edge.id);
           },
         },
       ];
