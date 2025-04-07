@@ -3,7 +3,7 @@ import { ModuleBase } from './ModuleBase';
 import { OscillatorModule } from './Modules/OscillatorModule';
 import { SpeakerModule } from './Modules/SpeakerModule';
 import { ReverbModule } from './Modules/ReverbModule';
-import { PresetNode } from './PresetManager';
+import { PresetNode, PresetEdge } from './PresetManager';
 import { LFOModule } from './Modules/LFOModule';
 
 // 节点数据接口
@@ -55,24 +55,31 @@ export class ModuleManager {
     };
   }
 
+  // 生成边ID
+  generateEdgeId(source: string, target: string, _sourceHandle?: string, _targetHandle?: string): string {
+    return `e-${source}-${target}-${Math.random().toString(36).substring(2, 9)}`;
+  }
+
   // 创建边
-  createEdge(id: string, source: string, target: string): Edge {
+  createEdge(source: string, target: string, sourceHandle?: string, targetHandle?: string): Edge {
+    const id = this.generateEdgeId(source, target, sourceHandle, targetHandle);
     return {
       id,
       source,
       target,
+      sourceHandle,
+      targetHandle
     };
   }
 
   // 创建边并建立模块间的绑定
   createEdgeWithBinding(
-    id: string,
     source: string,
     target: string,
     sourceHandle?: string,
     targetHandle?: string
   ): Edge {
-    const edge = this.createEdge(id, source, target);
+    const edge = this.createEdge(source, target, sourceHandle, targetHandle);
 
     // 将边绑定对应的两个节点
     this.bindModules(source, target, sourceHandle, targetHandle);
@@ -152,7 +159,7 @@ export class ModuleManager {
   // 从预设数据创建流程图
   createFlowFromPreset(
     presetNodes: PresetNode[],
-    presetEdges: Edge[]
+    presetEdges: PresetEdge[]
   ): { nodes: FlowNode[]; edges: Edge[] } {
     // 将预设节点转换为带有模块的流程节点
     const nodes = presetNodes.map((node) => {
@@ -161,6 +168,13 @@ export class ModuleManager {
       const label = data.label || id;
 
       const moduleInstance = this.createModuleInstance(type, id, label);
+      
+      // 应用预设中定义的参数
+      if (data.parameters) {
+        Object.entries(data.parameters).forEach(([key, value]) => {
+          moduleInstance.updateParameter(key, value);
+        });
+      }
 
       return {
         id,
@@ -174,9 +188,19 @@ export class ModuleManager {
       } as FlowNode;
     });
 
-    // 注意：边的绑定应该在所有节点创建完毕后进行
+    // 为边生成ID
+    const edges = presetEdges.map(edge => ({
+      id: this.generateEdgeId(edge.source, edge.target, edge.sourceHandle, edge.targetHandle),
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle
+    }));
 
-    return { nodes, edges: presetEdges };
+    // 设置所有边的绑定关系
+    this.setupAllEdgeBindings(edges);
+
+    return { nodes, edges };
   }
 
   // 添加一个公共方法，专门用于建立所有边的绑定关系

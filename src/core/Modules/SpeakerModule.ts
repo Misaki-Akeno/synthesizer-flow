@@ -23,7 +23,7 @@ export class SpeakerModule extends ModuleBase {
     const parameters = {
       level: {
         type: ParameterType.NUMBER,
-        value: -24,
+        value: -12,
         min: -60,
         max: 0,
         step: 0.1,

@@ -9,6 +9,7 @@ export class LFOModule extends ModuleBase {
   private signalScaler: any; // 将-1到1的信号映射到0到1范围
   private Tone: any;
   private intervalId: any = null; // 用于定期更新信号值
+  private startTime: number = 0; // 记录LFO启动时间，用于手动计算值
 
   constructor(id: string, name: string = 'LFO') {
     // 初始化基本参数
@@ -74,11 +75,14 @@ export class LFOModule extends ModuleBase {
         max: 1
       });
       
-      // 创建信号处理链
+      // 创建信号缩放器控制深度
       this.signalScaler = new this.Tone.Gain(this.getParameterValue('depth') as number);
       
       // 连接LFO到信号缩放器
       this.lfo.connect(this.signalScaler);
+      
+      // 记录起始时间，用于直接计算信号
+      this.startTime = Date.now();
       
       // 启动LFO
       if (this.getParameterValue('enabled') as boolean) {
@@ -104,26 +108,72 @@ export class LFOModule extends ModuleBase {
       clearInterval(this.intervalId);
     }
     
-    // 每50ms读取一次LFO的当前值并更新到signal输出
+    // 每16ms计算一次当前LFO值并更新到signal输出
     this.intervalId = setInterval(() => {
-      if (!this.lfo || !this.signalScaler || !this.Tone) return;
+      if (!this.lfo || !this.Tone) return;
       
       try {
         // 只有在LFO启用时才更新信号
         if (this.getParameterValue('enabled') as boolean) {
-          // 读取当前LFO输出值
-          const rawValue = this.signalScaler.getValue();
-          
-          // 确保值在0-1范围内
-          const normalizedValue = Math.max(0, Math.min(1, rawValue));
+          // 使用基于时间的计算方法获取LFO当前值
+          const currentValue = this.calculateLFOValue();
           
           // 更新到signal输出端口
-          this.outputPorts['signal'].next(normalizedValue);
+          this.outputPorts['signal'].next(currentValue);
         }
       } catch (error) {
-        console.warn('Error polling LFO signal value:', error);
+        console.warn('Error calculating LFO value:', error);
       }
-    }, 50); // 50ms间隔，提供平滑的更新而不过度消耗性能
+    }, 16); // 使用16ms（约60fps）提供更平滑的更新
+  }
+  
+  /**
+   * 手动计算当前LFO值
+   * 这比尝试从Tone.js中读取当前值更可靠
+   */
+  private calculateLFOValue(): number {
+    const now = Date.now();
+    const elapsedSeconds = (now - this.startTime) / 1000;
+    const rate = this.getParameterValue('rate') as number;
+    const depth = this.getParameterValue('depth') as number;
+    const waveType = this.getParameterValue('waveform') as string;
+    
+    // 计算角度（2π * 频率 * 时间）
+    const angle = 2 * Math.PI * rate * elapsedSeconds;
+    
+    // 基于波形类型计算值
+    let value = 0;
+    switch (waveType) {
+      case 'sine':
+        // 标准正弦波：y = sin(angle)，范围从-1到1
+        value = Math.sin(angle);
+        break;
+      case 'square':
+        // 方波：正弦波大于0时为1，否则为-1
+        value = Math.sin(angle) >= 0 ? 1 : -1;
+        break;
+      case 'sawtooth':
+        // 锯齿波：mod(angle, 2π)/2π * 2 - 1，范围从-1到1
+        value = (angle % (2 * Math.PI)) / (2 * Math.PI) * 2 - 1;
+        break;
+      case 'triangle':
+        // 三角波：abs(sawtooth) * 2 - 1，范围从-1到1
+        const sawtoothValue = (angle % (2 * Math.PI)) / (2 * Math.PI) * 2 - 1;
+        value = Math.abs(sawtoothValue) * 4 - 1;
+        value = value > 1 ? 2 - value : value;
+        break;
+      default:
+        value = Math.sin(angle);
+    }
+    
+    // 将-1到1的范围映射到0到1
+    value = (value + 1) / 2;
+    
+    // 应用深度
+    value = value * depth;
+    
+    // 确保值在0-1范围内
+    return Math.max(0, Math.min(1, value));
   }
 
   /**
@@ -150,6 +200,8 @@ export class LFOModule extends ModuleBase {
     const waveformSubscription = this.parameters['waveform'].subscribe((value: number | boolean | string) => {
       if (this.lfo && typeof value === 'string') {
         this.lfo.type = value;
+        // 重置起始时间，避免波形切换时的跳变
+        this.startTime = Date.now();
       }
     });
     
@@ -161,6 +213,7 @@ export class LFOModule extends ModuleBase {
         if (value) {
           if (this.lfo.state !== 'started') {
             this.lfo.start();
+            this.startTime = Date.now(); // 重置起始时间
           }
         } else {
           if (this.lfo.state === 'started') {

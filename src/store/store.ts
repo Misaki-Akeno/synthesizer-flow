@@ -28,7 +28,7 @@ interface FlowState {
   addEdge: (source: string, target: string) => void;
 }
 
-const defaultPreset = presetManager.getPreset('default');
+const defaultPreset = presetManager.getPreset('major-chord');
 const { nodes: initialNodes, edges: initialEdges } = defaultPreset ? 
   presetManager.loadPresetWithModules(defaultPreset.id) : 
   { nodes: [], edges: [] };

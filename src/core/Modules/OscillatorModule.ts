@@ -18,44 +18,44 @@ export class OscillatorModule extends ModuleBase {
     // 初始化基本参数，使用新的参数定义格式
     const moduleType = 'oscillator';
     const parameters = {
-      gain: { 
-        type: ParameterType.NUMBER, 
-        value: 1.0, 
-        min: 0, 
+      gain: {
+        type: ParameterType.NUMBER,
+        value: 1.0,
+        min: 0,
         max: 2.0,
-        step: 0.1
+        step: 0.1,
       },
-      freq: { 
-        type: ParameterType.NUMBER, 
-        value: 440, 
-        min: 20, 
+      freq: {
+        type: ParameterType.NUMBER,
+        value: 440,
+        min: 20,
         max: 2000,
-        step: 10
+        step: 10,
       },
-      waveform: { 
-        type: ParameterType.LIST, 
-        value: 'sine', 
-        options: ['sine', 'square', 'sawtooth', 'triangle'] 
+      waveform: {
+        type: ParameterType.LIST,
+        value: 'sine',
+        options: ['sine', 'square', 'sawtooth', 'triangle'],
       },
       enabled: {
         type: ParameterType.BOOLEAN,
-        value: true
+        value: true,
       },
       // 新增调制深度参数
       freqModDepth: {
         type: ParameterType.NUMBER,
-        value: 100, // 默认调制深度100Hz
+        value: 2, // 默认调制深度100Hz
         min: 0,
-        max: 500,
-        step: 10
+        max: 20,
+        step: 1,
       },
       gainModDepth: {
         type: ParameterType.NUMBER,
         value: 0.5, // 默认调制深度0.5
         min: 0,
         max: 1,
-        step: 0.05
-      }
+        step: 0.05,
+      },
     };
     
     // 使用新的端口定义格式，添加调制输入端口
