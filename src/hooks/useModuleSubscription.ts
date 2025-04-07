@@ -19,8 +19,6 @@ export function useModuleSubscription(module: ModuleBase | undefined) {
   useEffect(() => {
     if (!module) return;
     
-    console.debug(`[useModuleSubscription] Setting up subscriptions for module: ${module.id} (${module.moduleType})`);
-    
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const subscriptions: {[key: string]: any} = {};
     
@@ -65,7 +63,6 @@ export function useModuleSubscription(module: ModuleBase | undefined) {
     
     // 组件卸载时取消订阅
     return () => {
-      console.debug(`[useModuleSubscription] Cleaning up subscriptions for module: ${module.id}`);
       Object.values(subscriptions).forEach(sub => sub.unsubscribe());
     };
   }, [module]);

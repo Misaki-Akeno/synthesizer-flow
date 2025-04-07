@@ -5,7 +5,7 @@ export interface Preset {
   id: string;
   name: string;
   nodes: PresetNode[];
-  edges: Edge[];
+  edges: PresetEdge[];
 }
 
 export interface PresetNode {
@@ -14,8 +14,17 @@ export interface PresetNode {
   data: {
     type: string;
     label?: string;
+    parameters?: { [key: string]: number | boolean | string }; // 新增参数配置
     [key: string]: unknown;
   };
+}
+
+// 简化的边定义，不再需要手动指定ID
+export interface PresetEdge {
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
 }
 
 export class PresetManager {
@@ -51,25 +60,139 @@ export class PresetManager {
 }
 
 // 预设数据
-const defaultPreset: Preset = {
-  id: 'default',
-  name: '默认预设',
+const majorChordPreset: Preset = {
+  id: 'major-chord',
+  name: '大三和弦预设',
   nodes: [
     {
-      id: '1',
-      position: { x: 500, y: 500 },
-      data: { type: 'input', label: '输入节点' },
+      id: 'mainOscillator',
+      position: { x: 300, y: 200 },
+      data: {
+        type: 'oscillator',
+        label: '主振荡器(C4)',
+        parameters: {
+          freq: 523,
+        },
+      },
     },
     {
-      id: '2',
-      position: { x: 800, y: 500 },
-      data: { type: 'output', label: '输出节点' },
+      id: 'reverbEffect',
+      position: { x: 600, y: 200 },
+      data: {
+        type: 'reverb',
+        label: '混响效果器',
+        parameters: {
+          decay: 2.5,
+          wet: 0.8,
+        },
+      },
+    },
+    {
+      id: 'mainSpeaker',
+      position: { x: 900, y: 200 },
+      data: { type: 'speaker', label: '扬声器' },
+    },
+    {
+      id: 'modulationLFO',
+      position: { x: 0, y: 200 },
+      data: {
+        type: 'lfo',
+        label: '低频调制器',
+      },
+    },
+    {
+      id: 'thirdHarmonicOsc',
+      position: { x: 300, y: 550 },
+      data: {
+        type: 'oscillator',
+        label: '三度音(E4)',
+        parameters: {
+          freq: 659,
+        },
+      },
+    },
+    {
+      id: 'fifthHarmonicOsc',
+      position: { x: 300, y: 900 },
+      data: {
+        type: 'oscillator',
+        label: '五度音(G4)',
+        parameters: {
+          freq: 784,
+        },
+      },
+    },
+    {
+      id: 'bassOscillator',
+      position: { x: 300, y: 1250 },
+      data: {
+        type: 'oscillator',
+        label: '低八度(C3)',
+        parameters: {
+          freq: 262,
+        },
+      },
     },
   ],
-  edges: [{ id: 'e1-2', source: '1', target: '2' }],
+  edges: [
+    {
+      source: 'mainOscillator',
+      target: 'reverbEffect',
+      sourceHandle: 'audioout',
+      targetHandle: 'input',
+    },
+    {
+      source: 'reverbEffect',
+      target: 'mainSpeaker',
+      sourceHandle: 'output',
+      targetHandle: 'audioIn',
+    },
+    {
+      source: 'modulationLFO',
+      target: 'mainOscillator',
+      sourceHandle: 'signal',
+      targetHandle: 'freqMod',
+    },
+    {
+      source: 'modulationLFO',
+      target: 'thirdHarmonicOsc',
+      sourceHandle: 'signal',
+      targetHandle: 'freqMod',
+    },
+    {
+      source: 'thirdHarmonicOsc',
+      target: 'reverbEffect',
+      sourceHandle: 'audioout',
+      targetHandle: 'input',
+    },
+    {
+      source: 'modulationLFO',
+      target: 'fifthHarmonicOsc',
+      sourceHandle: 'signal',
+      targetHandle: 'freqMod',
+    },
+    {
+      source: 'fifthHarmonicOsc',
+      target: 'reverbEffect',
+      sourceHandle: 'audioout',
+      targetHandle: 'input',
+    },
+    {
+      source: 'modulationLFO',
+      target: 'bassOscillator',
+      sourceHandle: 'signal',
+      targetHandle: 'freqMod',
+    },
+    {
+      source: 'bassOscillator',
+      target: 'reverbEffect',
+      sourceHandle: 'audioout',
+      targetHandle: 'input',
+    },
+  ],
 };
 
 // 创建并导出预设管理器实例
-export const presetManager = new PresetManager([defaultPreset]);// 预设节点接口
+export const presetManager = new PresetManager([majorChordPreset]);
 
 

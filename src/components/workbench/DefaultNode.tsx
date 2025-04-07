@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { ModuleBase, ParameterType, PortType } from '../../core/ModuleBase';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFlowStore } from '../../store/store';
 import { useModuleSubscription } from '../../hooks/useModuleSubscription';
+import React from 'react';
 
 interface DefaultNodeProps {
   data: {
@@ -15,6 +17,7 @@ interface DefaultNodeProps {
     module?: ModuleBase;
   };
   id: string;
+  selected?: boolean;
 }
 
 // 数值参数控制组件
@@ -32,21 +35,74 @@ const NumberParameterControl = ({
   max: number;
   step: number;
   updateParameter: (key: string, value: number) => void;
-}) => (
-  <div className="mb-3">
-    <div className="flex justify-between text-xs mb-1">
-      <span>{paramKey}:</span>
-      <span>{typeof value === 'number' ? value.toFixed(2) : '0.00'}</span>
+}) => {
+  // 使用useEffect来确保inputValue总是跟随value的变化而更新
+  const [inputValue, setInputValue] = useState<string>(typeof value === 'number' ? value.toFixed(2) : '0.00');
+  
+  // 当外部value变化时更新输入框的值
+  React.useEffect(() => {
+    setInputValue(typeof value === 'number' ? value.toFixed(2) : '0.00');
+  }, [value]);
+
+  const [, setIsFocused] = useState(false);
+
+  // 处理滑块值变化
+  const handleSliderChange = (newValue: number[]) => {
+    updateParameter(paramKey, newValue[0]);
+    setInputValue(newValue[0].toFixed(2));
+  };
+
+  // 处理输入框值变化
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+  };
+
+  // 处理输入框失焦和回车事件
+  const handleInputCommit = () => {
+    const parsed = parseFloat(inputValue);
+    if (!isNaN(parsed)) {
+      const clampedValue = Math.min(Math.max(parsed, min), max);
+      updateParameter(paramKey, clampedValue);
+      setInputValue(clampedValue.toFixed(2));
+    } else {
+      setInputValue(value.toFixed(2));
+    }
+    setIsFocused(false);
+  };
+
+  // 处理键盘事件
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleInputCommit();
+    }
+  };
+
+  return (
+    <div className="mb-3">
+      <div className="flex justify-between items-center text-xs mb-1">
+        <span>{paramKey}:</span>
+        <div className="w-16">
+          <Input
+            type="text"
+            value={inputValue}
+            onChange={handleInputChange}
+            onBlur={handleInputCommit}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setIsFocused(true)}
+            className="h-6 text-xs px-2 py-0.5 leading-tight"
+          />
+        </div>
+      </div>
+      <Slider
+        value={[typeof value === 'number' ? value : 0]}
+        min={min}
+        max={max}
+        step={step} 
+        onValueChange={handleSliderChange}
+      />
     </div>
-    <Slider
-      value={[typeof value === 'number' ? value : 0]}
-      min={min}
-      max={max}
-      step={step} 
-      onValueChange={(newValue) => updateParameter(paramKey, newValue[0])}
-    />
-  </div>
-);
+  );
+};
 
 // 布尔参数控制组件
 const BooleanParameterControl = ({ 
@@ -110,14 +166,28 @@ const InputPort = ({
   portType,
   index,
   module,
+  isSelected,
 }: {
   portKey: string;
   value: any;
   portType: PortType;
   index: number;
   module: ModuleBase;
+  isSelected: boolean;
 }) => {
   const portColor = module.getPortColor(portType);
+  const portPosition = 40 + index * 28; // 将间距从20px增加到25px
+  
+  // 确定显示的值
+  const displayValue = () => {
+    if (typeof value === 'number') {
+      return value.toFixed(2);
+    } else if (value !== undefined && value !== null && value !== '') {
+      return '🔊'; // 音频或其他非空值显示声音emoji
+    } else {
+      return '–';
+    }
+  };
   
   return (
     <div key={`input-container-${portKey}`}>
@@ -126,13 +196,22 @@ const InputPort = ({
         type="target"
         position={Position.Left}
         id={portKey}
-        style={{ top: 40 + index * 20, backgroundColor: portColor }}
+        style={{ top: portPosition, backgroundColor: portColor }}
         className="w-2 h-2"
       />
-      <div className="text-xs text-gray-500 ml-1 mb-1">
-        <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: portColor }}></span>
-        {portKey}: {typeof value === 'number' ? value.toFixed(2) : '–'}
-      </div>
+      {isSelected && (
+        <div
+          className="text-xs text-gray-700 absolute px-2 py-1 bg-white/60 border border-gray-200 rounded shadow-sm z-10 whitespace-nowrap text-right"
+          style={{
+            top: portPosition - 2,
+            transform: 'translateY(-50%)',
+            right: 'calc(100% + 10px)',
+            left: 'auto',
+          }}
+        >
+          {portKey}: {displayValue()}
+        </div>
+      )}
     </div>
   );
 };
@@ -144,14 +223,28 @@ const OutputPort = ({
   portType,
   index,
   module,
+  isSelected,
 }: {
   portKey: string;
   value: any;
   portType: PortType;
   index: number;
   module: ModuleBase;
+  isSelected: boolean;
 }) => {
   const portColor = module.getPortColor(portType);
+  const portPosition = 40 + index * 28; // 将间距从20px增加到25px
+  
+  // 确定显示的值
+  const displayValue = () => {
+    if (typeof value === 'number') {
+      return value.toFixed(2);
+    } else if (value !== undefined && value !== null && value !== '') {
+      return '🔊'; // 音频或其他非空值显示声音emoji
+    } else {
+      return '–';
+    }
+  };
   
   return (
     <div key={`output-container-${portKey}`} className="text-right">
@@ -160,18 +253,27 @@ const OutputPort = ({
         type="source"
         position={Position.Right}
         id={portKey}
-        style={{ top: 40 + index * 20, backgroundColor: portColor }}
+        style={{ top: portPosition, backgroundColor: portColor }}
         className="w-2 h-2"
       />
-      <div className="text-xs text-gray-500 mr-1 mb-1">
-        {portKey}: {typeof value === 'number' ? value.toFixed(2) : '–'}
-        <span className="inline-block w-2 h-2 rounded-full ml-1" style={{ backgroundColor: portColor }}></span>
-      </div>
+      {isSelected && (
+        <div
+          className="text-xs text-gray-700 absolute px-2 py-1 bg-white/60 border border-gray-200 rounded shadow-sm z-10 whitespace-nowrap text-left"
+          style={{
+            top: portPosition - 2,
+            transform: 'translateY(-50%)',
+            left: 'calc(100% + 10px)',
+            right: 'auto',
+          }}
+        >
+          {portKey}: {displayValue()}
+        </div>
+      )}
     </div>
   );
 };
 
-const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
+const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
   const { module: moduleInstance } = data;
   const updateModuleParameter = useFlowStore(state => state.updateModuleParameter);
   
@@ -189,54 +291,61 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
     }
   };
   
+  // 渲染参数控制器
+  const renderParameterControl = (paramKey: string) => {
+    if (!moduleInstance) return null;
+    
+    const meta = moduleInstance.getParameterMeta(paramKey);
+    const value = paramValues[paramKey];
+    
+    switch (meta.type) {
+      case ParameterType.NUMBER:
+        return (
+          <NumberParameterControl
+            key={paramKey}
+            paramKey={paramKey}
+            value={typeof value === 'number' ? value : 0}
+            min={meta.min || 0}
+            max={meta.max || 1}
+            step={meta.step || 0.1}
+            updateParameter={handleParameterChange}
+          />
+        );
+      case ParameterType.BOOLEAN:
+        return (
+          <BooleanParameterControl
+            key={paramKey}
+            paramKey={paramKey}
+            value={Boolean(value)}
+            updateParameter={handleParameterChange}
+          />
+        );
+      case ParameterType.LIST:
+        return (
+          <ListParameterControl
+            key={paramKey}
+            paramKey={paramKey}
+            value={String(value)}
+            options={meta.options || []}
+            updateParameter={handleParameterChange}
+          />
+        );
+      default:
+        return <div key={paramKey}>未知参数类型</div>;
+    }
+  };
+  
   return (
-    <div className="node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px]">
+    <div 
+      className="node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative"
+    >
       {/* 模块标题 */}
       <div className="font-medium text-sm mb-2 pb-1 border-b">
         {data.label || moduleInstance?.name || "模块"}
       </div>
       
       {/* 参数控制列表 */}
-      {moduleInstance && Object.keys(moduleInstance.parameters).map((paramKey) => {
-        const meta = moduleInstance.getParameterMeta(paramKey);
-        const value = paramValues[paramKey];
-        
-        switch (meta.type) {
-          case ParameterType.NUMBER:
-            return (
-              <NumberParameterControl
-                key={paramKey}
-                paramKey={paramKey}
-                value={typeof value === 'number' ? value : 0}
-                min={meta.min || 0}
-                max={meta.max || 1}
-                step={meta.step || 0.1}
-                updateParameter={handleParameterChange}
-              />
-            );
-          case ParameterType.BOOLEAN:
-            return (
-              <BooleanParameterControl
-                key={paramKey}
-                paramKey={paramKey}
-                value={Boolean(value)}
-                updateParameter={handleParameterChange}
-              />
-            );
-          case ParameterType.LIST:
-            return (
-              <ListParameterControl
-                key={paramKey}
-                paramKey={paramKey}
-                value={String(value)}
-                options={meta.options || []}
-                updateParameter={handleParameterChange}
-              />
-            );
-          default:
-            return <div key={paramKey}>未知参数类型</div>;
-        }
-      })}
+      {moduleInstance && Object.keys(moduleInstance.parameters).map(renderParameterControl)}
       
       {/* 输入端口列表 */}
       {moduleInstance && Object.keys(moduleInstance.inputPorts).map((inputKey, index) => (
@@ -247,6 +356,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
           portType={inputPortTypes[inputKey] || PortType.NUMBER}
           index={index}
           module={moduleInstance}
+          isSelected={!!selected}
         />
       ))}
       
@@ -259,6 +369,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id }) => {
           portType={outputPortTypes[outputKey] || PortType.NUMBER}
           index={index}
           module={moduleInstance}
+          isSelected={!!selected}
         />
       ))}
     </div>
