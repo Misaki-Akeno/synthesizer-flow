@@ -57,19 +57,51 @@ const defaultPreset: Preset = {
   nodes: [
     {
       id: '1',
-      position: { x: 500, y: 500 },
-      data: { type: 'input', label: '输入节点' },
+      position: { x: 300, y: 500 },
+      data: { type: 'oscillator', label: '振荡器' },
     },
     {
       id: '2',
-      position: { x: 800, y: 500 },
-      data: { type: 'output', label: '输出节点' },
+      position: { x: 600, y: 500 },
+      data: { type: 'reverb', label: '混响效果器' },
+    },
+    {
+      id: '3',
+      position: { x: 900, y: 500 },
+      data: { type: 'speaker', label: '音响' },
+    },
+    {
+      id: '4',
+      position: { x: 300, y: 300 },
+      data: { type: 'lfo', label: 'LFO' },
     },
   ],
-  edges: [{ id: 'e1-2', source: '1', target: '2' }],
+  edges: [
+    {
+      id: 'e1-2',
+      source: '1',
+      target: '2',
+      sourceHandle: 'audioout',
+      targetHandle: 'input',
+    },
+    {
+      id: 'e2-3',
+      source: '2',
+      target: '3',
+      sourceHandle: 'output',
+      targetHandle: 'audioIn',
+    },
+    {
+      id: 'e4-1',
+      source: '4',
+      target: '1',
+      sourceHandle: 'signal',
+      targetHandle: 'freqMod',
+    },
+  ],
 };
 
 // 创建并导出预设管理器实例
-export const presetManager = new PresetManager([defaultPreset]);// 预设节点接口
+export const presetManager = new PresetManager([defaultPreset]);
 
 
