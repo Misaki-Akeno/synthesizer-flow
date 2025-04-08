@@ -1,13 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ModuleBase, ParameterType, PortType } from '../ModuleBase';
+import { ParameterType, PortType } from '../ModuleBase';
+import { AudioModuleBase } from '../AudioModuleBase';
 
 /**
  * LFO模块，生成低频调制信号用于自动调制声音
  */
-export class LFOModule extends ModuleBase {
+export class LFOModule extends AudioModuleBase {
   private lfo: any;
   private signalScaler: any; // 将-1到1的信号映射到0到1范围
-  private Tone: any;
   private intervalId: any = null; // 用于定期更新信号值
   private startTime: number = 0; // 记录LFO启动时间，用于手动计算值
 
@@ -52,51 +52,39 @@ export class LFOModule extends ModuleBase {
     };
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts);
-
-    // 仅在浏览器环境下初始化Tone.js
-    if (typeof window !== 'undefined') {
-      this.initializeTone();
-    }
   }
 
   /**
-   * 动态初始化Tone.js
+   * 实现音频初始化
    */
-  private async initializeTone(): Promise<void> {
-    try {
-      const ToneModule = await import('tone');
-      this.Tone = ToneModule;
-
-      // 初始化LFO
-      this.lfo = new this.Tone.LFO({
-        frequency: this.getParameterValue('rate') as number,
-        type: this.getParameterValue('waveform') as string,
-        min: 0,  // 输出范围0-1
-        max: 1
-      });
-      
-      // 创建信号缩放器控制深度
-      this.signalScaler = new this.Tone.Gain(this.getParameterValue('depth') as number);
-      
-      // 连接LFO到信号缩放器
-      this.lfo.connect(this.signalScaler);
-      
-      // 记录起始时间，用于直接计算信号
-      this.startTime = Date.now();
-      
-      // 启动LFO
-      if (this.getParameterValue('enabled') as boolean) {
-        this.lfo.start();
-      }
-      
-      // 设置参数绑定
-      this.setupLFOBindings();
-      
-      // 启动定期更新信号输出的机制
-      this.startSignalPolling();
-    } catch (error) {
-      console.error('Failed to initialize Tone.js LFO:', error);
+  protected async initializeAudio(): Promise<void> {
+    // 初始化LFO
+    this.lfo = new this.Tone.LFO({
+      frequency: this.getParameterValue('rate') as number,
+      type: this.getParameterValue('waveform') as string,
+      min: 0,  // 输出范围0-1
+      max: 1
+    });
+    
+    // 创建信号缩放器控制深度
+    this.signalScaler = new this.Tone.Gain(this.getParameterValue('depth') as number);
+    
+    // 连接LFO到信号缩放器
+    this.lfo.connect(this.signalScaler);
+    
+    // 记录起始时间，用于直接计算信号
+    this.startTime = Date.now();
+    
+    // 启动LFO
+    if (this.getParameterValue('enabled') as boolean) {
+      this.lfo.start();
     }
+    
+    // 设置参数绑定
+    this.setupLFOBindings();
+    
+    // 启动定期更新信号输出的机制
+    this.startSignalPolling();
   }
   
   /**
@@ -122,14 +110,13 @@ export class LFOModule extends ModuleBase {
           this.outputPorts['signal'].next(currentValue);
         }
       } catch (error) {
-        console.warn('Error calculating LFO value:', error);
+        console.warn(`[${this.moduleType}Module ${this.id}] Error calculating LFO value:`, error);
       }
     }, 16); // 使用16ms（约60fps）提供更平滑的更新
   }
   
   /**
    * 手动计算当前LFO值
-   * 这比尝试从Tone.js中读取当前值更可靠
    */
   private calculateLFOValue(): number {
     const now = Date.now();
@@ -145,19 +132,15 @@ export class LFOModule extends ModuleBase {
     let value = 0;
     switch (waveType) {
       case 'sine':
-        // 标准正弦波：y = sin(angle)，范围从-1到1
         value = Math.sin(angle);
         break;
       case 'square':
-        // 方波：正弦波大于0时为1，否则为-1
         value = Math.sin(angle) >= 0 ? 1 : -1;
         break;
       case 'sawtooth':
-        // 锯齿波：mod(angle, 2π)/2π * 2 - 1，范围从-1到1
         value = (angle % (2 * Math.PI)) / (2 * Math.PI) * 2 - 1;
         break;
       case 'triangle':
-        // 三角波：abs(sawtooth) * 2 - 1，范围从-1到1
         const sawtoothValue = (angle % (2 * Math.PI)) / (2 * Math.PI) * 2 - 1;
         value = Math.abs(sawtoothValue) * 4 - 1;
         value = value > 1 ? 2 - value : value;
@@ -185,14 +168,16 @@ export class LFOModule extends ModuleBase {
     // 频率参数绑定
     const rateSubscription = this.parameters['rate'].subscribe((value: number | boolean | string) => {
       if (this.lfo && typeof value === 'number') {
-        this.lfo.frequency.rampTo(value, 0.1);
+        // 使用较长的渐变时间使频率变化更平滑
+        this.applyParameterRamp(this.lfo.frequency, value, this.smoothTime);
       }
     });
 
     // 深度参数绑定
     const depthSubscription = this.parameters['depth'].subscribe((value: number | boolean | string) => {
       if (this.signalScaler && typeof value === 'number') {
-        this.signalScaler.gain.rampTo(value, 0.1);
+        // 使用较长的渐变时间使深度变化更平滑
+        this.applyParameterRamp(this.signalScaler.gain, value, this.smoothTime);
       }
     });
 
@@ -243,23 +228,7 @@ export class LFOModule extends ModuleBase {
       this.intervalId = null;
     }
     
-    if (this.lfo) {
-      try {
-        this.lfo.stop();
-        this.lfo.dispose();
-      } catch (error) {
-        console.warn('Error disposing LFO', error);
-      }
-    }
-    
-    if (this.signalScaler) {
-      try {
-        this.signalScaler.dispose();
-      } catch (error) {
-        console.warn('Error disposing signal scaler', error);
-      }
-    }
-    
+    this.disposeAudioNodes([this.lfo, this.signalScaler]);
     super.dispose();
   }
 }
