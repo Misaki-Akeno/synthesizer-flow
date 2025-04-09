@@ -86,7 +86,7 @@ export default function DevTools() {
           <div className="overflow-y-auto max-h-[80vh]">
             <Accordion
               type="multiple"
-              defaultValue={['viewport-logger', 'edge-module-logger']}
+              defaultValue={['edge-module-logger']}
             >
               <DevToolSection id="edge-module-logger" title="边和模块信息">
                 <div className="px-4 py-2">

@@ -243,8 +243,30 @@ export abstract class AudioModuleBase extends ModuleBase {
       this.audioInputHandler.dispose();
       this.audioInputHandler = null;
     }
-    
-    // 调用父类的dispose方法
+
+    // 标记模块已销毁
+    import('./ModuleInitManager').then(({ moduleInitManager }) => {
+      moduleInitManager.recordDisposal(this.id);
+    });
+
+    // 如果存在Tone实例，释放相关资源
+    if (this.initialized && this.Tone) {
+      try {
+        // 子类可能有特定的资源清理逻辑，在基类dispose之前已执行
+        // 释放Tone.js上下文资源
+        if (this.Tone.context && typeof this.Tone.context.dispose === 'function') {
+          // 只有当没有其他模块使用Tone上下文时才释放
+          const activeModules = moduleInitManager.getInitializedModules().length;
+          if (activeModules <= 1) { // 只有当前模块时释放上下文
+            this.Tone.context.dispose();
+          }
+        }
+      } catch (error) {
+        console.error(`[${this.moduleType}Module ${this.id}] Error disposing Tone resources:`, error);
+      }
+    }
+
+    // 调用父类的dispose方法清理基础资源
     super.dispose();
   }
 }

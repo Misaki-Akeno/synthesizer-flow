@@ -1,3 +1,22 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * 模块生命周期事件类型
+ */
+export enum ModuleLifecycleEvent {
+  REGISTERED = 'registered',
+  INITIALIZING = 'initializing',
+  INITIALIZED = 'initialized',
+  CONNECTED = 'connected',
+  DISCONNECTED = 'disconnected',
+  DISPOSED = 'disposed',
+  ERROR = 'error'
+}
+
+/**
+ * 生命周期事件回调类型
+ */
+export type ModuleLifecycleCallback = (moduleId: string, data?: any) => void;
+
 /**
  * 模块初始化管理器
  * 用于管理音频模块的异步初始化过程
@@ -9,6 +28,8 @@ class ModuleInitManager {
   private initializedModules: Set<string> = new Set();
   // 初始化完成的回调函数
   private initCallbacks: Map<string, (() => void)[]> = new Map();
+  // 生命周期事件订阅
+  private lifecycleSubscribers: Map<ModuleLifecycleEvent, ModuleLifecycleCallback[]> = new Map();
 
   /**
    * 注册一个需要异步初始化的模块
@@ -16,6 +37,7 @@ class ModuleInitManager {
    */
   public registerPendingModule(moduleId: string): void {
     this.pendingModules.add(moduleId);
+    this.emitLifecycleEvent(ModuleLifecycleEvent.REGISTERED, moduleId);
   }
 
   /**
@@ -29,6 +51,7 @@ class ModuleInitManager {
 
     this.pendingModules.delete(moduleId);
     this.initializedModules.add(moduleId);
+    this.emitLifecycleEvent(ModuleLifecycleEvent.INITIALIZED, moduleId);
     
     // 触发该模块的初始化完成回调
     if (this.initCallbacks.has(moduleId)) {
@@ -94,12 +117,83 @@ class ModuleInitManager {
   }
 
   /**
+   * 订阅模块生命周期事件
+   * @param event 生命周期事件类型
+   * @param callback 回调函数
+   * @returns 取消订阅的函数
+   */
+  public subscribeToLifecycle(event: ModuleLifecycleEvent, callback: ModuleLifecycleCallback): () => void {
+    if (!this.lifecycleSubscribers.has(event)) {
+      this.lifecycleSubscribers.set(event, []);
+    }
+    
+    const callbacks = this.lifecycleSubscribers.get(event)!;
+    callbacks.push(callback);
+    
+    return () => {
+      const index = callbacks.indexOf(callback);
+      if (index !== -1) {
+        callbacks.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * 触发生命周期事件
+   * @param event 事件类型
+   * @param moduleId 模块ID
+   * @param data 附加数据
+   */
+  public emitLifecycleEvent(event: ModuleLifecycleEvent, moduleId: string, data?: any): void {
+    const callbacks = this.lifecycleSubscribers.get(event) || [];
+    callbacks.forEach(callback => callback(moduleId, data));
+  }
+
+  /**
+   * 记录模块连接事件
+   * @param sourceId 源模块ID
+   * @param targetId 目标模块ID
+   */
+  public recordConnection(sourceId: string, targetId: string): void {
+    this.emitLifecycleEvent(ModuleLifecycleEvent.CONNECTED, sourceId, { targetId });
+  }
+
+  /**
+   * 记录模块断开连接事件
+   * @param sourceId 源模块ID
+   * @param targetId 目标模块ID
+   */
+  public recordDisconnection(sourceId: string, targetId: string): void {
+    this.emitLifecycleEvent(ModuleLifecycleEvent.DISCONNECTED, sourceId, { targetId });
+  }
+
+  /**
+   * 记录模块销毁事件
+   * @param moduleId 模块ID
+   */
+  public recordDisposal(moduleId: string): void {
+    this.initializedModules.delete(moduleId);
+    this.pendingModules.delete(moduleId);
+    this.emitLifecycleEvent(ModuleLifecycleEvent.DISPOSED, moduleId);
+  }
+
+  /**
+   * 记录模块错误事件
+   * @param moduleId 模块ID
+   * @param error 错误信息
+   */
+  public recordError(moduleId: string, error: any): void {
+    this.emitLifecycleEvent(ModuleLifecycleEvent.ERROR, moduleId, { error });
+  }
+
+  /**
    * 重置管理器状态（主要用于测试）
    */
   public reset(): void {
     this.pendingModules.clear();
     this.initializedModules.clear();
     this.initCallbacks.clear();
+    this.lifecycleSubscribers.clear();
   }
 }
 
