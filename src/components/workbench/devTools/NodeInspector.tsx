@@ -11,7 +11,7 @@ import { ModuleBase } from '../../../core/ModuleBase';
 const safeStringify = (obj: any, depth = 0, maxDepth = 2): string => {
   // 避免过深的递归
   if (depth > maxDepth) return '"[Nested Object]"';
-  
+
   // 处理简单类型
   if (obj === null || obj === undefined) return String(obj);
   if (typeof obj !== 'object') return JSON.stringify(obj);
@@ -28,7 +28,7 @@ const safeStringify = (obj: any, depth = 0, maxDepth = 2): string => {
 
   // 处理数组
   if (Array.isArray(obj)) {
-    const items = obj.map(item => {
+    const items = obj.map((item) => {
       try {
         return safeStringify(item, depth + 1, maxDepth);
       } catch (_e) {
@@ -58,16 +58,16 @@ const safeStringify = (obj: any, depth = 0, maxDepth = 2): string => {
 // 格式化模块数据
 const formatModuleData = (module: ModuleBase): string => {
   if (!module) return 'undefined';
-  
+
   const result: Record<string, any> = {
     moduleType: module.moduleType,
     id: module.id,
     name: module.name,
     parameters: {},
     inputPorts: {},
-    outputPorts: {}
+    outputPorts: {},
   };
-  
+
   // 获取参数值
   Object.entries(module.parameters || {}).forEach(([key, subject]) => {
     try {
@@ -76,27 +76,29 @@ const formatModuleData = (module: ModuleBase): string => {
       result.parameters[key] = '[Error]';
     }
   });
-  
+
   // 获取输入端口值
   Object.entries(module.inputPorts || {}).forEach(([key, subject]) => {
     try {
       const value = subject.getValue();
-      result.inputPorts[key] = typeof value === 'number' ? value : '[Complex Value]';
+      result.inputPorts[key] =
+        typeof value === 'number' ? value : '[Complex Value]';
     } catch (_e) {
       result.inputPorts[key] = '[Error]';
     }
   });
-  
+
   // 获取输出端口值
   Object.entries(module.outputPorts || {}).forEach(([key, subject]) => {
     try {
       const value = subject.getValue();
-      result.outputPorts[key] = typeof value === 'number' ? value : '[Complex Value]';
+      result.outputPorts[key] =
+        typeof value === 'number' ? value : '[Complex Value]';
     } catch (_e) {
       result.outputPorts[key] = '[Error]';
     }
   });
-  
+
   return JSON.stringify(result, null, 2);
 };
 
@@ -160,9 +162,9 @@ function NodeInfo({
   }
 
   // 格式化数据，避免循环引用错误
-  const formattedData = data.module ? 
-    formatModuleData(data.module) : 
-    safeStringify(data);
+  const formattedData = data.module
+    ? formatModuleData(data.module)
+    : safeStringify(data);
 
   return (
     <div

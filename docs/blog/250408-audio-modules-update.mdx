@@ -5,6 +5,7 @@ tags: ['SynthesizerFlow', '音频处理', 'Tone.js', '模块化设计', '参数�
 draft: false
 summary: '为了解决代码重复及参数突变产生的爆破音问题，SynthesizerFlow通过AudioModuleBase和参数平滑渐变技术提升了代码质量和音频体验。'
 ---
+
 # 音频模块层次结构与参数平滑渐变：SynthesizerFlow音频引擎升级
 
 ## 引言
@@ -26,7 +27,7 @@ summary: '为了解决代码重复及参数突变产生的爆破音问题，Synt
 
 通过如下方法实现平滑渐变（核心代码示例）：
 
-````typescript
+```typescript
 /**
  * 应用平滑的参数变化
  * @param audioParam 音频参数（如gain.gain）
@@ -35,38 +36,38 @@ summary: '为了解决代码重复及参数突变产生的爆破音问题，Synt
  * @param immediate 是否立即设置（跳过渐变）
  */
 protected applyParameterRamp(
-  audioParam: any, 
-  value: number, 
+  audioParam: any,
+  value: number,
   rampTime: number = this.fadeTime,
   immediate: boolean = false
 ): void {
   if (!audioParam || !this.Tone) return;
-  
+
   try {
     if (immediate) {
       audioParam.value = value;
       return;
     }
-    
+
     // 检查当前值是否已经很接近目标值
-    const currentValue = audioParam.value !== undefined ? 
-      audioParam.value : 
+    const currentValue = audioParam.value !== undefined ?
+      audioParam.value :
       (typeof audioParam.getValue === 'function' ? audioParam.getValue() : null);
-    
+
     if (currentValue !== null && Math.abs(currentValue - value) < 0.001) {
       return;
     }
-    
+
     audioParam.cancelScheduledValues(this.Tone.now());
-    
+
     // 尝试多种渐变方法，确保兼容性
     if (typeof audioParam.rampTo === 'function') {
       audioParam.rampTo(value, rampTime);
-    } 
+    }
     else if (typeof audioParam.linearRampToValueAtTime === 'function') {
       const now = this.Tone.now();
       audioParam.linearRampToValueAtTime(value, now + rampTime);
-    } 
+    }
     else {
       audioParam.value = value;
     }
@@ -79,9 +80,10 @@ protected applyParameterRamp(
     }
   }
 }
-````
+```
 
 该方法具备：
+
 - 灵活设定渐变时间
 - 捕获异常与优雅降级
 - 支持不同的Web Audio API渐变方法
@@ -92,7 +94,7 @@ protected applyParameterRamp(
 
 通过继承AudioModuleBase，各模块如振荡器等只需关注核心业务。例如：
 
-````typescript
+```typescript
 protected async initializeAudio(): Promise<void> {
   // 初始化Tone.js振荡器
   this.oscillator = new this.Tone.Oscillator({
@@ -100,12 +102,12 @@ protected async initializeAudio(): Promise<void> {
     volume: this.Tone.gainToDb(this.getParameterValue('gain') as number),
     type: this.getParameterValue('waveform') as string,
   });
-  
+
   // 创建增益节点用于渐变控制
   this.gainNode = new this.Tone.Gain(0);
   this.oscillator.connect(this.gainNode);
   this.oscillator.start();
-  
+
   // 根据enabled参数设置初始状态
   if (this.getParameterValue('enabled') as boolean) {
     this.applyParameterRamp(this.gainNode.gain, 1);
@@ -118,9 +120,10 @@ protected async initializeAudio(): Promise<void> {
   this.setupOscillatorBindings();
   this.setupModulationHandling();
 }
-````
+```
 
 设计优势包括：
+
 - 模块统一注册与初始化管理（moduleInitManager）
 - 确保输入连接时各模块均已完成初始化
 - 统一的错误捕捉和资源释放机制
@@ -128,11 +131,13 @@ protected async initializeAudio(): Promise<void> {
 ## 成果与未来展望
 
 **成果：**
+
 - 大幅提高代码复用性
 - 消除参数突变产生的爆破音
 - 简化模块扩展和维护
 
 **未来：**
+
 - 添加更多音频模块（滤波、压缩等）
 - 实现更复杂参数自动化和调制路径
 - 优化大规模音频处理图的性能和UI响应

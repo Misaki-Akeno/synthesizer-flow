@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -21,21 +21,21 @@ export const ContextMenu: React.FC = () => {
     // 确保菜单在视口内
     const adjustPosition = () => {
       if (!menuRef.current) return;
-      
+
       const rect = menuRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      
+
       let { x, y } = position;
-      
+
       if (x + rect.width > viewportWidth) {
         x = viewportWidth - rect.width;
       }
-      
+
       if (y + rect.height > viewportHeight) {
         y = viewportHeight - rect.height;
       }
-      
+
       menuRef.current.style.left = `${x}px`;
       menuRef.current.style.top = `${y}px`;
     };
@@ -46,7 +46,7 @@ export const ContextMenu: React.FC = () => {
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div 
+    <div
       ref={menuRef}
       className="fixed z-50 min-w-[180px] bg-white dark:bg-gray-800 shadow-lg rounded-md overflow-hidden context-menu-content"
       style={{ left: position.x, top: position.y }}

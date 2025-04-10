@@ -102,27 +102,20 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
     loadPreset: (presetId) => {
       const { nodes, edges } = presetManager.loadPresetWithModules(presetId);
-      
-      // 在加载新预设前重置初始化管理器
       moduleInitManager.reset();
-      
-      // 设置状态
+
       set({
         nodes,
         edges,
         currentPresetId: presetId,
       });
-      
+
       // 等待所有模块初始化完成后再设置边绑定
       moduleInitManager.onAllModulesReady(() => {
         moduleManager.setupAllEdgeBindings(edges);
       });
-      
-      // 为了向后兼容，仍保留setTimeout方式，但延长时间确保异步初始化有足够时间
       setTimeout(() => {
-        // 只有当模块尚未全部初始化时才执行这个备份绑定
-        moduleInitManager.onAllModulesReady(() => {
-        });
+        moduleInitManager.onAllModulesReady(() => {});
       }, 1000);
     },
 
@@ -132,7 +125,6 @@ export const useFlowStore = create<FlowState>((set, get) => {
       set({
         nodes: get().nodes.map((node) => {
           if (node.id === nodeId && node.data?.module) {
-            // 使用修改后的 updateParameter 方法，它可以处理所有类型的参数
             node.data.module.updateParameter(paramKey, value);
             return { ...node }; // 触发React更新
           }

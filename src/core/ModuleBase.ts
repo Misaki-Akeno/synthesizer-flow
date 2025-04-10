@@ -74,7 +74,7 @@ export abstract class ModuleBase {
 
   // 存储内部订阅关系
   private internalSubscriptions: Subscription[] = [];
-    type: string | undefined;
+  type: string | undefined;
 
   constructor(
     moduleType: string,
@@ -430,22 +430,27 @@ export abstract class ModuleBase {
     }
 
     // 创建新的订阅，对于音频端口使用唯一的绑定键
-    const bindingKey = isAudioPort 
-      ? `input_${inputPortName}_${sourceModule.id}_${sourcePortName}` 
+    const bindingKey = isAudioPort
+      ? `input_${inputPortName}_${sourceModule.id}_${sourcePortName}`
       : `input_${inputPortName}`;
-      
+
     // 检查是否已存在相同的绑定
     if (this.subscriptions[bindingKey]) {
       this.subscriptions[bindingKey].unsubscribe();
     }
-    
+
     this.subscriptions[bindingKey] = sourceModule.outputPorts[
       sourcePortName
     ].subscribe((value) => {
       if (isAudioPort) {
         // 对于音频端口，保留输入值的引用，但不直接修改BehaviorSubject
         // 让模块内部处理多个音频输入
-        this.handleAudioInput(inputPortName, value, sourceModule.id, sourcePortName);
+        this.handleAudioInput(
+          inputPortName,
+          value,
+          sourceModule.id,
+          sourcePortName
+        );
       } else {
         // 对于非音频端口，直接更新BehaviorSubject
         this.inputPorts[inputPortName].next(value);
@@ -461,9 +466,9 @@ export abstract class ModuleBase {
    * @param sourcePortName 源端口名
    */
   protected handleAudioInput(
-    inputPortName: string, 
-    audioInput: ModuleInterface, 
-    sourceModuleId: string, 
+    inputPortName: string,
+    audioInput: ModuleInterface,
+    sourceModuleId: string,
     sourcePortName: string
   ): void {
     // 默认实现：直接更新端口值
@@ -478,7 +483,11 @@ export abstract class ModuleBase {
    * @param sourcePortName 可选的源端口名，如果提供，则只解除与该源端口的绑定
    * @returns 是否成功解除绑定
    */
-  unbindInput(inputPortName: string, sourceModuleId?: string, sourcePortName?: string): boolean {
+  unbindInput(
+    inputPortName: string,
+    sourceModuleId?: string,
+    sourcePortName?: string
+  ): boolean {
     // 检查输入端口是否存在
     if (!this.inputPorts[inputPortName]) {
       console.warn(
@@ -492,22 +501,26 @@ export abstract class ModuleBase {
 
     // 如果是针对特定源模块的音频解绑
     if (isAudioPort && sourceModuleId) {
-      const bindingKey = sourcePortName 
+      const bindingKey = sourcePortName
         ? `input_${inputPortName}_${sourceModuleId}_${sourcePortName}`
         : `input_${inputPortName}_${sourceModuleId}`;
-      
+
       if (this.subscriptions[bindingKey]) {
         this.subscriptions[bindingKey].unsubscribe();
         delete this.subscriptions[bindingKey];
         // 通知模块音频连接已移除
-        this.handleAudioDisconnect(inputPortName, sourceModuleId, sourcePortName);
+        this.handleAudioDisconnect(
+          inputPortName,
+          sourceModuleId,
+          sourcePortName
+        );
         return true;
       }
-      
+
       // 尝试查找所有与该源模块相关的订阅
       if (!sourcePortName) {
         let found = false;
-        Object.keys(this.subscriptions).forEach(key => {
+        Object.keys(this.subscriptions).forEach((key) => {
           if (key.startsWith(`input_${inputPortName}_${sourceModuleId}_`)) {
             this.subscriptions[key].unsubscribe();
             delete this.subscriptions[key];
@@ -519,23 +532,23 @@ export abstract class ModuleBase {
           return true;
         }
       }
-      
+
       return false;
     }
 
     // 常规解绑（非音频或解绑所有连接）
     let unbound = false;
-    
+
     if (isAudioPort) {
       // 对于音频端口，解除所有相关订阅
-      Object.keys(this.subscriptions).forEach(key => {
+      Object.keys(this.subscriptions).forEach((key) => {
         if (key.startsWith(`input_${inputPortName}_`)) {
           this.subscriptions[key].unsubscribe();
           delete this.subscriptions[key];
           unbound = true;
         }
       });
-      
+
       if (unbound) {
         // 重置音频输入端口
         this.inputPorts[inputPortName].next(null);

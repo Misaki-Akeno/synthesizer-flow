@@ -19,7 +19,7 @@ export class SpeakerModule extends AudioModuleBase {
         min: -60,
         max: 0,
         step: 0.1,
-      }
+      },
       // enabled参数已移除
     };
 
@@ -70,7 +70,7 @@ export class SpeakerModule extends AudioModuleBase {
       if (enabled) {
         // 当启用时，尝试启动音频上下文
         this.startAudioContext();
-        
+
         // 渐入到目标音量
         const levelDB = this.getParameterValue('level') as number;
         const gainValue = this.dbToLinear(levelDB);

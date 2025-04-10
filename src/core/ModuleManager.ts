@@ -57,19 +57,29 @@ export class ModuleManager {
   }
 
   // 生成边ID
-  generateEdgeId(source: string, target: string, _sourceHandle?: string, _targetHandle?: string): string {
+  generateEdgeId(
+    source: string,
+    target: string,
+    _sourceHandle?: string,
+    _targetHandle?: string
+  ): string {
     return `e-${source}-${target}-${Math.random().toString(36).substring(2, 9)}`;
   }
 
   // 创建边
-  createEdge(source: string, target: string, sourceHandle?: string, targetHandle?: string): Edge {
+  createEdge(
+    source: string,
+    target: string,
+    sourceHandle?: string,
+    targetHandle?: string
+  ): Edge {
     const id = this.generateEdgeId(source, target, sourceHandle, targetHandle);
     return {
       id,
       source,
       target,
       sourceHandle,
-      targetHandle
+      targetHandle,
     };
   }
 
@@ -127,23 +137,27 @@ export class ModuleManager {
           sourceNode.data.module,
           sourcePort
         );
-        
+
         // 记录连接事件
         import('./ModuleInitManager').then(({ moduleInitManager }) => {
           moduleInitManager.recordConnection(sourceId, targetId);
         });
       } catch (error) {
         console.error(`Failed to bind modules: ${error}`);
-        
+
         // 记录错误事件
         import('./ModuleInitManager').then(({ moduleInitManager }) => {
           moduleInitManager.recordError(sourceId, { error, targetId });
         });
       }
     } else {
-      console.warn(`[ModuleManager] Could not find modules for binding: ${sourceId} -> ${targetId}`);
-      if (!sourceNode) console.warn(`[ModuleManager] Source node ${sourceId} not found`);
-      if (!targetNode) console.warn(`[ModuleManager] Target node ${targetId} not found`);
+      console.warn(
+        `[ModuleManager] Could not find modules for binding: ${sourceId} -> ${targetId}`
+      );
+      if (!sourceNode)
+        console.warn(`[ModuleManager] Source node ${sourceId} not found`);
+      if (!targetNode)
+        console.warn(`[ModuleManager] Target node ${targetId} not found`);
     }
   }
 
@@ -158,7 +172,7 @@ export class ModuleManager {
       const targetPort = edge.targetHandle || 'input';
       const sourceId = edge.source;
       const sourcePort = edge.sourceHandle || 'output';
-      
+
       targetNode.data.module.unbindInput(targetPort, sourceId, sourcePort);
     }
   }
@@ -186,7 +200,7 @@ export class ModuleManager {
       const label = data.label || id;
 
       const moduleInstance = this.createModuleInstance(type, id, label);
-      
+
       // 应用预设中定义的参数
       if (data.parameters) {
         Object.entries(data.parameters).forEach(([key, value]) => {
@@ -198,7 +212,7 @@ export class ModuleManager {
         id,
         position,
         type: 'default',
-        dragHandle: '.node-drag-handle', // 指定标题栏为拖动句柄
+        dragHandle: '.node-drag-handle',
         data: {
           module: moduleInstance,
           label,
@@ -208,14 +222,18 @@ export class ModuleManager {
     });
 
     // 为边生成ID
-    const edges = presetEdges.map(edge => ({
-      id: this.generateEdgeId(edge.source, edge.target, edge.sourceHandle, edge.targetHandle),
+    const edges = presetEdges.map((edge) => ({
+      id: this.generateEdgeId(
+        edge.source,
+        edge.target,
+        edge.sourceHandle,
+        edge.targetHandle
+      ),
       source: edge.source,
       target: edge.target,
       sourceHandle: edge.sourceHandle,
-      targetHandle: edge.targetHandle
+      targetHandle: edge.targetHandle,
     }));
-
 
     return { nodes, edges };
   }
@@ -223,7 +241,7 @@ export class ModuleManager {
   // 添加一个公共方法，专门用于建立所有边的绑定关系
   setupAllEdgeBindings(edges: Edge[]): void {
     const sortedEdges = this.sortEdgesByDependency(edges);
-    
+
     sortedEdges.forEach((edge, _index) => {
       try {
         this.bindModules(
@@ -240,16 +258,16 @@ export class ModuleManager {
       }
     });
   }
-  
+
   /**
    * 根据依赖关系对边进行排序，确保源节点先于目标节点
    */
   private sortEdgesByDependency(edges: Edge[]): Edge[] {
     // 创建一个依赖图
     const dependencyGraph: Record<string, string[]> = {};
-    
+
     // 初始化图
-    edges.forEach(edge => {
+    edges.forEach((edge) => {
       if (!dependencyGraph[edge.source]) {
         dependencyGraph[edge.source] = [];
       }
@@ -259,30 +277,26 @@ export class ModuleManager {
         dependencyGraph[edge.target].push(edge.source);
       }
     });
-    
+
     // 为所有节点分配处理顺序
     const processed: Record<string, number> = {};
     let order = 0;
-    
+
     // 递归处理节点
     const processNode = (nodeId: string) => {
-      // 如果已处理，跳过
       if (processed[nodeId] !== undefined) return;
-      
       // 处理所有依赖
-      (dependencyGraph[nodeId] || []).forEach(depId => {
+      (dependencyGraph[nodeId] || []).forEach((depId) => {
         processNode(depId);
       });
-      
-      // 标记为已处理
       processed[nodeId] = order++;
     };
-    
+
     // 处理所有节点
-    Object.keys(dependencyGraph).forEach(nodeId => {
+    Object.keys(dependencyGraph).forEach((nodeId) => {
       processNode(nodeId);
     });
-    
+
     // 根据节点处理顺序对边进行排序
     return [...edges].sort((a, b) => {
       // 源节点顺序相同时，比较目标节点

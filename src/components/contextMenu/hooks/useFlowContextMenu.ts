@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import { useCallback } from 'react';
 import { Node, Edge, useReactFlow } from '@xyflow/react';
@@ -10,7 +10,9 @@ export const useFlowContextMenu = () => {
   const reactFlowInstance = useReactFlow();
 
   // 处理事件类型的辅助函数
-  const handleEvent = (event: MouseEvent | React.MouseEvent<Element, MouseEvent>) => {
+  const handleEvent = (
+    event: MouseEvent | React.MouseEvent<Element, MouseEvent>
+  ) => {
     if ('nativeEvent' in event) {
       return event; // 已经是React事件
     } else {
@@ -20,7 +22,7 @@ export const useFlowContextMenu = () => {
         nativeEvent: event,
         isDefaultPrevented: () => false,
         isPropagationStopped: () => false,
-        persist: () => { },
+        persist: () => {},
       } as unknown as React.MouseEvent<Element, MouseEvent>;
     }
   };
