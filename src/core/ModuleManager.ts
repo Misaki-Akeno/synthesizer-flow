@@ -49,6 +49,7 @@ export class ModuleManager {
       id,
       position,
       type: 'default', // 节点的视觉类型，可以根据需要调整
+      dragHandle: '.node-drag-handle', // 指定标题栏为拖动句柄
       data: {
         module: moduleInstance,
       },
@@ -126,8 +127,18 @@ export class ModuleManager {
           sourceNode.data.module,
           sourcePort
         );
+        
+        // 记录连接事件
+        import('./ModuleInitManager').then(({ moduleInitManager }) => {
+          moduleInitManager.recordConnection(sourceId, targetId);
+        });
       } catch (error) {
         console.error(`Failed to bind modules: ${error}`);
+        
+        // 记录错误事件
+        import('./ModuleInitManager').then(({ moduleInitManager }) => {
+          moduleInitManager.recordError(sourceId, { error, targetId });
+        });
       }
     } else {
       console.warn(`[ModuleManager] Could not find modules for binding: ${sourceId} -> ${targetId}`);
@@ -187,6 +198,7 @@ export class ModuleManager {
         id,
         position,
         type: 'default',
+        dragHandle: '.node-drag-handle', // 指定标题栏为拖动句柄
         data: {
           module: moduleInstance,
           label,
@@ -204,8 +216,6 @@ export class ModuleManager {
       targetHandle: edge.targetHandle
     }));
 
-    // 设置所有边的绑定关系
-    this.setupAllEdgeBindings(edges);
 
     return { nodes, edges };
   }

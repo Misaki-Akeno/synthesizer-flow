@@ -1,21 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ModuleBase, ParameterType, PortType } from '../ModuleBase';
+import { ParameterType, PortType } from '../ModuleBase';
+import { AudioModuleBase } from '../AudioModuleBase';
 
 /**
  * 振荡器模块，生成音频信号并根据参数调整输出
  */
-export class OscillatorModule extends ModuleBase {
+export class OscillatorModule extends AudioModuleBase {
   private oscillator: any;
-  private gainNode: any; // 添加增益节点用于渐变控制
-  private Tone: any;
-  private fadeTime = 0.01; //避免爆破音
+  private gainNode: any; // 用于渐变控制
   
   // 存储调制信号的当前值
   private currentFreqMod: number = 0;
   private currentGainMod: number = 0;
 
   constructor(id: string, name: string = '振荡器') {
-    // 初始化基本参数，使用新的参数定义格式
+    // 初始化基本参数
     const moduleType = 'oscillator';
     const parameters = {
       gain: {
@@ -37,35 +36,30 @@ export class OscillatorModule extends ModuleBase {
         value: 'sine',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
       },
-      enabled: {
-        type: ParameterType.BOOLEAN,
-        value: true,
-      },
-      // 新增调制深度参数
+      // enabled参数已移除
+      // 调制深度参数
       freqModDepth: {
         type: ParameterType.NUMBER,
-        value: 2, // 默认调制深度100Hz
+        value: 2,
         min: 0,
         max: 20,
         step: 1,
       },
       gainModDepth: {
         type: ParameterType.NUMBER,
-        value: 0.5, // 默认调制深度0.5
+        value: 0.5,
         min: 0,
         max: 1,
         step: 0.05,
       },
     };
     
-    // 使用新的端口定义格式，添加调制输入端口
+    // 定义端口
     const inputPorts = {
-      // 增加频率调制输入
       freqMod: { 
         type: PortType.NUMBER, 
         value: 0 
       },
-      // 增加音量调制输入
       gainMod: { 
         type: PortType.NUMBER, 
         value: 0 
@@ -83,52 +77,49 @@ export class OscillatorModule extends ModuleBase {
       }
     };
 
-    super(moduleType, id, name, parameters, inputPorts, outputPorts);
-
-    // 仅在浏览器环境下初始化Tone.js
-    if (typeof window !== 'undefined') {
-      // 使用动态导入Tone.js
-      this.initializeTone();
-    }
+    super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
   }
 
   /**
-   * 动态初始化Tone.js
+   * 实现音频初始化
    */
-  private async initializeTone(): Promise<void> {
-    try {
-      const ToneModule = await import('tone');
-      this.Tone = ToneModule;
+  protected async initializeAudio(): Promise<void> {
+    // 初始化Tone.js振荡器
+    this.oscillator = new this.Tone.Oscillator({
+      frequency: this.getParameterValue('freq') as number,
+      volume: this.Tone.gainToDb(this.getParameterValue('gain') as number),
+      type: this.getParameterValue('waveform') as string,
+    });
+    
+    // 创建增益节点用于渐变控制
+    this.gainNode = new this.Tone.Gain(0);
+    // 将振荡器连接到增益节点
+    this.oscillator.connect(this.gainNode);
+    
+    // 总是启动振荡器，但通过增益节点控制是否有声音输出
+    this.oscillator.start();
+    
+    // 根据enabled参数决定是否有声音输出
+    if (this.isEnabled()) {
+      this.applyParameterRamp(this.gainNode.gain, 1);
+    }
 
-      // 初始化Tone.js振荡器
-      this.oscillator = new this.Tone.Oscillator({
-        frequency: this.getParameterValue('freq') as number,
-        volume: this.Tone.gainToDb(this.getParameterValue('gain') as number),
-        type: this.getParameterValue('waveform') as string,
-      });
-      
-      // 创建增益节点用于渐变控制
-      this.gainNode = new this.Tone.Gain(0);
-      // 将振荡器连接到增益节点
-      this.oscillator.connect(this.gainNode);
-      
-      // 总是启动振荡器，但通过增益节点控制是否有声音输出
-      this.oscillator.start();
-      
-      // 根据enabled参数决定是否有声音输出
-      if (this.getParameterValue('enabled') as boolean) {
-        this.gainNode.gain.rampTo(1, this.fadeTime);
-      }
+    // 更新输出端口
+    this.outputPorts['audioout'].next(this.gainNode);
 
-      this.outputPorts['audioout'].next(this.gainNode);
+    // 设置参数变更监听
+    this.setupOscillatorBindings();
+    
+    // 设置调制输入处理
+    this.setupModulationHandling();
+  }
 
-      // 设置参数变更监听
-      this.setupOscillatorBindings();
-      
-      // 设置调制输入处理
-      this.setupModulationHandling();
-    } catch (error) {
-      console.error('Failed to initialize Tone.js:', error);
+  /**
+   * 重写启用状态变化处理
+   */
+  protected onEnabledStateChanged(enabled: boolean): void {
+    if (this.gainNode) {
+      this.applyParameterRamp(this.gainNode.gain, enabled ? 1 : 0);
     }
   }
 
@@ -136,18 +127,16 @@ export class OscillatorModule extends ModuleBase {
    * 设置振荡器参数绑定
    */
   private setupOscillatorBindings(): void {
-    if (!this.oscillator || !this.Tone) return;
+    if (!this.oscillator) return;
 
     const freqSubscription = this.parameters['freq'].subscribe((value: number | boolean | string) => {
-      if (this.oscillator && typeof value === 'number') {
-        // 应用基础频率加上调制效果
+      if (typeof value === 'number') {
         this.applyFrequencyWithModulation(value);
       }
     });
 
     const gainSubscription = this.parameters['gain'].subscribe((value: number | boolean | string) => {
-      if (this.oscillator && typeof value === 'number') {
-        // 应用基础增益加上调制效果
+      if (typeof value === 'number') {
         this.applyGainWithModulation(value);
       }
     });
@@ -157,24 +146,8 @@ export class OscillatorModule extends ModuleBase {
         this.oscillator.type = value;
       }
     });
-    
-    const enabledSubscription = this.parameters['enabled'].subscribe((value: number | boolean | string) => {
-      if (!this.oscillator || !this.gainNode) return;
 
-      if (typeof value === 'boolean') {
-        if (value) {
-          // 渐入: 音量从0到1
-          this.gainNode.gain.cancelScheduledValues(this.Tone.now());
-          this.gainNode.gain.rampTo(1, this.fadeTime);
-        } else {
-          // 渐出: 音量从1到0
-          this.gainNode.gain.cancelScheduledValues(this.Tone.now());
-          this.gainNode.gain.rampTo(0, this.fadeTime);
-        }
-      }
-    });
-
-    // 添加调制深度参数的订阅，当调制深度改变时重新应用调制
+    // 调制深度参数的订阅
     const freqModDepthSubscription = this.parameters['freqModDepth'].subscribe(() => {
       const baseFreq = this.getParameterValue('freq') as number;
       this.applyFrequencyWithModulation(baseFreq);
@@ -189,7 +162,6 @@ export class OscillatorModule extends ModuleBase {
       freqSubscription,
       gainSubscription,
       waveformSubscription,
-      enabledSubscription,
       freqModDepthSubscription,
       gainModDepthSubscription
     ]);
@@ -199,8 +171,6 @@ export class OscillatorModule extends ModuleBase {
    * 设置调制输入处理
    */
   private setupModulationHandling(): void {
-    if (!this.oscillator) return;
-
     // 处理频率调制输入
     const freqModSubscription = this.inputPorts['freqMod'].subscribe((value: any) => {
       if (typeof value === 'number') {
@@ -224,7 +194,6 @@ export class OscillatorModule extends ModuleBase {
 
   /**
    * 应用频率调制
-   * @param baseFrequency 基础频率
    */
   private applyFrequencyWithModulation(baseFrequency: number): void {
     if (!this.oscillator) return;
@@ -232,28 +201,26 @@ export class OscillatorModule extends ModuleBase {
     const modDepth = this.getParameterValue('freqModDepth') as number;
     // 调制值范围0-1，映射到[-1, 1]范围用于双向调制
     const normalizedMod = (this.currentFreqMod * 2) - 1; 
-    // 计算调制后的频率: 基础频率 + 调制深度 * 调制信号
+    // 计算调制后的频率
     const modulatedFreq = baseFrequency + (modDepth * normalizedMod);
     
-    // 应用到振荡器，使用cancelScheduledValues和rampTo确保平滑过渡
-    this.oscillator.frequency.cancelScheduledValues(this.Tone.now());
-    this.oscillator.frequency.rampTo(modulatedFreq, 0.01); // 快速过渡但避免爆音
+    // 应用到振荡器 - 使用较短的渐变时间以保持响应性但避免爆音
+    this.applyParameterRamp(this.oscillator.frequency, modulatedFreq, 0.01);
   }
 
   /**
    * 应用增益调制
-   * @param baseGain 基础增益
    */
   private applyGainWithModulation(baseGain: number): void {
     if (!this.oscillator) return;
     
     const modDepth = this.getParameterValue('gainModDepth') as number;
-    // 计算调制后的增益: 基础增益 + 调制深度 * 调制信号
+    // 计算调制后的增益
     const modulatedGain = Math.max(0, Math.min(2, baseGain + (modDepth * this.currentGainMod)));
     
-    // 应用到振荡器
-    this.oscillator.volume.cancelScheduledValues(this.Tone.now());
-    this.oscillator.volume.rampTo(this.Tone.gainToDb(modulatedGain), 0.01);
+    // 使用统一的参数渐变方法，而不是直接调用 rampTo
+    const dbGain = this.Tone.gainToDb(modulatedGain);
+    this.applyParameterRamp(this.oscillator.volume, dbGain, 0.02);
   }
 
   /**
@@ -268,23 +235,7 @@ export class OscillatorModule extends ModuleBase {
    * 释放资源方法
    */
   public dispose(): void {
-    if (this.oscillator) {
-      try {
-        this.oscillator.stop();
-        this.oscillator.dispose();
-      } catch (error) {
-        console.warn('Error disposing oscillator', error);
-      }
-    }
-    
-    if (this.gainNode) {
-      try {
-        this.gainNode.dispose();
-      } catch (error) {
-        console.warn('Error disposing gain node', error);
-      }
-    }
-    
+    this.disposeAudioNodes([this.oscillator, this.gainNode]);
     super.dispose();
   }
 }

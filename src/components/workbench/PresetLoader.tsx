@@ -1,23 +1,40 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useFlowStore } from '../../store/store';
 import { presetManager } from '../../core/PresetManager';
 import { moduleManager } from '../../core/ModuleManager';
 
 const PresetLoader: React.FC = () => {
-  const { currentPresetId, loadPreset, edges } = useFlowStore();
+  const { currentPresetId, loadPreset, edges, nodes } = useFlowStore();
   const presets = presetManager.getPresets();
-
-  // 在预设加载后或edges变化时，重新建立模块间绑定
+  
+  // 使用ref记录上一次的edges长度
+  const prevEdgesLength = useRef(0);
+  
+  // 在组件挂载时，如果没有选择预设则加载默认预设
   useEffect(() => {
-    if (edges.length > 0) {
-      // 稍微延迟执行，确保节点已经完全渲染
-      const timer = setTimeout(() => {
-        moduleManager.setupAllEdgeBindings(edges);
-      }, 100);
-
-      return () => clearTimeout(timer);
+    if (!currentPresetId) {
+      const defaultPreset = presetManager.getPreset('major-chord');
+      if (defaultPreset) {
+        loadPreset(defaultPreset.id);
+      }
     }
-  }, [edges, currentPresetId]);
+  }, [currentPresetId, loadPreset]);
+  
+  useEffect(() => {
+    if (edges.length > 0 && nodes.length > 0) {
+      // 确保所有节点已加载，且edges有变化时才重新绑定
+      // 这样避免了不必要的重复绑定
+      if (edges.length !== prevEdgesLength.current) {
+        prevEdgesLength.current = edges.length;
+        
+        // 使用requestAnimationFrame确保在下一帧渲染时执行，
+        // 此时React已完成DOM更新，节点都已添加到状态中
+        requestAnimationFrame(() => {
+          moduleManager.setupAllEdgeBindings(edges);
+        });
+      }
+    }
+  }, [edges, nodes, currentPresetId]);
 
   return (
     <div

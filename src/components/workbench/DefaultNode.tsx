@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useFlowStore } from '../../store/store';
 import { useModuleSubscription } from '../../hooks/useModuleSubscription';
 import React from 'react';
+import { AudioModuleBase } from '../../core/AudioModuleBase';
 
 interface DefaultNodeProps {
   data: {
@@ -198,6 +199,8 @@ const InputPort = ({
         id={portKey}
         style={{ top: portPosition, backgroundColor: portColor }}
         className="w-2 h-2"
+        isConnectable={true}
+        data-port-type={portType} // 添加自定义属性存储端口类型
       />
       {isSelected && (
         <div
@@ -255,6 +258,8 @@ const OutputPort = ({
         id={portKey}
         style={{ top: portPosition, backgroundColor: portColor }}
         className="w-2 h-2"
+        isConnectable={true}
+        data-port-type={portType} // 添加自定义属性存储端口类型
       />
       {isSelected && (
         <div
@@ -273,6 +278,58 @@ const OutputPort = ({
   );
 };
 
+// 模块启用/禁用切换按钮组件
+const ModuleEnableToggle = ({ module }: { module: AudioModuleBase }) => {
+  const [enabled, setEnabled] = useState(module.isEnabled());
+
+  React.useEffect(() => {
+    const subscription = module.enabled.subscribe((value) => {
+      setEnabled(value);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [module]);
+
+  const toggleEnabled = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    module.toggleEnabled();
+  };
+
+  return (
+    <button
+      onClick={toggleEnabled}
+      className="relative w-4 h-4 flex items-center justify-center focus:outline-none"
+      title={enabled ? '点击禁用模块' : '点击启用模块'}
+    >
+      <svg
+        className="w-full h-full"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <circle
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          strokeWidth="2"
+          fill={enabled ? "#4ade80" : "transparent"}
+        />
+        {!enabled && (
+          <line
+            x1="6"
+            y1="6"
+            x2="18"
+            y2="18"
+            stroke="currentColor"
+            strokeWidth="2"
+          />
+        )}
+      </svg>
+    </button>
+  );
+};
+
 const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
   const { module: moduleInstance } = data;
   const updateModuleParameter = useFlowStore(state => state.updateModuleParameter);
@@ -283,6 +340,22 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     inputPortValues, inputPortTypes,
     outputPortValues, outputPortTypes
   } = useModuleSubscription(moduleInstance);
+  
+  // 追踪模块是否启用的状态
+  const [moduleEnabled, setModuleEnabled] = useState(
+    moduleInstance instanceof AudioModuleBase ? moduleInstance.isEnabled() : true
+  );
+  
+  // 监听模块的启用状态变化
+  React.useEffect(() => {
+    if (moduleInstance instanceof AudioModuleBase) {
+      const subscription = moduleInstance.enabled.subscribe(enabled => {
+        setModuleEnabled(enabled);
+      });
+      
+      return () => subscription.unsubscribe();
+    }
+  }, [moduleInstance]);
   
   // 参数更新处理函数
   const handleParameterChange = (paramKey: string, value: number | boolean | string) => {
@@ -337,11 +410,18 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
   
   return (
     <div 
-      className="node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative"
+      className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${
+        !moduleEnabled ? 'opacity-50' : ''
+      }`}
     >
-      {/* 模块标题 */}
-      <div className="font-medium text-sm mb-2 pb-1 border-b">
-        {data.label || moduleInstance?.name || "模块"}
+      {/* 模块标题栏 - 添加 node-drag-handle 类作为拖动句柄 */}
+      <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center node-drag-handle cursor-move">
+        <div>{data.label || moduleInstance?.name || "模块"}</div>
+        
+        {/* 启用/禁用切换按钮 */}
+        {moduleInstance instanceof AudioModuleBase && (
+          <ModuleEnableToggle module={moduleInstance} />
+        )}
       </div>
       
       {/* 参数控制列表 */}
