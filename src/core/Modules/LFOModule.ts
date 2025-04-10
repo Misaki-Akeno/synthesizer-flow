@@ -33,11 +33,8 @@ export class LFOModule extends AudioModuleBase {
         type: ParameterType.LIST, 
         value: 'sine', 
         options: ['sine', 'square', 'sawtooth', 'triangle'] 
-      },
-      enabled: {
-        type: ParameterType.BOOLEAN,
-        value: true
       }
+      // enabled参数已移除
     };
     
     // LFO没有输入端口
@@ -51,7 +48,7 @@ export class LFOModule extends AudioModuleBase {
       }
     };
 
-    super(moduleType, id, name, parameters, inputPorts, outputPorts);
+    super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
   }
 
   /**
@@ -76,7 +73,7 @@ export class LFOModule extends AudioModuleBase {
     this.startTime = Date.now();
     
     // 启动LFO
-    if (this.getParameterValue('enabled') as boolean) {
+    if (this.isEnabled()) {
       this.lfo.start();
     }
     
@@ -85,6 +82,26 @@ export class LFOModule extends AudioModuleBase {
     
     // 启动定期更新信号输出的机制
     this.startSignalPolling();
+  }
+
+  /**
+   * 重写启用状态变化处理
+   */
+  protected onEnabledStateChanged(enabled: boolean): void {
+    if (!this.lfo) return;
+      
+    if (enabled) {
+      if (this.lfo.state !== 'started') {
+        this.lfo.start();
+        this.startTime = Date.now(); // 重置起始时间
+      }
+    } else {
+      if (this.lfo.state === 'started') {
+        this.lfo.stop();
+      }
+      // 停止时将信号输出重置为0
+      this.outputPorts['signal'].next(0);
+    }
   }
   
   /**
@@ -102,7 +119,7 @@ export class LFOModule extends AudioModuleBase {
       
       try {
         // 只有在LFO启用时才更新信号
-        if (this.getParameterValue('enabled') as boolean) {
+        if (this.isEnabled()) {
           // 使用基于时间的计算方法获取LFO当前值
           const currentValue = this.calculateLFOValue();
           
@@ -190,31 +207,10 @@ export class LFOModule extends AudioModuleBase {
       }
     });
     
-    // 启用状态绑定
-    const enabledSubscription = this.parameters['enabled'].subscribe((value: number | boolean | string) => {
-      if (!this.lfo) return;
-      
-      if (typeof value === 'boolean') {
-        if (value) {
-          if (this.lfo.state !== 'started') {
-            this.lfo.start();
-            this.startTime = Date.now(); // 重置起始时间
-          }
-        } else {
-          if (this.lfo.state === 'started') {
-            this.lfo.stop();
-          }
-          // 停止时将信号输出重置为0
-          this.outputPorts['signal'].next(0);
-        }
-      }
-    });
-
     this.addInternalSubscriptions([
       rateSubscription,
       depthSubscription,
-      waveformSubscription,
-      enabledSubscription
+      waveformSubscription
     ]);
   }
 

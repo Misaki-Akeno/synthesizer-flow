@@ -8,7 +8,6 @@ import { AudioInputHandler } from '../AudioInputHandler';
  */
 export class ReverbModule extends AudioModuleBase {
   private reverb: any;
-  private bypassEnabled: boolean = false;
 
   constructor(id: string, name: string = '混响效果器') {
     // 初始化基本参数
@@ -34,11 +33,8 @@ export class ReverbModule extends AudioModuleBase {
         min: 0, 
         max: 0.5,
         step: 0.01
-      },
-      bypass: {
-        type: ParameterType.BOOLEAN,
-        value: false
       }
+      // bypass参数已移除
     };
     
     // 定义输入和输出端口
@@ -56,8 +52,7 @@ export class ReverbModule extends AudioModuleBase {
       }
     };
 
-    super(moduleType, id, name, parameters, inputPorts, outputPorts);
-    this.bypassEnabled = this.getParameterValue('bypass') as boolean;
+    super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
   }
 
   /**
@@ -85,18 +80,25 @@ export class ReverbModule extends AudioModuleBase {
   }
 
   /**
-   * 更新输出连接，根据bypass设置选择直通或混响输出
+   * 更新输出连接，根据启用状态设置选择直通或混响输出
    */
   private updateOutputConnection(): void {
     if (!this.audioInputHandler || !this.reverb) return;
     
-    if (this.bypassEnabled) {
-      // 在bypass模式下，直接输出混合器
+    if (!this.isEnabled()) {
+      // 在禁用模式下，直接输出混合器
       this.outputPorts['output'].next(this.audioInputHandler.getMixerOutput());
     } else {
-      // 正常模式下，输出混响效果
+      // 启用模式下，输出混响效果
       this.outputPorts['output'].next(this.reverb);
     }
+  }
+
+  /**
+   * 重写启用状态变化处理
+   */
+  protected onEnabledStateChanged(_enabled: boolean): void {
+    this.updateOutputConnection();
   }
 
   /**
@@ -147,20 +149,10 @@ export class ReverbModule extends AudioModuleBase {
       }
     });
     
-    const bypassSubscription = this.parameters['bypass'].subscribe((value: number | boolean | string) => {
-      if (!this.reverb || !this.audioInputHandler) return;
-      
-      if (typeof value === 'boolean') {
-        this.bypassEnabled = value;
-        this.updateOutputConnection();
-      }
-    });
-
     this.addInternalSubscriptions([
       decaySubscription,
       wetSubscription,
-      preDelaySubscription,
-      bypassSubscription
+      preDelaySubscription
     ]);
   }
 

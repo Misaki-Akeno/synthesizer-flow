@@ -36,10 +36,7 @@ export class OscillatorModule extends AudioModuleBase {
         value: 'sine',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
       },
-      enabled: {
-        type: ParameterType.BOOLEAN,
-        value: true,
-      },
+      // enabled参数已移除
       // 调制深度参数
       freqModDepth: {
         type: ParameterType.NUMBER,
@@ -80,7 +77,7 @@ export class OscillatorModule extends AudioModuleBase {
       }
     };
 
-    super(moduleType, id, name, parameters, inputPorts, outputPorts);
+    super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
   }
 
   /**
@@ -103,7 +100,7 @@ export class OscillatorModule extends AudioModuleBase {
     this.oscillator.start();
     
     // 根据enabled参数决定是否有声音输出
-    if (this.getParameterValue('enabled') as boolean) {
+    if (this.isEnabled()) {
       this.applyParameterRamp(this.gainNode.gain, 1);
     }
 
@@ -115,6 +112,15 @@ export class OscillatorModule extends AudioModuleBase {
     
     // 设置调制输入处理
     this.setupModulationHandling();
+  }
+
+  /**
+   * 重写启用状态变化处理
+   */
+  protected onEnabledStateChanged(enabled: boolean): void {
+    if (this.gainNode) {
+      this.applyParameterRamp(this.gainNode.gain, enabled ? 1 : 0);
+    }
   }
 
   /**
@@ -140,14 +146,6 @@ export class OscillatorModule extends AudioModuleBase {
         this.oscillator.type = value;
       }
     });
-    
-    const enabledSubscription = this.parameters['enabled'].subscribe((value: number | boolean | string) => {
-      if (!this.gainNode) return;
-
-      if (typeof value === 'boolean') {
-        this.applyParameterRamp(this.gainNode.gain, value ? 1 : 0);
-      }
-    });
 
     // 调制深度参数的订阅
     const freqModDepthSubscription = this.parameters['freqModDepth'].subscribe(() => {
@@ -164,7 +162,6 @@ export class OscillatorModule extends AudioModuleBase {
       freqSubscription,
       gainSubscription,
       waveformSubscription,
-      enabledSubscription,
       freqModDepthSubscription,
       gainModDepthSubscription
     ]);

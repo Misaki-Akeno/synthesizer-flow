@@ -2,6 +2,7 @@
 import { ModuleBase, PortType, ModuleInterface } from './ModuleBase';
 import { moduleInitManager } from './ModuleInitManager';
 import { AudioInputHandler } from './AudioInputHandler';
+import { BehaviorSubject } from 'rxjs';
 
 /**
  * 音频模块基类，提供Tone.js初始化和音频处理的通用方法
@@ -23,6 +24,9 @@ export abstract class AudioModuleBase extends ModuleBase {
   }> = [];
   // 音频处理器对象
   protected audioInputHandler: AudioInputHandler | null = null;
+  
+  // 模块启用状态（新增）
+  public enabled: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true);
 
   constructor(
     moduleType: string,
@@ -30,9 +34,16 @@ export abstract class AudioModuleBase extends ModuleBase {
     name: string,
     parameters: { [key: string]: any } = {},
     inputPorts: { [key: string]: { type: PortType; value: ModuleInterface } } = {},
-    outputPorts: { [key: string]: { type: PortType; value: ModuleInterface } } = {}
+    outputPorts: { [key: string]: { type: PortType; value: ModuleInterface } } = {},
+    initialEnabled: boolean = true // 新增初始启用状态参数
   ) {
     super(moduleType, id, name, parameters, inputPorts, outputPorts);
+
+    // 初始化启用状态
+    this.enabled.next(initialEnabled);
+
+    // 监听启用状态变化
+    this.handleEnabledChange();
 
     // 注册为待初始化模块
     moduleInitManager.registerPendingModule(this.id);
@@ -41,6 +52,48 @@ export abstract class AudioModuleBase extends ModuleBase {
     if (typeof window !== 'undefined') {
       this.initializeTone();
     }
+  }
+
+  /**
+   * 获取模块启用状态
+   */
+  public isEnabled(): boolean {
+    return this.enabled.getValue();
+  }
+
+  /**
+   * 设置模块启用状态
+   */
+  public setEnabled(value: boolean): void {
+    if (this.enabled.getValue() !== value) {
+      this.enabled.next(value);
+    }
+  }
+
+  /**
+   * 切换模块启用状态
+   */
+  public toggleEnabled(): void {
+    this.enabled.next(!this.enabled.getValue());
+  }
+
+  /**
+   * 处理模块启用状态变化
+   * 子类可以重写此方法以实现特定的启用/禁用行为
+   */
+  protected handleEnabledChange(): void {
+    const enabledSubscription = this.enabled.subscribe(enabled => {
+      this.onEnabledStateChanged(enabled);
+    });
+    this.addInternalSubscription(enabledSubscription);
+  }
+
+  /**
+   * 当模块启用状态改变时的回调
+   * 子类应该重写此方法以实现特定的启用/禁用行为
+   */
+  protected onEnabledStateChanged(_enabled: boolean): void {
+    // 默认实现为空，由子类覆盖
   }
 
   /**
