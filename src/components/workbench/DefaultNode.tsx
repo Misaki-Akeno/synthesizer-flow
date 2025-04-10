@@ -199,6 +199,8 @@ const InputPort = ({
         id={portKey}
         style={{ top: portPosition, backgroundColor: portColor }}
         className="w-2 h-2"
+        isConnectable={true}
+        data-port-type={portType} // 添加自定义属性存储端口类型
       />
       {isSelected && (
         <div
@@ -256,6 +258,8 @@ const OutputPort = ({
         id={portKey}
         style={{ top: portPosition, backgroundColor: portColor }}
         className="w-2 h-2"
+        isConnectable={true}
+        data-port-type={portType} // 添加自定义属性存储端口类型
       />
       {isSelected && (
         <div
@@ -410,8 +414,8 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
         !moduleEnabled ? 'opacity-50' : ''
       }`}
     >
-      {/* 模块标题栏 */}
-      <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center">
+      {/* 模块标题栏 - 添加 node-drag-handle 类作为拖动句柄 */}
+      <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center node-drag-handle cursor-move">
         <div>{data.label || moduleInstance?.name || "模块"}</div>
         
         {/* 启用/禁用切换按钮 */}

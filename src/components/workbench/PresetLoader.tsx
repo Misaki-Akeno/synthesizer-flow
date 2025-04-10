@@ -10,7 +10,16 @@ const PresetLoader: React.FC = () => {
   // 使用ref记录上一次的edges长度
   const prevEdgesLength = useRef(0);
   
-  // 在nodes和edges都准备好后，建立模块间绑定
+  // 在组件挂载时，如果没有选择预设则加载默认预设
+  useEffect(() => {
+    if (!currentPresetId) {
+      const defaultPreset = presetManager.getPreset('major-chord');
+      if (defaultPreset) {
+        loadPreset(defaultPreset.id);
+      }
+    }
+  }, [currentPresetId, loadPreset]);
+  
   useEffect(() => {
     if (edges.length > 0 && nodes.length > 0) {
       // 确保所有节点已加载，且edges有变化时才重新绑定

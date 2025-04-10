@@ -49,6 +49,7 @@ export class ModuleManager {
       id,
       position,
       type: 'default', // 节点的视觉类型，可以根据需要调整
+      dragHandle: '.node-drag-handle', // 指定标题栏为拖动句柄
       data: {
         module: moduleInstance,
       },
@@ -197,6 +198,7 @@ export class ModuleManager {
         id,
         position,
         type: 'default',
+        dragHandle: '.node-drag-handle', // 指定标题栏为拖动句柄
         data: {
           module: moduleInstance,
           label,
