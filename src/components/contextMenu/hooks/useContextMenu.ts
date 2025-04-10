@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import { useContext, useCallback } from 'react';
 import { ContextMenuContext } from '../ContextMenuProvider';

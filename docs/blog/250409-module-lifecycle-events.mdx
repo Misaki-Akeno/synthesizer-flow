@@ -32,13 +32,13 @@ summary: '通过实现基于事件的模块生命周期管理系统，Synthesize
 
 ```typescript
 export enum ModuleLifecycleEvent {
-  REGISTERED = 'registered',    // 模块注册阶段
+  REGISTERED = 'registered', // 模块注册阶段
   INITIALIZING = 'initializing', // 模块初始化中
-  INITIALIZED = 'initialized',   // 模块初始化完成
-  CONNECTED = 'connected',       // 模块连接建立
+  INITIALIZED = 'initialized', // 模块初始化完成
+  CONNECTED = 'connected', // 模块连接建立
   DISCONNECTED = 'disconnected', // 模块连接断开
-  DISPOSED = 'disposed',         // 模块销毁
-  ERROR = 'error'                // 模块发生错误
+  DISPOSED = 'disposed', // 模块销毁
+  ERROR = 'error', // 模块发生错误
 }
 ```
 

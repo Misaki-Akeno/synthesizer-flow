@@ -5,7 +5,13 @@ import { ModuleBase, ParameterType, PortType } from '../../core/ModuleBase';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useFlowStore } from '../../store/store';
 import { useModuleSubscription } from '../../hooks/useModuleSubscription';
 import React from 'react';
@@ -38,8 +44,10 @@ const NumberParameterControl = ({
   updateParameter: (key: string, value: number) => void;
 }) => {
   // 使用useEffect来确保inputValue总是跟随value的变化而更新
-  const [inputValue, setInputValue] = useState<string>(typeof value === 'number' ? value.toFixed(2) : '0.00');
-  
+  const [inputValue, setInputValue] = useState<string>(
+    typeof value === 'number' ? value.toFixed(2) : '0.00'
+  );
+
   // 当外部value变化时更新输入框的值
   React.useEffect(() => {
     setInputValue(typeof value === 'number' ? value.toFixed(2) : '0.00');
@@ -98,7 +106,7 @@ const NumberParameterControl = ({
         value={[typeof value === 'number' ? value : 0]}
         min={min}
         max={max}
-        step={step} 
+        step={step}
         onValueChange={handleSliderChange}
       />
     </div>
@@ -106,19 +114,19 @@ const NumberParameterControl = ({
 };
 
 // 布尔参数控制组件
-const BooleanParameterControl = ({ 
-  paramKey, 
-  value, 
-  updateParameter 
-}: { 
-  paramKey: string, 
-  value: boolean, 
-  updateParameter: (key: string, value: boolean) => void 
+const BooleanParameterControl = ({
+  paramKey,
+  value,
+  updateParameter,
+}: {
+  paramKey: string;
+  value: boolean;
+  updateParameter: (key: string, value: boolean) => void;
 }) => (
   <div className="mb-3">
     <div className="flex justify-between items-center text-xs">
       <span>{paramKey}:</span>
-      <Switch 
+      <Switch
         checked={Boolean(value)}
         onCheckedChange={(checked) => updateParameter(paramKey, checked)}
       />
@@ -127,30 +135,30 @@ const BooleanParameterControl = ({
 );
 
 // 列表参数控制组件
-const ListParameterControl = ({ 
-  paramKey, 
-  value, 
+const ListParameterControl = ({
+  paramKey,
+  value,
   options,
-  updateParameter 
-}: { 
-  paramKey: string, 
-  value: string, 
-  options: string[],
-  updateParameter: (key: string, value: string) => void 
+  updateParameter,
+}: {
+  paramKey: string;
+  value: string;
+  options: string[];
+  updateParameter: (key: string, value: string) => void;
 }) => (
   <div className="mb-3">
     <div className="flex justify-between text-xs mb-1">
       <span>{paramKey}:</span>
     </div>
-    <Select 
-      value={String(value)} 
+    <Select
+      value={String(value)}
       onValueChange={(val) => updateParameter(paramKey, val)}
     >
       <SelectTrigger className="w-full text-xs h-8">
         <SelectValue placeholder="选择选项" />
       </SelectTrigger>
       <SelectContent>
-        {options.map(option => (
+        {options.map((option) => (
           <SelectItem key={option} value={option}>
             {option}
           </SelectItem>
@@ -178,7 +186,7 @@ const InputPort = ({
 }) => {
   const portColor = module.getPortColor(portType);
   const portPosition = 40 + index * 28; // 将间距从20px增加到25px
-  
+
   // 确定显示的值
   const displayValue = () => {
     if (typeof value === 'number') {
@@ -189,7 +197,7 @@ const InputPort = ({
       return '–';
     }
   };
-  
+
   return (
     <div key={`input-container-${portKey}`}>
       <Handle
@@ -237,7 +245,7 @@ const OutputPort = ({
 }) => {
   const portColor = module.getPortColor(portType);
   const portPosition = 40 + index * 28; // 将间距从20px增加到25px
-  
+
   // 确定显示的值
   const displayValue = () => {
     if (typeof value === 'number') {
@@ -248,7 +256,7 @@ const OutputPort = ({
       return '–';
     }
   };
-  
+
   return (
     <div key={`output-container-${portKey}`} className="text-right">
       <Handle
@@ -313,7 +321,7 @@ const ModuleEnableToggle = ({ module }: { module: AudioModuleBase }) => {
           r="10"
           stroke="currentColor"
           strokeWidth="2"
-          fill={enabled ? "#4ade80" : "transparent"}
+          fill={enabled ? '#4ade80' : 'transparent'}
         />
         {!enabled && (
           <line
@@ -332,45 +340,54 @@ const ModuleEnableToggle = ({ module }: { module: AudioModuleBase }) => {
 
 const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
   const { module: moduleInstance } = data;
-  const updateModuleParameter = useFlowStore(state => state.updateModuleParameter);
-  
+  const updateModuleParameter = useFlowStore(
+    (state) => state.updateModuleParameter
+  );
+
   // 使用自定义Hook获取模块数据
-  const { 
-    paramValues, 
-    inputPortValues, inputPortTypes,
-    outputPortValues, outputPortTypes
+  const {
+    paramValues,
+    inputPortValues,
+    inputPortTypes,
+    outputPortValues,
+    outputPortTypes,
   } = useModuleSubscription(moduleInstance);
-  
+
   // 追踪模块是否启用的状态
   const [moduleEnabled, setModuleEnabled] = useState(
-    moduleInstance instanceof AudioModuleBase ? moduleInstance.isEnabled() : true
+    moduleInstance instanceof AudioModuleBase
+      ? moduleInstance.isEnabled()
+      : true
   );
-  
+
   // 监听模块的启用状态变化
   React.useEffect(() => {
     if (moduleInstance instanceof AudioModuleBase) {
-      const subscription = moduleInstance.enabled.subscribe(enabled => {
+      const subscription = moduleInstance.enabled.subscribe((enabled) => {
         setModuleEnabled(enabled);
       });
-      
+
       return () => subscription.unsubscribe();
     }
   }, [moduleInstance]);
-  
+
   // 参数更新处理函数
-  const handleParameterChange = (paramKey: string, value: number | boolean | string) => {
+  const handleParameterChange = (
+    paramKey: string,
+    value: number | boolean | string
+  ) => {
     if (moduleInstance) {
       updateModuleParameter(id, paramKey, value);
     }
   };
-  
+
   // 渲染参数控制器
   const renderParameterControl = (paramKey: string) => {
     if (!moduleInstance) return null;
-    
+
     const meta = moduleInstance.getParameterMeta(paramKey);
     const value = paramValues[paramKey];
-    
+
     switch (meta.type) {
       case ParameterType.NUMBER:
         return (
@@ -407,53 +424,56 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
         return <div key={paramKey}>未知参数类型</div>;
     }
   };
-  
+
   return (
-    <div 
+    <div
       className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${
         !moduleEnabled ? 'opacity-50' : ''
       }`}
     >
       {/* 模块标题栏 - 添加 node-drag-handle 类作为拖动句柄 */}
       <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center node-drag-handle cursor-move">
-        <div>{data.label || moduleInstance?.name || "模块"}</div>
-        
+        <div>{data.label || moduleInstance?.name || '模块'}</div>
+
         {/* 启用/禁用切换按钮 */}
         {moduleInstance instanceof AudioModuleBase && (
           <ModuleEnableToggle module={moduleInstance} />
         )}
       </div>
-      
+
       {/* 参数控制列表 */}
-      {moduleInstance && Object.keys(moduleInstance.parameters).map(renderParameterControl)}
-      
+      {moduleInstance &&
+        Object.keys(moduleInstance.parameters).map(renderParameterControl)}
+
       {/* 输入端口列表 */}
-      {moduleInstance && Object.keys(moduleInstance.inputPorts).map((inputKey, index) => (
-        <InputPort
-          key={inputKey}
-          portKey={inputKey}
-          value={inputPortValues[inputKey]}
-          portType={inputPortTypes[inputKey] || PortType.NUMBER}
-          index={index}
-          module={moduleInstance}
-          isSelected={!!selected}
-        />
-      ))}
-      
+      {moduleInstance &&
+        Object.keys(moduleInstance.inputPorts).map((inputKey, index) => (
+          <InputPort
+            key={inputKey}
+            portKey={inputKey}
+            value={inputPortValues[inputKey]}
+            portType={inputPortTypes[inputKey] || PortType.NUMBER}
+            index={index}
+            module={moduleInstance}
+            isSelected={!!selected}
+          />
+        ))}
+
       {/* 输出端口列表 */}
-      {moduleInstance && Object.keys(moduleInstance.outputPorts).map((outputKey, index) => (
-        <OutputPort
-          key={outputKey}
-          portKey={outputKey}
-          value={outputPortValues[outputKey]}
-          portType={outputPortTypes[outputKey] || PortType.NUMBER}
-          index={index}
-          module={moduleInstance}
-          isSelected={!!selected}
-        />
-      ))}
+      {moduleInstance &&
+        Object.keys(moduleInstance.outputPorts).map((outputKey, index) => (
+          <OutputPort
+            key={outputKey}
+            portKey={outputKey}
+            value={outputPortValues[outputKey]}
+            portType={outputPortTypes[outputKey] || PortType.NUMBER}
+            index={index}
+            module={moduleInstance}
+            isSelected={!!selected}
+          />
+        ))}
     </div>
   );
-}
- 
+};
+
 export default memo(DefaultNode);

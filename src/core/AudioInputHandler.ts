@@ -30,10 +30,12 @@ export class AudioInputHandler {
    */
   private setupMixer(): void {
     if (!this.Tone) {
-      console.warn('[AudioInputHandler] Cannot setup mixer: Tone.js instance not available');
+      console.warn(
+        '[AudioInputHandler] Cannot setup mixer: Tone.js instance not available'
+      );
       return;
     }
-    
+
     // 创建增益节点作为混合器
     this.mixer = new this.Tone.Gain(1);
     // 将混合器连接到目标节点
@@ -47,29 +49,38 @@ export class AudioInputHandler {
    * @param sourcePortName 源端口名
    * @returns 是否成功连接
    */
-  public handleInput(audioInput: any, sourceModuleId: string, sourcePortName: string): boolean {
+  public handleInput(
+    audioInput: any,
+    sourceModuleId: string,
+    sourcePortName: string
+  ): boolean {
     if (!this.mixer) {
-      console.warn('[AudioInputHandler] Cannot handle input: mixer not initialized');
+      console.warn(
+        '[AudioInputHandler] Cannot handle input: mixer not initialized'
+      );
       return false;
     }
-    
+
     const connectionKey = `${sourceModuleId}:${sourcePortName}`;
-    
+
     // 检查连接是否已存在且相同
     if (this.audioInputs.has(connectionKey)) {
       const existingInput = this.audioInputs.get(connectionKey);
       if (existingInput === audioInput) {
         return true; // 连接已存在，无需重新连接
       }
-      
+
       // 断开旧连接
       try {
         existingInput.disconnect(this.mixer);
       } catch (error) {
-        console.warn(`[AudioInputHandler] Error disconnecting previous audio:`, error);
+        console.warn(
+          `[AudioInputHandler] Error disconnecting previous audio:`,
+          error
+        );
       }
     }
-    
+
     // 如果新的音频输入有效，则连接它
     if (audioInput) {
       try {
@@ -77,7 +88,10 @@ export class AudioInputHandler {
         this.audioInputs.set(connectionKey, audioInput);
         return true;
       } catch (error) {
-        console.error(`[AudioInputHandler] Error connecting audio from ${connectionKey}:`, error);
+        console.error(
+          `[AudioInputHandler] Error connecting audio from ${connectionKey}:`,
+          error
+        );
         return false;
       }
     } else {
@@ -92,9 +106,12 @@ export class AudioInputHandler {
    * @param sourceModuleId 可选的源模块ID
    * @param sourcePortName 可选的源端口名
    */
-  public handleDisconnect(sourceModuleId?: string, sourcePortName?: string): void {
+  public handleDisconnect(
+    sourceModuleId?: string,
+    sourcePortName?: string
+  ): void {
     if (!this.mixer) return;
-    
+
     // 如果指定了源模块和端口，只断开特定连接
     if (sourceModuleId && sourcePortName) {
       const connectionKey = `${sourceModuleId}:${sourcePortName}`;
@@ -109,7 +126,7 @@ export class AudioInputHandler {
           console.warn(`[AudioInputHandler] Error disconnecting audio:`, error);
         }
       }
-    } 
+    }
     // 如果只指定了源模块，断开来自该模块的所有连接
     else if (sourceModuleId) {
       const keysToRemove: string[] = [];
@@ -119,12 +136,15 @@ export class AudioInputHandler {
             audioInput.disconnect(this.mixer);
             keysToRemove.push(key);
           } catch (error) {
-            console.warn(`[AudioInputHandler] Error disconnecting audio:`, error);
+            console.warn(
+              `[AudioInputHandler] Error disconnecting audio:`,
+              error
+            );
           }
         }
       });
-      
-      keysToRemove.forEach(key => this.audioInputs.delete(key));
+
+      keysToRemove.forEach((key) => this.audioInputs.delete(key));
     }
     // 如果没有指定源，断开所有连接
     else {
@@ -135,7 +155,7 @@ export class AudioInputHandler {
           console.warn(`[AudioInputHandler] Error disconnecting audio:`, error);
         }
       });
-      
+
       this.audioInputs.clear();
     }
   }
@@ -159,7 +179,7 @@ export class AudioInputHandler {
    */
   public dispose(): void {
     this.handleDisconnect();
-    
+
     if (this.mixer) {
       try {
         this.mixer.dispose();

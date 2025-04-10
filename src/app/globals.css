@@ -79,7 +79,7 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  
+
   .react-flow__node-default {
     padding: 0;
   }
@@ -95,7 +95,7 @@
     border: none;
     box-shadow: none;
   }
-  
+
   .react-flow__node-default {
     padding: 0;
     width: auto;
@@ -106,7 +106,7 @@
     background-color: transparent;
     box-shadow: none;
   }
-  
+
   /* 清除选中节点的黑边 */
   .react-flow__node.selected,
   .react-flow__node-default.selected,
@@ -117,7 +117,7 @@
     border: none !important;
     box-shadow: none !important;
   }
-  
+
   .react-flow__handle {
     width: 10px;
     height: 10px;
@@ -125,12 +125,12 @@
     background-color: var(--primary);
     border: 1px solid var(--background);
   }
-  
+
   .react-flow__edge-path {
     stroke: var(--border);
     stroke-width: 2;
   }
-  
+
   .react-flow__attribution {
     display: none;
   }

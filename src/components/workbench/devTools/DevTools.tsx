@@ -84,10 +84,7 @@ export default function DevTools() {
         {/* 内容区域 */}
         {isOpen && (
           <div className="overflow-y-auto max-h-[80vh]">
-            <Accordion
-              type="multiple"
-              defaultValue={['edge-module-logger']}
-            >
+            <Accordion type="multiple" defaultValue={['edge-module-logger']}>
               <DevToolSection id="edge-module-logger" title="边和模块信息">
                 <div className="px-4 py-2">
                   <EdgeModuleLogger />

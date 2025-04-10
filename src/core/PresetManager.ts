@@ -29,7 +29,7 @@ export interface PresetEdge {
 
 export class PresetManager {
   private presets: Preset[];
-  
+
   constructor(initialPresets: Preset[] = []) {
     // 深拷贝预设，避免引用问题
     this.presets = JSON.parse(JSON.stringify(initialPresets));
@@ -46,10 +46,13 @@ export class PresetManager {
   }
 
   // 加载预设
-  loadPresetWithModules(presetId: string): { nodes: FlowNode[]; edges: Edge[] } {
+  loadPresetWithModules(presetId: string): {
+    nodes: FlowNode[];
+    edges: Edge[];
+  } {
     const preset = this.getPreset(presetId) || this.presets[0];
     if (!preset) {
-      throw new Error("No presets available");
+      throw new Error('No presets available');
     }
     const presetNodes = JSON.parse(JSON.stringify(preset.nodes));
     const presetEdges = JSON.parse(JSON.stringify(preset.edges));
@@ -194,5 +197,3 @@ const majorChordPreset: Preset = {
 
 // 创建并导出预设管理器实例
 export const presetManager = new PresetManager([majorChordPreset]);
-
-

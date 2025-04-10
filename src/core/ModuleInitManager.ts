@@ -9,7 +9,7 @@ export enum ModuleLifecycleEvent {
   CONNECTED = 'connected',
   DISCONNECTED = 'disconnected',
   DISPOSED = 'disposed',
-  ERROR = 'error'
+  ERROR = 'error',
 }
 
 /**
@@ -29,7 +29,10 @@ class ModuleInitManager {
   // 初始化完成的回调函数
   private initCallbacks: Map<string, (() => void)[]> = new Map();
   // 生命周期事件订阅
-  private lifecycleSubscribers: Map<ModuleLifecycleEvent, ModuleLifecycleCallback[]> = new Map();
+  private lifecycleSubscribers: Map<
+    ModuleLifecycleEvent,
+    ModuleLifecycleCallback[]
+  > = new Map();
 
   /**
    * 注册一个需要异步初始化的模块
@@ -52,11 +55,11 @@ class ModuleInitManager {
     this.pendingModules.delete(moduleId);
     this.initializedModules.add(moduleId);
     this.emitLifecycleEvent(ModuleLifecycleEvent.INITIALIZED, moduleId);
-    
+
     // 触发该模块的初始化完成回调
     if (this.initCallbacks.has(moduleId)) {
       const callbacks = this.initCallbacks.get(moduleId) || [];
-      callbacks.forEach(callback => callback());
+      callbacks.forEach((callback) => callback());
       this.initCallbacks.delete(moduleId);
     }
   }
@@ -87,14 +90,14 @@ class ModuleInitManager {
     if (this.isModuleInitialized(moduleId)) {
       return Promise.resolve();
     }
-    
+
     // 如果模块不在等待列表中也不在已完成列表中，返回错误
     if (!this.isModulePending(moduleId)) {
       return Promise.reject(new Error(`Module ${moduleId} is not registered`));
     }
-    
+
     // 否则返回一个Promise，当模块初始化完成时解析
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       if (!this.initCallbacks.has(moduleId)) {
         this.initCallbacks.set(moduleId, []);
       }
@@ -122,14 +125,17 @@ class ModuleInitManager {
    * @param callback 回调函数
    * @returns 取消订阅的函数
    */
-  public subscribeToLifecycle(event: ModuleLifecycleEvent, callback: ModuleLifecycleCallback): () => void {
+  public subscribeToLifecycle(
+    event: ModuleLifecycleEvent,
+    callback: ModuleLifecycleCallback
+  ): () => void {
     if (!this.lifecycleSubscribers.has(event)) {
       this.lifecycleSubscribers.set(event, []);
     }
-    
+
     const callbacks = this.lifecycleSubscribers.get(event)!;
     callbacks.push(callback);
-    
+
     return () => {
       const index = callbacks.indexOf(callback);
       if (index !== -1) {
@@ -144,9 +150,13 @@ class ModuleInitManager {
    * @param moduleId 模块ID
    * @param data 附加数据
    */
-  public emitLifecycleEvent(event: ModuleLifecycleEvent, moduleId: string, data?: any): void {
+  public emitLifecycleEvent(
+    event: ModuleLifecycleEvent,
+    moduleId: string,
+    data?: any
+  ): void {
     const callbacks = this.lifecycleSubscribers.get(event) || [];
-    callbacks.forEach(callback => callback(moduleId, data));
+    callbacks.forEach((callback) => callback(moduleId, data));
   }
 
   /**
@@ -155,7 +165,9 @@ class ModuleInitManager {
    * @param targetId 目标模块ID
    */
   public recordConnection(sourceId: string, targetId: string): void {
-    this.emitLifecycleEvent(ModuleLifecycleEvent.CONNECTED, sourceId, { targetId });
+    this.emitLifecycleEvent(ModuleLifecycleEvent.CONNECTED, sourceId, {
+      targetId,
+    });
   }
 
   /**
@@ -164,7 +176,9 @@ class ModuleInitManager {
    * @param targetId 目标模块ID
    */
   public recordDisconnection(sourceId: string, targetId: string): void {
-    this.emitLifecycleEvent(ModuleLifecycleEvent.DISCONNECTED, sourceId, { targetId });
+    this.emitLifecycleEvent(ModuleLifecycleEvent.DISCONNECTED, sourceId, {
+      targetId,
+    });
   }
 
   /**
@@ -184,6 +198,34 @@ class ModuleInitManager {
    */
   public recordError(moduleId: string, error: any): void {
     this.emitLifecycleEvent(ModuleLifecycleEvent.ERROR, moduleId, { error });
+  }
+
+  /**
+   * 当所有模块初始化完成时执行回调
+   * @param callback 所有模块初始化完成后要执行的回调函数
+   */
+  public onAllModulesReady(callback: () => void): void {
+    // 如果没有待初始化的模块，立即执行回调
+    if (this.pendingModules.size === 0) {
+      callback();
+      return;
+    }
+
+    // 否则，订阅初始化事件，当所有模块都初始化完成时执行回调
+    const checkAndExecute = (_moduleId: string) => {
+      if (this.pendingModules.size === 0) {
+        // 所有模块都已初始化，执行回调
+        callback();
+        // 移除监听器，避免内存泄漏
+        unsubscribe();
+      }
+    };
+
+    // 订阅初始化事件
+    const unsubscribe = this.subscribeToLifecycle(
+      ModuleLifecycleEvent.INITIALIZED,
+      checkAndExecute
+    );
   }
 
   /**

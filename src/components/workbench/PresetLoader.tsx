@@ -6,10 +6,10 @@ import { moduleManager } from '../../core/ModuleManager';
 const PresetLoader: React.FC = () => {
   const { currentPresetId, loadPreset, edges, nodes } = useFlowStore();
   const presets = presetManager.getPresets();
-  
+
   // 使用ref记录上一次的edges长度
   const prevEdgesLength = useRef(0);
-  
+
   // 在组件挂载时，如果没有选择预设则加载默认预设
   useEffect(() => {
     if (!currentPresetId) {
@@ -19,14 +19,12 @@ const PresetLoader: React.FC = () => {
       }
     }
   }, [currentPresetId, loadPreset]);
-  
+
   useEffect(() => {
     if (edges.length > 0 && nodes.length > 0) {
-      // 确保所有节点已加载，且edges有变化时才重新绑定
-      // 这样避免了不必要的重复绑定
       if (edges.length !== prevEdgesLength.current) {
         prevEdgesLength.current = edges.length;
-        
+
         // 使用requestAnimationFrame确保在下一帧渲染时执行，
         // 此时React已完成DOM更新，节点都已添加到状态中
         requestAnimationFrame(() => {

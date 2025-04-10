@@ -24,7 +24,7 @@ export abstract class AudioModuleBase extends ModuleBase {
   }> = [];
   // 音频处理器对象
   protected audioInputHandler: AudioInputHandler | null = null;
-  
+
   // 模块启用状态（新增）
   public enabled: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true);
 
@@ -33,8 +33,12 @@ export abstract class AudioModuleBase extends ModuleBase {
     id: string,
     name: string,
     parameters: { [key: string]: any } = {},
-    inputPorts: { [key: string]: { type: PortType; value: ModuleInterface } } = {},
-    outputPorts: { [key: string]: { type: PortType; value: ModuleInterface } } = {},
+    inputPorts: {
+      [key: string]: { type: PortType; value: ModuleInterface };
+    } = {},
+    outputPorts: {
+      [key: string]: { type: PortType; value: ModuleInterface };
+    } = {},
     initialEnabled: boolean = true // 新增初始启用状态参数
   ) {
     super(moduleType, id, name, parameters, inputPorts, outputPorts);
@@ -82,7 +86,7 @@ export abstract class AudioModuleBase extends ModuleBase {
    * 子类可以重写此方法以实现特定的启用/禁用行为
    */
   protected handleEnabledChange(): void {
-    const enabledSubscription = this.enabled.subscribe(enabled => {
+    const enabledSubscription = this.enabled.subscribe((enabled) => {
       this.onEnabledStateChanged(enabled);
     });
     this.addInternalSubscription(enabledSubscription);
@@ -103,18 +107,21 @@ export abstract class AudioModuleBase extends ModuleBase {
     try {
       const ToneModule = await import('tone');
       this.Tone = ToneModule;
-      
+
       // 执行子类特定的初始化
       await this.initializeAudio();
-      
+
       // 标记初始化完成
       this.initialized = true;
       moduleInitManager.markModuleAsInitialized(this.id);
-      
+
       // 处理待处理的音频输入
       this.processPendingInputs();
     } catch (error) {
-      console.error(`[${this.moduleType}Module ${this.id}] Failed to initialize Tone.js:`, error);
+      console.error(
+        `[${this.moduleType}Module ${this.id}] Failed to initialize Tone.js:`,
+        error
+      );
     }
   }
 
@@ -128,12 +135,18 @@ export abstract class AudioModuleBase extends ModuleBase {
    */
   protected processPendingInputs(): void {
     if (!this.initialized || !this.audioInputHandler) return;
-    
+
     // 处理所有待处理的输入
-    this.pendingAudioInputs.forEach(({sourceModuleId, sourcePortName, audioInput}) => {
-      this.audioInputHandler?.handleInput(audioInput, sourceModuleId, sourcePortName);
-    });
-    
+    this.pendingAudioInputs.forEach(
+      ({ sourceModuleId, sourcePortName, audioInput }) => {
+        this.audioInputHandler?.handleInput(
+          audioInput,
+          sourceModuleId,
+          sourcePortName
+        );
+      }
+    );
+
     // 清空队列
     this.pendingAudioInputs = [];
   }
@@ -169,53 +182,67 @@ export abstract class AudioModuleBase extends ModuleBase {
    * @param immediate 是否立即设置（跳过渐变）
    */
   protected applyParameterRamp(
-    audioParam: any, 
-    value: number, 
+    audioParam: any,
+    value: number,
     rampTime: number = this.fadeTime,
     immediate: boolean = false
   ): void {
     if (!audioParam || !this.Tone) return;
-    
+
     try {
       if (immediate) {
         audioParam.value = value;
         return;
       }
-      
+
       // 检查当前值是否已经很接近目标值，如果是则不需要渐变
-      const currentValue = audioParam.value !== undefined ? audioParam.value : (typeof audioParam.getValue === 'function' ? audioParam.getValue() : null);
+      const currentValue =
+        audioParam.value !== undefined
+          ? audioParam.value
+          : typeof audioParam.getValue === 'function'
+            ? audioParam.getValue()
+            : null;
       if (currentValue !== null && Math.abs(currentValue - value) < 0.001) {
         return;
       }
-      
+
       audioParam.cancelScheduledValues(this.Tone.now());
-      
+
       // 检查是否支持 rampTo 方法
       if (typeof audioParam.rampTo === 'function') {
         audioParam.rampTo(value, rampTime);
-      } 
+      }
       // 检查是否支持 linearRampToValueAtTime 方法（原生 Web Audio API）
       else if (typeof audioParam.linearRampToValueAtTime === 'function') {
         const now = this.Tone.now();
         audioParam.linearRampToValueAtTime(value, now + rampTime);
-      } 
+      }
       // 如果以上方法都不支持，则使用 setValueAtTime 和 linearRampToValueAtTime 组合
-      else if (typeof audioParam.setValueAtTime === 'function' && typeof audioParam.linearRampToValueAtTime === 'function') {
+      else if (
+        typeof audioParam.setValueAtTime === 'function' &&
+        typeof audioParam.linearRampToValueAtTime === 'function'
+      ) {
         const now = this.Tone.now();
         audioParam.setValueAtTime(audioParam.value, now);
         audioParam.linearRampToValueAtTime(value, now + rampTime);
-      } 
+      }
       // 最后的备选方案：直接设置值
       else {
         audioParam.value = value;
       }
     } catch (error) {
-      console.warn(`[${this.moduleType}Module ${this.id}] Error applying parameter ramp:`, error);
+      console.warn(
+        `[${this.moduleType}Module ${this.id}] Error applying parameter ramp:`,
+        error
+      );
       // 如果渐变失败，尝试直接设置值
       try {
         audioParam.value = value;
       } catch (innerError) {
-        console.error(`[${this.moduleType}Module ${this.id}] Failed to set parameter value:`, innerError);
+        console.error(
+          `[${this.moduleType}Module ${this.id}] Failed to set parameter value:`,
+          innerError
+        );
       }
     }
   }
@@ -234,21 +261,25 @@ export abstract class AudioModuleBase extends ModuleBase {
       this.pendingAudioInputs.push({
         sourceModuleId,
         sourcePortName,
-        audioInput
+        audioInput,
       });
       // 更新输入端口状态
       this.inputPorts[inputPortName].next(audioInput);
       return;
     }
-    
+
     if (this.audioInputHandler) {
-      this.audioInputHandler.handleInput(audioInput, sourceModuleId, sourcePortName);
+      this.audioInputHandler.handleInput(
+        audioInput,
+        sourceModuleId,
+        sourcePortName
+      );
     }
-    
+
     // 更新输入端口状态
     this.inputPorts[inputPortName].next(audioInput);
   }
-  
+
   /**
    * 重写音频断开连接处理方法
    */
@@ -258,10 +289,12 @@ export abstract class AudioModuleBase extends ModuleBase {
     sourcePortName?: string
   ): void {
     if (!this.audioInputHandler) {
-      console.warn(`[${this.moduleType}Module ${this.id}] Cannot handle audio disconnect: AudioInputHandler not initialized`);
+      console.warn(
+        `[${this.moduleType}Module ${this.id}] Cannot handle audio disconnect: AudioInputHandler not initialized`
+      );
       return;
     }
-    
+
     // 使用音频输入处理器处理断开连接
     this.audioInputHandler.handleDisconnect(sourceModuleId, sourcePortName);
   }
@@ -271,7 +304,7 @@ export abstract class AudioModuleBase extends ModuleBase {
    * @param audioNodes 要释放的音频节点列表
    */
   protected disposeAudioNodes(audioNodes: any[]): void {
-    audioNodes.forEach(node => {
+    audioNodes.forEach((node) => {
       if (node) {
         try {
           if (typeof node.stop === 'function') {
@@ -281,7 +314,10 @@ export abstract class AudioModuleBase extends ModuleBase {
             node.dispose();
           }
         } catch (error) {
-          console.warn(`[${this.moduleType}Module ${this.id}] Error disposing audio node:`, error);
+          console.warn(
+            `[${this.moduleType}Module ${this.id}] Error disposing audio node:`,
+            error
+          );
         }
       }
     });
@@ -307,15 +343,23 @@ export abstract class AudioModuleBase extends ModuleBase {
       try {
         // 子类可能有特定的资源清理逻辑，在基类dispose之前已执行
         // 释放Tone.js上下文资源
-        if (this.Tone.context && typeof this.Tone.context.dispose === 'function') {
+        if (
+          this.Tone.context &&
+          typeof this.Tone.context.dispose === 'function'
+        ) {
           // 只有当没有其他模块使用Tone上下文时才释放
-          const activeModules = moduleInitManager.getInitializedModules().length;
-          if (activeModules <= 1) { // 只有当前模块时释放上下文
+          const activeModules =
+            moduleInitManager.getInitializedModules().length;
+          if (activeModules <= 1) {
+            // 只有当前模块时释放上下文
             this.Tone.context.dispose();
           }
         }
       } catch (error) {
-        console.error(`[${this.moduleType}Module ${this.id}] Error disposing Tone resources:`, error);
+        console.error(
+          `[${this.moduleType}Module ${this.id}] Error disposing Tone resources:`,
+          error
+        );
       }
     }
 

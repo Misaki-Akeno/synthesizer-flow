@@ -1,6 +1,12 @@
-'use client'
+'use client';
 
-import React, { createContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import React, {
+  createContext,
+  useState,
+  useCallback,
+  ReactNode,
+  useEffect,
+} from 'react';
 import { ContextMenuState, MenuItem } from './types';
 
 interface ContextMenuContextType {
@@ -26,7 +32,9 @@ interface ContextMenuProviderProps {
   children: ReactNode;
 }
 
-export const ContextMenuProvider: React.FC<ContextMenuProviderProps> = ({ children }) => {
+export const ContextMenuProvider: React.FC<ContextMenuProviderProps> = ({
+  children,
+}) => {
   const [state, setState] = useState<ContextMenuState>(initialState);
 
   const showMenu = useCallback((x: number, y: number, items: MenuItem[]) => {
@@ -57,7 +65,7 @@ export const ContextMenuProvider: React.FC<ContextMenuProviderProps> = ({ childr
 
     // 监听全局点击来关闭菜单
     window.addEventListener('click', handleClick);
-    
+
     // 添加ESC键关闭菜单
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
