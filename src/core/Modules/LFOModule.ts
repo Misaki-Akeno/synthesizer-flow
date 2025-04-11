@@ -33,8 +33,8 @@ export class LFOModule extends AudioModuleBase {
         type: ParameterType.LIST,
         value: 'sine',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
+        uiOptions: { advanced: true }, // 替换folded为uiOptions.advanced
       },
-      // enabled参数已移除
     };
 
     // LFO没有输入端口

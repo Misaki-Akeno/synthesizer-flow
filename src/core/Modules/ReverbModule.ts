@@ -33,8 +33,8 @@ export class ReverbModule extends AudioModuleBase {
         min: 0,
         max: 0.5,
         step: 0.01,
+        uiOptions: { advanced: true }, // 替换folded为uiOptions.advanced
       },
-      // bypass参数已移除
     };
 
     // 定义输入和输出端口

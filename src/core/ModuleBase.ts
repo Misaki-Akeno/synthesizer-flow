@@ -29,6 +29,10 @@ export interface ParameterDefinition {
   max?: number;
   step?: number;
   options?: string[]; // 用于LIST类型，选项列表
+  uiOptions?: { // 用于UI相关配置
+    advanced?: boolean; // 表示是否为高级参数（应被折叠）
+    [key: string]: unknown; // 允许其他UI配置选项
+  };
 }
 
 // 端口颜色映射
@@ -57,6 +61,10 @@ export abstract class ModuleBase {
       max?: number;
       step?: number;
       options?: string[];
+      uiOptions?: {
+        advanced?: boolean;
+        [key: string]: unknown;
+      };
     };
   };
 
@@ -105,6 +113,7 @@ export abstract class ModuleBase {
         max: param.max,
         step: param.step,
         options: param.options,
+        uiOptions: param.uiOptions,
       };
     }
 
@@ -139,6 +148,10 @@ export abstract class ModuleBase {
     max?: number;
     step?: number;
     options?: string[];
+    uiOptions?: {
+      advanced?: boolean;
+      [key: string]: unknown;
+    };
   } {
     return (
       this.parameterMeta[paramKey] || {
@@ -146,6 +159,7 @@ export abstract class ModuleBase {
         min: 0,
         max: 1,
         step: 0.1,
+        uiOptions: { advanced: false },
       }
     );
   }

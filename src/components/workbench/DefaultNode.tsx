@@ -353,6 +353,9 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     outputPortTypes,
   } = useModuleSubscription(moduleInstance);
 
+  // 折叠参数抽屉的展开状态
+  const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
+
   // 追踪模块是否启用的状态
   const [moduleEnabled, setModuleEnabled] = useState(
     moduleInstance instanceof AudioModuleBase
@@ -379,6 +382,11 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     if (moduleInstance) {
       updateModuleParameter(id, paramKey, value);
     }
+  };
+
+  // 切换高级参数抽屉的展开状态
+  const toggleAdvancedParams = () => {
+    setIsAdvancedExpanded(!isAdvancedExpanded);
   };
 
   // 渲染参数控制器
@@ -424,6 +432,24 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
         return <div key={paramKey}>未知参数类型</div>;
     }
   };
+  
+  // 将参数分为主要参数和高级参数
+  const mainParameters: string[] = [];
+  const advancedParameters: string[] = [];
+  
+  if (moduleInstance) {
+    Object.keys(moduleInstance.parameters).forEach(paramKey => {
+      const meta = moduleInstance.getParameterMeta(paramKey);
+      if (meta.uiOptions?.advanced) {
+        advancedParameters.push(paramKey);
+      } else {
+        mainParameters.push(paramKey);
+      }
+    });
+  }
+  
+  // 检查是否有高级参数
+  const hasAdvancedParams = advancedParameters.length > 0;
 
   return (
     <div
@@ -431,7 +457,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
         !moduleEnabled ? 'opacity-50' : ''
       }`}
     >
-      {/* 模块标题栏 - 添加 node-drag-handle 类作为拖动句柄 */}
+      {/* 模块标题栏 */}
       <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center node-drag-handle cursor-move">
         <div>{data.label || moduleInstance?.name || '模块'}</div>
 
@@ -441,9 +467,36 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
         )}
       </div>
 
-      {/* 参数控制列表 */}
-      {moduleInstance &&
-        Object.keys(moduleInstance.parameters).map(renderParameterControl)}
+      {/* 主要参数控制列表 */}
+      {moduleInstance && mainParameters.map(renderParameterControl)}
+
+      {/* 高级参数抽屉切换按钮 */}
+      {hasAdvancedParams && (
+        <div 
+          className="text-xs text-center mt-1 mb-1 cursor-pointer hover:bg-gray-100 py-1 rounded flex items-center justify-center"
+          onClick={toggleAdvancedParams}
+        >
+          <div className="flex items-center">
+            <span className="mr-1">{isAdvancedExpanded ? '收起高级选项' : '显示高级选项'}</span>
+            <svg
+              className={`w-3 h-3 transition-transform ${isAdvancedExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </div>
+        </div>
+      )}
+
+      {/* 高级参数抽屉 */}
+      {isAdvancedExpanded && hasAdvancedParams && (
+        <div className="border-t pt-2 mt-1 mb-1">
+          {advancedParameters.map(renderParameterControl)}
+        </div>
+      )}
 
       {/* 输入端口列表 */}
       {moduleInstance &&

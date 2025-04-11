@@ -36,14 +36,14 @@ export class OscillatorModule extends AudioModuleBase {
         value: 'sine',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
       },
-      // enabled参数已移除
-      // 调制深度参数
+      // 调制深度参数 - 标记为高级参数
       freqModDepth: {
         type: ParameterType.NUMBER,
         value: 2,
         min: 0,
         max: 20,
         step: 1,
+        uiOptions: { advanced: true }, // 替换folded为uiOptions.advanced
       },
       gainModDepth: {
         type: ParameterType.NUMBER,
@@ -51,6 +51,7 @@ export class OscillatorModule extends AudioModuleBase {
         min: 0,
         max: 1,
         step: 0.05,
+        uiOptions: { advanced: true }, // 替换folded为uiOptions.advanced
       },
     };
 

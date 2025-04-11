@@ -20,7 +20,7 @@ export class SpeakerModule extends AudioModuleBase {
         max: 0,
         step: 0.1,
       },
-      // enabled参数已移除
+
     };
 
     // 定义端口
