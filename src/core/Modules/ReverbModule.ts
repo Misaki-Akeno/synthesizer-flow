@@ -33,7 +33,7 @@ export class ReverbModule extends AudioModuleBase {
         min: 0,
         max: 0.5,
         step: 0.01,
-        uiOptions: { advanced: true }, // 替换folded为uiOptions.advanced
+        uiOptions: { advanced: true },
       },
     };
 
@@ -53,6 +53,23 @@ export class ReverbModule extends AudioModuleBase {
     };
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
+
+    this.setCustomUI('XYPad', {
+      xParam: {
+        paramKey: 'decay',
+        label: 'Decay',
+        min: 0.1,
+        max: 10,
+      },
+      yParam: {
+        paramKey: 'wet',
+        label: 'Wet',
+        min: 0,
+        max: 1.0,
+      },
+      width: 180,
+      height: 120,
+    });
   }
 
   /**

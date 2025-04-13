@@ -1,6 +1,6 @@
 import { Node, Edge } from '@xyflow/react';
 import { ModuleBase } from './ModuleBase';
-import { OscillatorModule } from './Modules/OscillatorModule';
+import { SimpleOscillatorModule } from './Modules/OscillatorModule';
 import { SpeakerModule } from './Modules/SpeakerModule';
 import { ReverbModule } from './Modules/ReverbModule';
 import { PresetNode, PresetEdge } from './PresetManager';
@@ -20,7 +20,7 @@ export class ModuleManager {
     string,
     new (id: string, name: string) => ModuleBase
   > = {
-    oscillator: OscillatorModule,
+    simpleoscillator: SimpleOscillatorModule,
     speaker: SpeakerModule,
     reverb: ReverbModule,
     lfo: LFOModule,

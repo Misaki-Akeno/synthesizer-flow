@@ -68,6 +68,12 @@ export abstract class ModuleBase {
     };
   };
 
+  // 添加自定义UI支持
+  protected customUI?: {
+    type: string;
+    props?: Record<string, unknown>;
+  };
+
   // 输入接口，使用BehaviorSubject
   public inputPorts: { [key: string]: BehaviorSubject<ModuleInterface> };
   // 输出接口，使用BehaviorSubject
@@ -611,6 +617,23 @@ export abstract class ModuleBase {
    */
   protected addInternalSubscriptions(subscriptions: Subscription[]): void {
     subscriptions.forEach((sub) => this.internalSubscriptions.push(sub));
+  }
+
+  /**
+   * 获取模块的自定义UI组件信息
+   * @returns 自定义UI组件信息，包含类型和props
+   */
+  public getCustomUI(): { type: string; props?: Record<string, unknown> } | undefined {
+    return this.customUI;
+  }
+
+  /**
+   * 设置模块的自定义UI
+   * @param type 自定义UI组件类型
+   * @param props 组件属性
+   */
+  protected setCustomUI(type: string, props?: Record<string, unknown>): void {
+    this.customUI = { type, props };
   }
 
   /**

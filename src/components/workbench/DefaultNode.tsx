@@ -16,6 +16,7 @@ import { useFlowStore } from '../../store/store';
 import { useModuleSubscription } from '../../hooks/useModuleSubscription';
 import React from 'react';
 import { AudioModuleBase } from '../../core/AudioModuleBase';
+import { CustomUIComponents } from '../modules/ui';
 
 interface DefaultNodeProps {
   data: {
@@ -432,6 +433,48 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
         return <div key={paramKey}>未知参数类型</div>;
     }
   };
+
+  // 渲染自定义UI组件
+  const renderCustomUI = () => {
+    if (!moduleInstance) return null;
+    
+    const customUI = moduleInstance.getCustomUI();
+    if (!customUI) return null;
+    
+    const { type, props } = customUI;
+    // 使用in操作符检查type是否为有效的组件类型
+    if (!(type in CustomUIComponents)) {
+      return <div className="text-xs text-red-500">未知的自定义UI组件: {type}</div>;
+    }
+    
+    const CustomComponent = CustomUIComponents[type as keyof typeof CustomUIComponents];
+    
+    // 处理参数更改的回调函数
+    const handleParamChange = (paramKey: string, value: number | boolean | string) => {
+      handleParameterChange(paramKey, value);
+    };
+    
+    // 将模块参数和metaData与UI组件props合并
+    return (
+      <div className="custom-ui-container border-t pt-2 mt-2">
+        <CustomComponent 
+        xParam={{
+          paramKey: '',
+          label: undefined,
+          min: 0,
+          max: 0
+        }} yParam={{
+          paramKey: '',
+          label: undefined,
+          min: 0,
+          max: 0
+        }} {...props}
+        module={moduleInstance}
+        paramValues={paramValues}
+        onParamChange={handleParamChange}        />
+      </div>
+    );
+  };
   
   // 将参数分为主要参数和高级参数
   const mainParameters: string[] = [];
@@ -467,17 +510,22 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
         )}
       </div>
 
+      {/* 自定义UI组件 */}
+      {renderCustomUI()}
+
       {/* 主要参数控制列表 */}
       {moduleInstance && mainParameters.map(renderParameterControl)}
 
       {/* 高级参数抽屉切换按钮 */}
       {hasAdvancedParams && (
-        <div 
+        <div
           className="text-xs text-center mt-1 mb-1 cursor-pointer hover:bg-gray-100 py-1 rounded flex items-center justify-center"
           onClick={toggleAdvancedParams}
         >
           <div className="flex items-center">
-            <span className="mr-1">{isAdvancedExpanded ? '收起高级选项' : '显示高级选项'}</span>
+            <span className="mr-1">
+              {isAdvancedExpanded ? '收起高级选项' : '显示高级选项'}
+            </span>
             <svg
               className={`w-3 h-3 transition-transform ${isAdvancedExpanded ? 'rotate-180' : ''}`}
               fill="none"
@@ -485,7 +533,12 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
               viewBox="0 0 24 24"
               xmlns="http://www.w3.org/2000/svg"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M19 9l-7 7-7-7"
+              ></path>
             </svg>
           </div>
         </div>

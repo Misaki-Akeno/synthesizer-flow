@@ -71,7 +71,7 @@ const majorChordPreset: Preset = {
       id: 'mainOscillator',
       position: { x: 300, y: 200 },
       data: {
-        type: 'oscillator',
+        type: 'simpleoscillator',
         label: '主振荡器(C4)',
         parameters: {
           freq: 523,
@@ -107,7 +107,7 @@ const majorChordPreset: Preset = {
       id: 'thirdHarmonicOsc',
       position: { x: 300, y: 550 },
       data: {
-        type: 'oscillator',
+        type: 'simpleoscillator',
         label: '三度音(E4)',
         parameters: {
           freq: 659,
@@ -118,7 +118,7 @@ const majorChordPreset: Preset = {
       id: 'fifthHarmonicOsc',
       position: { x: 300, y: 900 },
       data: {
-        type: 'oscillator',
+        type: 'simpleoscillator',
         label: '五度音(G4)',
         parameters: {
           freq: 784,
@@ -129,7 +129,7 @@ const majorChordPreset: Preset = {
       id: 'bassOscillator',
       position: { x: 300, y: 1250 },
       data: {
-        type: 'oscillator',
+        type: 'simpleoscillator',
         label: '低八度(C3)',
         parameters: {
           freq: 262,
