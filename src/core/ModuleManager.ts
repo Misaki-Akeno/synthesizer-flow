@@ -5,6 +5,8 @@ import { SpeakerModule } from './Modules/SpeakerModule';
 import { ReverbModule } from './Modules/ReverbModule';
 import { PresetNode, PresetEdge } from './PresetManager';
 import { LFOModule } from './Modules/LFOModule';
+import { AdvancedOscillatorModule } from './Modules/AdvancedOscillatorModule';
+import { MIDIInputModule } from './Modules/MIDIInputModule';
 
 // 节点数据接口
 export interface NodeData {
@@ -24,6 +26,8 @@ export class ModuleManager {
     speaker: SpeakerModule,
     reverb: ReverbModule,
     lfo: LFOModule,
+    advancedoscillator: AdvancedOscillatorModule, 
+    midiinput: MIDIInputModule, 
   };
 
   // 创建模块实例

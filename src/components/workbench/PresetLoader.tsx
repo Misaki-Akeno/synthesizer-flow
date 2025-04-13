@@ -4,7 +4,7 @@ import { presetManager } from '../../core/PresetManager';
 import { moduleManager } from '../../core/ModuleManager';
 
 const PresetLoader: React.FC = () => {
-  const { currentPresetId, loadPreset, edges, nodes } = useFlowStore();
+  const { currentPresetId, loadPreset, edges, nodes, getDefaultPresetId } = useFlowStore();
   const presets = presetManager.getPresets();
 
   // 使用ref记录上一次的edges长度
@@ -13,12 +13,12 @@ const PresetLoader: React.FC = () => {
   // 在组件挂载时，如果没有选择预设则加载默认预设
   useEffect(() => {
     if (!currentPresetId) {
-      const defaultPreset = presetManager.getPreset('major-chord');
-      if (defaultPreset) {
-        loadPreset(defaultPreset.id);
+      const defaultPresetId = getDefaultPresetId();
+      if (defaultPresetId) {
+        loadPreset(defaultPresetId);
       }
     }
-  }, [currentPresetId, loadPreset]);
+  }, [currentPresetId, loadPreset, getDefaultPresetId]);
 
   useEffect(() => {
     if (edges.length > 0 && nodes.length > 0) {

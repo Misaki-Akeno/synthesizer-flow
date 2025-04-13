@@ -19,6 +19,7 @@ export class ReverbModule extends AudioModuleBase {
         min: 0.1,
         max: 10.0,
         step: 0.1,
+        uiOptions: { advanced: true },
       },
       wet: {
         type: ParameterType.NUMBER,
@@ -26,6 +27,7 @@ export class ReverbModule extends AudioModuleBase {
         min: 0,
         max: 1.0,
         step: 0.01,
+        uiOptions: { advanced: true },
       },
       preDelay: {
         type: ParameterType.NUMBER,

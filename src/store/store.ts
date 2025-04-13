@@ -24,6 +24,7 @@ interface FlowState {
   onConnect: (connection: Connection) => void;
   loadPreset: (presetId: string) => void;
   getPresets: () => typeof presetManager.getPresets;
+  getDefaultPresetId: () => string;
   updateModuleParameter: (
     nodeId: string,
     paramKey: string,
@@ -37,10 +38,9 @@ interface FlowState {
   addEdge: (source: string, target: string) => void;
 }
 
-const defaultPreset = presetManager.getPreset('major-chord');
-const { nodes: initialNodes, edges: initialEdges } = defaultPreset
-  ? presetManager.loadPresetWithModules(defaultPreset.id)
-  : { nodes: [], edges: [] };
+// 使用PresetManager的默认预设ID
+const defaultPresetId = presetManager.getDefaultPresetId();
+const { nodes: initialNodes, edges: initialEdges } = presetManager.loadPresetWithModules(defaultPresetId);
 
 export const useFlowStore = create<FlowState>((set, get) => {
   // 设置节点获取函数
@@ -49,7 +49,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
   return {
     nodes: initialNodes,
     edges: initialEdges,
-    currentPresetId: defaultPreset?.id || '',
+    currentPresetId: defaultPresetId,
 
     onNodesChange: (changes) => {
       set({
@@ -120,6 +120,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
 
     getPresets: () => presetManager.getPresets,
+    
+    getDefaultPresetId: () => presetManager.getDefaultPresetId(),
 
     updateModuleParameter: (nodeId, paramKey, value) => {
       set({

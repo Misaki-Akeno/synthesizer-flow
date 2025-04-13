@@ -29,10 +29,13 @@ export interface PresetEdge {
 
 export class PresetManager {
   private presets: Preset[];
+  private defaultPresetId: string;
 
-  constructor(initialPresets: Preset[] = []) {
+  constructor(initialPresets: Preset[] = [], defaultPresetId?: string) {
     // 深拷贝预设，避免引用问题
     this.presets = JSON.parse(JSON.stringify(initialPresets));
+    // 设置默认预设ID，如果未指定则使用第一个预设
+    this.defaultPresetId = defaultPresetId || (this.presets.length > 0 ? this.presets[0].id : '');
   }
 
   // 获取所有预设
@@ -45,12 +48,25 @@ export class PresetManager {
     return this.presets.find((p) => p.id === presetId);
   }
 
+  // 获取默认预设ID
+  getDefaultPresetId(): string {
+    return this.defaultPresetId;
+  }
+
+  // 设置默认预设
+  setDefaultPresetId(presetId: string): void {
+    if (this.getPreset(presetId)) {
+      this.defaultPresetId = presetId;
+    }
+  }
+
   // 加载预设
   loadPresetWithModules(presetId: string): {
     nodes: FlowNode[];
     edges: Edge[];
   } {
-    const preset = this.getPreset(presetId) || this.presets[0];
+    // 如果未指定预设ID或者预设不存在，使用默认预设
+    const preset = this.getPreset(presetId) || this.getPreset(this.defaultPresetId) || this.presets[0];
     if (!preset) {
       throw new Error('No presets available');
     }
@@ -195,5 +211,84 @@ const majorChordPreset: Preset = {
   ],
 };
 
-// 创建并导出预设管理器实例
-export const presetManager = new PresetManager([majorChordPreset]);
+
+// MIDI输入测试预设
+const midiInputTestPreset: Preset = {
+  id: 'midi-input-test',
+  name: 'MIDI控制器输入测试',
+  nodes: [
+    {
+      id: 'midiInput',
+      position: { x: 200, y: 200 },
+      data: {
+        type: 'midiinput',
+        label: 'MIDI控制器输入',
+        parameters: {
+          channel: 0, // 所有通道
+          transpose: 0,
+          velocitySensitivity: 1.0,
+        },
+      },
+    },
+    {
+      id: 'advancedOsc',
+      position: { x: 500, y: 200 },
+      data: {
+        type: 'advancedoscillator',
+        label: '高级振荡器',
+      },
+    },
+    {
+      id: 'reverbEffect',
+      position: { x: 800, y: 200 },
+      data: {
+        type: 'reverb',
+        label: '混响效果器',
+        parameters: {
+          decay: 1.5,
+          wet: 0.4,
+        },
+      },
+    },
+    {
+      id: 'speaker',
+      position: { x: 1100, y: 200 },
+      data: { 
+        type: 'speaker', 
+        label: '扬声器',
+        parameters: {
+          level: -12,
+        },
+      },
+    },
+  ],
+  edges: [
+    {
+      source: 'midiInput',
+      target: 'advancedOsc',
+      sourceHandle: 'note',
+      targetHandle: 'note',
+    },
+    {
+      source: 'midiInput',
+      target: 'advancedOsc',
+      sourceHandle: 'velocity',
+      targetHandle: 'velocity',
+    },
+    {
+      source: 'advancedOsc',
+      target: 'reverbEffect',
+      sourceHandle: 'audioout',
+      targetHandle: 'input',
+    },
+    {
+      source: 'reverbEffect',
+      target: 'speaker',
+      sourceHandle: 'output',
+      targetHandle: 'audioIn',
+    },
+  ],
+};
+
+// 创建并导出预设管理器实例，设置'midi-input-test'为默认预设
+export const presetManager = new PresetManager([majorChordPreset, midiInputTestPreset], 'midi-input-test');
