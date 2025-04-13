@@ -5,6 +5,7 @@ import { BehaviorSubject, Subscription } from 'rxjs';
 export enum PortType {
   NUMBER = 'number',
   AUDIO = 'audio',
+  ARRAY = 'array', // 新增：用于传输数组数据（如复音MIDI数据）
 }
 
 // 参数类型枚举
@@ -14,8 +15,8 @@ export enum ParameterType {
   LIST = 'list',
 }
 
-// 允许接口的数据类型是 number 或 audio
-export type ModuleInterface = number | Audio;
+// 允许接口的数据类型是 number、audio 或数组
+export type ModuleInterface = number | Audio | Array<number | object>;
 
 // 定义一个音频类型
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,6 +40,7 @@ export interface ParameterDefinition {
 export const PORT_COLORS = {
   [PortType.NUMBER]: '#1D4ED8', // 数字端口为蓝色
   [PortType.AUDIO]: '#047857', // 音频端口为绿色
+  [PortType.ARRAY]: '#9333EA', // 数组端口为紫色
 };
 
 // 模块抽象类

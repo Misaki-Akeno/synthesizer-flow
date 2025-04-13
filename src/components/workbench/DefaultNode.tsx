@@ -190,7 +190,17 @@ const InputPort = ({
 
   // 确定显示的值
   const displayValue = () => {
-    if (typeof value === 'number') {
+    if (portType === PortType.ARRAY && Array.isArray(value)) {
+      // 如果是数组类型，显示前几个数字
+      const numbers = value.filter(v => typeof v === 'number');
+      if (numbers.length > 0) {
+        const displayLimit = 3; // 最多显示3个数字
+        const displayedNumbers = numbers.slice(0, displayLimit).map(n => n.toFixed(1));
+        return `[${displayedNumbers.join(', ')}${numbers.length > displayLimit ? ', ...' : ''}]`;
+      } else {
+        return '[]'; // 空数组或非数字数组
+      }
+    } else if (typeof value === 'number') {
       return value.toFixed(2);
     } else if (value !== undefined && value !== null && value !== '') {
       return '🔊'; // 音频或其他非空值显示声音emoji
@@ -249,7 +259,17 @@ const OutputPort = ({
 
   // 确定显示的值
   const displayValue = () => {
-    if (typeof value === 'number') {
+    if (portType === PortType.ARRAY && Array.isArray(value)) {
+      // 如果是数组类型，显示前几个数字
+      const numbers = value.filter(v => typeof v === 'number');
+      if (numbers.length > 0) {
+        const displayLimit = 3; // 最多显示3个数字
+        const displayedNumbers = numbers.slice(0, displayLimit).map(n => n.toFixed(1));
+        return `[${displayedNumbers.join(', ')}${numbers.length > displayLimit ? ', ...' : ''}]`;
+      } else {
+        return '[]'; // 空数组或非数字数组
+      }
+    } else if (typeof value === 'number') {
       return value.toFixed(2);
     } else if (value !== undefined && value !== null && value !== '') {
       return '🔊'; // 音频或其他非空值显示声音emoji
@@ -456,7 +476,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     
     // 将模块参数和metaData与UI组件props合并
     return (
-      <div className="custom-ui-container border-t pt-2 mt-2">
+      <div className="custom-ui-container border-t">
         <CustomComponent 
         xParam={{
           paramKey: '',

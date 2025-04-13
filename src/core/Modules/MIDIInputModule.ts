@@ -12,9 +12,8 @@ export class MIDIInputModule extends AudioModuleBase {
   private inputDeviceId: string = '';
   
   // 模块状态
-  private currentNote: number = 0; // 最后按下的MIDI音符
-  private currentVelocity: number = 0; // 最后按下的力度
-  private activeNotes: Set<number> = new Set(); // 当前激活的音符集合
+  // 使用 Map 存储每个活动音符及其力度
+  private activeNoteVelocities: Map<number, number> = new Map(); 
   private debugInfo: string = '';
   
   // 上次音符变化时间（用于防抖动）
@@ -51,15 +50,16 @@ export class MIDIInputModule extends AudioModuleBase {
       },
     };
 
-    // 定义输出端口 - 移除了gate端口
+    // 定义输出端口 - 移除了单音符和力度端口
     const outputPorts = {
-      note: {
-        type: PortType.NUMBER,
-        value: 60, // 默认C4
+      // 添加复音输出端口
+      activeNotes: {
+        type: PortType.ARRAY,
+        value: [], // 当前激活的音符数组
       },
-      velocity: {
-        type: PortType.NUMBER,
-        value: 0, // 0-1范围
+      activeVelocities: {
+        type: PortType.ARRAY,
+        value: [], // 当前激活的力度数组 (与activeNotes一一对应)
       }
     };
     
@@ -177,9 +177,7 @@ export class MIDIInputModule extends AudioModuleBase {
       this.inputDeviceId = '';
       
       // 重置所有音符状态
-      this.activeNotes.clear();
-      this.currentNote = 0;
-      this.currentVelocity = 0;
+      this.activeNoteVelocities.clear(); // 清空 Map
       
       // 更新输出端口
       this.updateOutputPorts();
@@ -222,7 +220,7 @@ export class MIDIInputModule extends AudioModuleBase {
         break;
         
       // 可以添加对Control Change等其他消息的处理
-      
+        
       default:
         // 忽略其他类型的消息
         break;
@@ -244,12 +242,8 @@ export class MIDIInputModule extends AudioModuleBase {
     const sensitivity = this.getParameterValue('velocitySensitivity') as number;
     const scaledVelocity = Math.max(0, Math.min(1, (velocity / 127) * sensitivity));
     
-    // 添加到活跃音符集合
-    this.activeNotes.add(transposedNote);
-    
-    // 更新当前音符和力度
-    this.currentNote = transposedNote;
-    this.currentVelocity = scaledVelocity;
+    // 添加到活跃音符 Map 中，存储音符和对应的力度
+    this.activeNoteVelocities.set(transposedNote, scaledVelocity);
     
     // 更新输出端口（加入防抖动，避免频繁更新）
     if (currentTime - this.lastNoteChangeTime > 5) { // 5ms的防抖动时间
@@ -269,24 +263,13 @@ export class MIDIInputModule extends AudioModuleBase {
     const transpose = this.getParameterValue('transpose') as number;
     const transposedNote = Math.max(0, Math.min(127, note + transpose));
     
-    // 从活跃音符集合中移除
-    this.activeNotes.delete(transposedNote);
-    
-    // 如果没有活跃音符了，则将velocity设为0
-    if (this.activeNotes.size === 0) {
-      this.currentVelocity = 0;
-    } else {
-      // 如果释放的是当前音符，则切换到最后按下的音符
-      if (this.currentNote === transposedNote) {
-        // 选择最后一个活跃的音符
-        this.currentNote = Array.from(this.activeNotes).pop() || 0;
-      }
-    }
+    // 从活跃音符 Map 中移除
+    this.activeNoteVelocities.delete(transposedNote);
     
     // 更新输出端口
     this.updateOutputPorts();
     
-    this.debugInfo = `收到MIDI音符释放: note=${note}->转置为${transposedNote}, 剩余活跃音符: ${this.activeNotes.size}`;
+    this.debugInfo = `收到MIDI音符释放: note=${note}->转置为${transposedNote}, 剩余活跃音符: ${this.activeNoteVelocities.size}`;
     console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
   }
   
@@ -294,13 +277,15 @@ export class MIDIInputModule extends AudioModuleBase {
    * 更新输出端口的值
    */
   private updateOutputPorts(): void {
-    // 更新note输出
-    this.outputPorts['note'].next(this.currentNote);
+    // 从 Map 中提取音符和力度数组
+    const notesArray = Array.from(this.activeNoteVelocities.keys());
+    const velocitiesArray = Array.from(this.activeNoteVelocities.values());
     
-    // 更新velocity输出
-    this.outputPorts['velocity'].next(this.currentVelocity);
+    // 更新复音输出端口
+    this.outputPorts['activeNotes'].next(notesArray);
+    this.outputPorts['activeVelocities'].next(velocitiesArray);
     
-    this.debugInfo = `更新MIDI输出: note=${this.currentNote}, velocity=${this.currentVelocity.toFixed(2)}`;
+    this.debugInfo = `更新MIDI输出: ${notesArray.length}个音符活跃`;
     console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
   }
   
@@ -371,9 +356,7 @@ export class MIDIInputModule extends AudioModuleBase {
   protected onEnabledStateChanged(enabled: boolean): void {
     if (!enabled) {
       // 如果模块被禁用，重置所有状态
-      this.activeNotes.clear();
-      this.currentNote = 0;
-      this.currentVelocity = 0;
+      this.activeNoteVelocities.clear(); // 清空 Map
       this.updateOutputPorts();
     }
     

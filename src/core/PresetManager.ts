@@ -231,11 +231,14 @@ const midiInputTestPreset: Preset = {
       },
     },
     {
-      id: 'advancedOsc',
+      id: 'polyOsc',
       position: { x: 500, y: 200 },
       data: {
         type: 'advancedoscillator',
-        label: '高级振荡器',
+        label: '复音振荡器',
+        parameters: {
+          voiceCount: 8,
+        },
       },
     },
     {
@@ -245,16 +248,16 @@ const midiInputTestPreset: Preset = {
         type: 'reverb',
         label: '混响效果器',
         parameters: {
-          decay: 1.5,
-          wet: 0.4,
+          decay: 1.8,
+          wet: 0.35,
         },
       },
     },
     {
       id: 'speaker',
       position: { x: 1100, y: 200 },
-      data: { 
-        type: 'speaker', 
+      data: {
+        type: 'speaker',
         label: '扬声器',
         parameters: {
           level: -12,
@@ -265,18 +268,18 @@ const midiInputTestPreset: Preset = {
   edges: [
     {
       source: 'midiInput',
-      target: 'advancedOsc',
-      sourceHandle: 'note',
-      targetHandle: 'note',
+      target: 'polyOsc',
+      sourceHandle: 'activeNotes',
+      targetHandle: 'notes',
     },
     {
       source: 'midiInput',
-      target: 'advancedOsc',
-      sourceHandle: 'velocity',
-      targetHandle: 'velocity',
+      target: 'polyOsc',
+      sourceHandle: 'activeVelocities',
+      targetHandle: 'velocities',
     },
     {
-      source: 'advancedOsc',
+      source: 'polyOsc',
       target: 'reverbEffect',
       sourceHandle: 'audioout',
       targetHandle: 'input',
@@ -289,6 +292,8 @@ const midiInputTestPreset: Preset = {
     },
   ],
 };
+
+
 
 // 创建并导出预设管理器实例，设置'midi-input-test'为默认预设
 export const presetManager = new PresetManager([majorChordPreset, midiInputTestPreset], 'midi-input-test');

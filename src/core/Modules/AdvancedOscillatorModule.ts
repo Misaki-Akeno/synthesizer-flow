@@ -13,22 +13,25 @@ function midiNoteToFrequency(note: number): number {
 }
 
 /**
- * 高级振荡器模块，支持MIDI输入和音高控制
+ * 复音振荡器模块，支持同时发声多个音符
  */
 export class AdvancedOscillatorModule extends AudioModuleBase {
-  private oscillator: any;
   private gainNode: any; // 用于渐变控制
-  private velocityGain: any; // 用于MIDI力度控制
   
-  private currentNote: number = 69; // A4
-  private currentVelocity: number = 0; // 0-1范围的力度
-  private currentFreqMod: number = 0; // 频率调制输入
-  private noteOn: boolean = false; // 音符是否激活
+  // 复音相关
+  private maxVoices: number = 8; // 最大声部数
+  private mixer: any; // 声部混合器
+  private voices: Map<number, { // 管理中的声部
+    oscillator: any,  // 振荡器
+    velocityGain: any, // 力度控制增益
+    active: boolean,   // 是否激活
+    note: number       // 当前音符
+  }> = new Map();
   
   // 用于调试
   private debugInfo: string = '';
 
-  constructor(id: string, name: string = '高级振荡器') {
+  constructor(id: string, name: string = '复音振荡器') {
     const moduleType = 'advancedoscillator';
     const parameters = {
       detune: {
@@ -44,11 +47,11 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         value: 'sine',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
       },
-      modDepth: {
+      voiceCount: {
         type: ParameterType.NUMBER,
-        value: 5,
-        min: 0,
-        max: 100,
+        value: 8,
+        min: 1,
+        max: 16,
         step: 1,
         uiOptions: { advanced: true },
       },
@@ -56,17 +59,13 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
     // 定义端口
     const inputPorts = {
-      note: { // MIDI音符输入
-        type: PortType.NUMBER,
-        value: 69, // A4 = 69
+      notes: {
+        type: PortType.ARRAY,
+        value: [], // 音符数组
       },
-      velocity: { // MIDI力度输入
-        type: PortType.NUMBER,
-        value: 0, // 0-1范围
-      },
-      freqMod: { // 频率调制输入
-        type: PortType.NUMBER,
-        value: 0,
+      velocities: {
+        type: PortType.ARRAY,
+        value: [], // 力度数组
       },
     };
 
@@ -87,25 +86,11 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     console.debug(`[${this.moduleType}Module ${this.id}] 开始初始化音频`);
     
     try {
-      // 创建振荡器
-      this.oscillator = new this.Tone.Oscillator({
-        frequency: midiNoteToFrequency(this.currentNote),
-        detune: this.getParameterValue('detune') as number,
-        type: this.getParameterValue('waveform') as string,
-      });
-      
-      // 创建力度增益节点
-      this.velocityGain = new this.Tone.Gain(0);
-      
       // 创建主增益节点
-      this.gainNode = new this.Tone.Gain(0);
+      this.gainNode = new this.Tone.Gain(1);
       
-      // 振荡器 -> 力度增益 -> 主增益
-      this.oscillator.connect(this.velocityGain);
-      this.velocityGain.connect(this.gainNode);
-      
-      // 开始振荡器（但没有声音，因为增益为0）
-      this.oscillator.start();
+      // 初始化复音系统
+      this.initializePolyphony();
       
       // 更新输出端口
       this.outputPorts['audioout'].next(this.gainNode);
@@ -124,204 +109,293 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * 设置输入端口的绑定
    */
   private setupInputBindings(): void {
-    // 处理MIDI音符输入
-    const noteSubscription = this.inputPorts['note'].subscribe(
+    // 处理复音音符数组输入
+    const notesSubscription = this.inputPorts['notes'].subscribe(
       (value: any) => {
-        if (typeof value === 'number') {
-          this.handleNoteInput(value);
+        if (Array.isArray(value) && value.length > 0) {
+          // 获取对应的力度数组
+          const velocities = this.inputPorts['velocities'].getValue();
+          // 处理复音输入
+          this.handlePolyphonicInput(value, Array.isArray(velocities) ? velocities : []);
+        } else if (Array.isArray(value) && value.length === 0) {
+          // 空数组则释放所有声部
+          this.voices.forEach((_, note) => {
+            this.releaseVoice(note);
+          });
         }
       }
     );
     
-    // 处理MIDI力度输入
-    const velocitySubscription = this.inputPorts['velocity'].subscribe(
+    // 处理复音力度数组输入 - 如果音符数组存在，触发复音处理
+    const velocitiesSubscription = this.inputPorts['velocities'].subscribe(
       (value: any) => {
-        if (typeof value === 'number') {
-          this.handleVelocityInput(value);
+        if (Array.isArray(value)) {
+          const notes = this.inputPorts['notes'].getValue();
+          if (Array.isArray(notes) && notes.length > 0) {
+            this.handlePolyphonicInput(notes, value);
+          }
         }
       }
     );
     
-    // 处理频率调制输入
-    const freqModSubscription = this.inputPorts['freqMod'].subscribe(
-      (value: any) => {
-        if (typeof value === 'number') {
-          this.currentFreqMod = value;
-          this.updateFrequency();
-        }
-      }
-    );
-    
-    this.addInternalSubscriptions([
-      noteSubscription, 
-      velocitySubscription,
-      freqModSubscription
-    ]);
+    this.addInternalSubscriptions([notesSubscription, velocitiesSubscription]);
   }
   
   /**
    * 设置参数绑定
    */
   private setupParameterBindings(): void {
-    if (!this.oscillator) return;
-    
-    // 音高微调参数
-    const detuneSubscription = this.parameters['detune'].subscribe(
+    // 声部数量参数
+    const voiceCountSubscription = this.parameters['voiceCount'].subscribe(
       (value: number | boolean | string) => {
-        if (typeof value === 'number' && this.oscillator) {
-          this.applyParameterRamp(this.oscillator.detune, value);
-          this.debugInfo = `应用微调: ${value}分`;
-          console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
+        if (typeof value === 'number') {
+          this.maxVoices = value;
+          console.debug(`[${this.moduleType}Module ${this.id}] 设置最大声部数: ${this.maxVoices}`);
         }
       }
     );
     
-    // 波形参数
+    // 波形参数 - 更新所有活跃声部的波形
     const waveformSubscription = this.parameters['waveform'].subscribe(
       (value: number | boolean | string) => {
-        if (typeof value === 'string' && this.oscillator) {
-          this.oscillator.type = value;
-          this.debugInfo = `波形变更: ${value}`;
-          console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
+        if (typeof value === 'string') {
+          this.voices.forEach(voice => {
+            if (voice.oscillator) {
+              voice.oscillator.type = value;
+            }
+          });
+          console.debug(`[${this.moduleType}Module ${this.id}] 更新所有声部波形: ${value}`);
         }
       }
     );
     
-    // 调制深度参数
-    const modDepthSubscription = this.parameters['modDepth'].subscribe(
-      () => {
-        this.updateFrequency();
+    // 微调参数 - 更新所有声部的微调
+    const detuneSubscription = this.parameters['detune'].subscribe(
+      (value: number | boolean | string) => {
+        if (typeof value === 'number') {
+          this.voices.forEach(voice => {
+            if (voice.oscillator && voice.oscillator.detune) {
+              this.applyParameterRamp(voice.oscillator.detune, value);
+            }
+          });
+          console.debug(`[${this.moduleType}Module ${this.id}] 更新所有声部微调: ${value}`);
+        }
       }
     );
     
     this.addInternalSubscriptions([
-      detuneSubscription,
+      voiceCountSubscription,
       waveformSubscription,
-      modDepthSubscription
+      detuneSubscription
     ]);
   }
   
   /**
-   * 处理MIDI音符输入
+   * 初始化复音系统
    */
-  private handleNoteInput(noteValue: number): void {
-    // 记录新音符
-    this.currentNote = noteValue;
+  private initializePolyphony(): void {
+    if (!this.Tone) return;
     
-    // 先更新频率，无论力度如何
-    this.updateFrequency();
+    // 创建混音器
+    this.mixer = new this.Tone.Gain(1);
     
-    // 如果有力度，则触发或维持音符
-    if (this.currentVelocity > 0) {
-      // 如果还没有音符激活，则触发音符开始
-      if (!this.noteOn) {
-        this.triggerAttack();
-      }
-    }
+    // 将混音器连接到主增益节点
+    this.mixer.connect(this.gainNode);
     
-    this.debugInfo = `MIDI音符: ${noteValue}, 频率: ${midiNoteToFrequency(noteValue).toFixed(2)}Hz`;
-    console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
+    console.debug(`[${this.moduleType}Module ${this.id}] 初始化复音系统，最大声部数: ${this.maxVoices}`);
   }
   
   /**
-   * 处理MIDI力度输入
+   * 处理复音音符数组输入
+   * @param notes 音符数组
+   * @param velocities 力度数组（可选）
    */
-  private handleVelocityInput(velocityValue: number): void {
-    // 记录新的力度值
-    this.currentVelocity = velocityValue;
+  private handlePolyphonicInput(notes: number[], velocities: number[] = []): void {
+    if (!this.mixer || !this.isEnabled()) return;
     
-    if (velocityValue > 0) {
-      // 先更新频率，然后再处理声音的开始
-      this.updateFrequency();
+    // 创建当前活跃音符的集合，用于后续比较
+    const activeNotes = new Set(notes);
+    
+    // 处理释放的音符（当前声部中有，但新音符列表中没有的）
+    this.voices.forEach((voice, noteNumber) => {
+      if (!activeNotes.has(noteNumber) && voice.active) {
+        this.releaseVoice(noteNumber);
+      }
+    });
+    
+    // 处理新的音符（新音符列表中有，但未激活的）
+    notes.forEach((note, index) => {
+      // 获取对应的力度（如果提供）
+      const velocity = index < velocities.length ? velocities[index] : 0.7;
       
-      // 力度大于0，触发音符开始
-      if (!this.noteOn) {
-        this.triggerAttack();
+      // 如果这个音符已经有声部并且是活跃的，只需更新力度
+      if (this.voices.has(note) && this.voices.get(note)!.active) {
+        this.updateVoiceVelocity(note, velocity);
       } else {
-        // 已经在发声，只更新力度
-        this.updateVelocity();
+        // 否则触发新的声部
+        this.triggerVoice(note, velocity);
       }
-    } else {
-      // 力度为0，触发音符释放
-      if (this.noteOn) {
-        this.triggerRelease();
+    });
+    
+    this.debugInfo = `复音处理: ${notes.length}个音符活跃`;
+    console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
+  }
+  
+  /**
+   * 触发一个新的声部
+   * @param note MIDI音符
+   * @param velocity 力度值 (0-1)
+   */
+  private triggerVoice(note: number, velocity: number): void {
+    // 如果声部已经存在但没激活，重用它
+    if (this.voices.has(note)) {
+      const voice = this.voices.get(note)!;
+      
+      // 更新音符（频率）
+      voice.note = note;
+      this.applyParameterRamp(voice.oscillator.frequency, midiNoteToFrequency(note), 0.01);
+      
+      // 更新力度
+      this.applyParameterRamp(voice.velocityGain.gain, velocity, 0.01);
+      
+      // 标记为激活
+      voice.active = true;
+      
+      this.debugInfo = `重用声部: note=${note}, 频率=${midiNoteToFrequency(note).toFixed(2)}Hz, 力度=${velocity.toFixed(2)}`;
+    } 
+    // 如果需要创建新声部
+    else {
+      // 检查是否已达到最大声部数
+      if (this.voices.size >= this.maxVoices) {
+        // 寻找可以替换的声部（当前未激活的）
+        let replacedNote: number | null = null;
+        this.voices.forEach((v, n) => {
+          if (!v.active && replacedNote === null) {
+            replacedNote = n;
+          }
+        });
+        
+        // 如果没有未激活的声部，则查找持续时间最长的声部
+        if (replacedNote === null) {
+          // 这里简化处理：直接替换第一个找到的声部
+          // 实际应用中可以使用时间戳等方式找出最早触发的声部
+          replacedNote = this.voices.keys().next().value ?? null;
+        }
+        
+        // 移除要替换的声部
+        if (replacedNote !== null) {
+          this.disposeVoice(replacedNote);
+        } else {
+          console.debug(`[${this.moduleType}Module ${this.id}] 已达到最大声部数${this.maxVoices}，无法创建新声部`);
+          return;
+        }
+      }
+      
+      try {
+        // 获取当前波形
+        const waveform = this.getParameterValue('waveform') as string;
+        const detune = this.getParameterValue('detune') as number;
+        
+        // 创建新的振荡器
+        const osc = new this.Tone.Oscillator({
+          frequency: midiNoteToFrequency(note),
+          detune: detune,
+          type: waveform,
+        });
+        
+        // 创建力度增益节点
+        const velGain = new this.Tone.Gain(velocity);
+        
+        // 连接：振荡器 -> 力度增益 -> 混音器
+        osc.connect(velGain);
+        velGain.connect(this.mixer);
+        
+        // 启动振荡器
+        osc.start();
+        
+        // 存储声部信息
+        this.voices.set(note, {
+          oscillator: osc,
+          velocityGain: velGain,
+          active: true,
+          note: note
+        });
+        
+        this.debugInfo = `创建新声部: note=${note}, 频率=${midiNoteToFrequency(note).toFixed(2)}Hz, 力度=${velocity.toFixed(2)}`;
+      } catch (error) {
+        console.error(`[${this.moduleType}Module ${this.id}] 创建声部失败:`, error);
       }
     }
     
-    this.debugInfo = `MIDI力度: ${velocityValue.toFixed(2)}`;
     console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
   }
   
   /**
-   * 触发音符开始
+   * 释放一个声部（不销毁，只停止发声）
+   * @param note MIDI音符
    */
-  private triggerAttack(): void {
-    if (!this.velocityGain || !this.gainNode) return;
+  private releaseVoice(note: number): void {
+    if (!this.voices.has(note)) return;
     
-    // 标记音符为激活状态
-    this.noteOn = true;
+    const voice = this.voices.get(note)!;
     
-    // 设置力度增益
-    this.updateVelocity();
+    // 应用释放渐变
+    this.applyParameterRamp(voice.velocityGain.gain, 0, this.fadeTime);
     
-    // 启用主增益节点（使用父类的防爆音渐变）
-    this.applyParameterRamp(this.gainNode.gain, 1, this.fadeTime);
+    // 标记为非激活
+    voice.active = false;
     
-    this.debugInfo = `触发音符开始: note=${this.currentNote}, 渐变时间=${this.fadeTime}s`;
+    this.debugInfo = `释放声部: note=${note}`;
     console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
   }
   
   /**
-   * 触发音符释放
+   * 更新声部的力度
+   * @param note MIDI音符
+   * @param velocity 新的力度值 (0-1)
    */
-  private triggerRelease(): void {
-    if (!this.gainNode) return;
+  private updateVoiceVelocity(note: number, velocity: number): void {
+    if (!this.voices.has(note)) return;
     
-    // 标记音符为非激活状态
-    this.noteOn = false;
+    const voice = this.voices.get(note)!;
     
-    // 应用释放渐变（使用父类的防爆音渐变）
-    this.applyParameterRamp(this.gainNode.gain, 0, this.fadeTime);
+    // 应用力度变化
+    this.applyParameterRamp(voice.velocityGain.gain, velocity, 0.01);
     
-    this.debugInfo = `触发音符释放: 渐变时间=${this.fadeTime}s`;
+    this.debugInfo = `更新声部力度: note=${note}, 力度=${velocity.toFixed(2)}`;
     console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
   }
   
   /**
-   * 更新力度增益
+   * 销毁一个声部并释放资源
+   * @param note MIDI音符
    */
-  private updateVelocity(): void {
-    if (!this.velocityGain) return;
+  private disposeVoice(note: number): void {
+    if (!this.voices.has(note)) return;
     
-    // 将0-1的力度值映射到增益
-    const gainValue = this.currentVelocity;
-    this.applyParameterRamp(this.velocityGain.gain, gainValue, 0.01);
+    const voice = this.voices.get(note)!;
     
-    this.debugInfo = `更新力度增益: ${gainValue.toFixed(2)}`;
-    console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
-  }
-  
-  /**
-   * 更新频率（包含调制）
-   */
-  private updateFrequency(): void {
-    if (!this.oscillator) return;
-    
-    const baseFreq = midiNoteToFrequency(this.currentNote);
-    const modDepth = this.getParameterValue('modDepth') as number;
-    
-    // 调制值范围0-1，映射到[-1, 1]范围用于双向调制
-    const normalizedMod = this.currentFreqMod * 2 - 1;
-    
-    // 计算调制后的频率 (以半音为单位，modDepth是最大半音数)
-    const freqRatio = Math.pow(2, (normalizedMod * modDepth) / 1200);
-    const modulatedFreq = baseFreq * freqRatio;
-    
-    // 应用到振荡器
-    this.applyParameterRamp(this.oscillator.frequency, modulatedFreq, 0.01);
-    
-    this.debugInfo = `更新频率: 基础=${baseFreq.toFixed(2)}Hz, 调制后=${modulatedFreq.toFixed(2)}Hz`;
-    console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
+    try {
+      // 停止并释放资源
+      if (voice.oscillator) {
+        voice.oscillator.stop();
+        voice.oscillator.disconnect();
+        voice.oscillator.dispose();
+      }
+      
+      if (voice.velocityGain) {
+        voice.velocityGain.disconnect();
+        voice.velocityGain.dispose();
+      }
+      
+      // 从映射中删除
+      this.voices.delete(note);
+      
+      this.debugInfo = `销毁声部: note=${note}`;
+      console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
+    } catch (error) {
+      console.error(`[${this.moduleType}Module ${this.id}] 销毁声部失败:`, error);
+    }
   }
   
   /**
@@ -330,13 +404,16 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
   protected onEnabledStateChanged(enabled: boolean): void {
     if (this.gainNode) {
       if (enabled) {
-        // 如果有活跃音符，则恢复增益
-        if (this.noteOn) {
-          this.applyParameterRamp(this.gainNode.gain, 1);
-        }
+        // 恢复增益
+        this.applyParameterRamp(this.gainNode.gain, 1);
       } else {
         // 如果禁用，则立即静音
         this.applyParameterRamp(this.gainNode.gain, 0, 0.05);
+        
+        // 释放所有声部
+        this.voices.forEach((_, note) => {
+          this.releaseVoice(note);
+        });
       }
     }
   }
@@ -345,7 +422,14 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * 释放资源
    */
   public dispose(): void {
-    this.disposeAudioNodes([this.oscillator, this.velocityGain, this.gainNode]);
+    // 释放所有声部
+    this.voices.forEach((_, note) => {
+      this.disposeVoice(note);
+    });
+    
+    // 释放主要音频节点
+    this.disposeAudioNodes([this.mixer, this.gainNode]);
+    
     console.debug(`[${this.moduleType}Module ${this.id}] 释放资源`);
     super.dispose();
   }
