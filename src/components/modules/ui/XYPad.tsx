@@ -39,57 +39,80 @@ const XYPad: React.FC<XYPadProps> = ({
   yParam,
   width = 180,
   height = 120,
-  backgroundColor = 'rgb(241, 245, 249)'
+  backgroundColor = 'rgb(241, 245, 249)',
 }) => {
   const padRef = useRef<HTMLDivElement>(null);
-  
+
   // 获取当前X和Y参数的值
-  const xValue = typeof paramValues[xParam.paramKey] === 'number' 
-    ? paramValues[xParam.paramKey] as number 
-    : xParam.min;
-    
-  const yValue = typeof paramValues[yParam.paramKey] === 'number'
-    ? paramValues[yParam.paramKey] as number
-    : yParam.min;
-  
+  const xValue =
+    typeof paramValues[xParam.paramKey] === 'number'
+      ? (paramValues[xParam.paramKey] as number)
+      : xParam.min;
+
+  const yValue =
+    typeof paramValues[yParam.paramKey] === 'number'
+      ? (paramValues[yParam.paramKey] as number)
+      : yParam.min;
+
   // 当前点的位置
   const [position, setPosition] = useState({
     x: normalizeValue(xValue, xParam.min, xParam.max, width),
-    y: normalizeValue(yValue, yParam.min, yParam.max, height, true)
+    y: normalizeValue(yValue, yParam.min, yParam.max, height, true),
   });
-  
+
   // 是否正在拖动
   const [isDragging, setIsDragging] = useState(false);
 
   // 将值从实际范围归一化到像素位置
-  function normalizeValue(value: number, min: number, max: number, dimension: number, invert = false): number {
+  function normalizeValue(
+    value: number,
+    min: number,
+    max: number,
+    dimension: number,
+    invert = false
+  ): number {
     const normalized = ((value - min) / (max - min)) * dimension;
     return invert ? dimension - normalized : normalized;
   }
 
   // 将像素位置转换回实际值
-  function denormalizeValue(pos: number, min: number, max: number, dimension: number, invert = false): number {
+  function denormalizeValue(
+    pos: number,
+    min: number,
+    max: number,
+    dimension: number,
+    invert = false
+  ): number {
     const normalized = invert ? dimension - pos : pos;
     return min + (normalized / dimension) * (max - min);
   }
 
   // 更新位置和触发值更改
-  const updatePosition = (clientX: number, clientY: number) => {
-    if (!padRef.current) return;
-    
-    const rect = padRef.current.getBoundingClientRect();
-    const x = Math.max(0, Math.min(width, clientX - rect.left));
-    const y = Math.max(0, Math.min(height, clientY - rect.top));
-    
-    setPosition({ x, y });
-    
-    // 更新参数值
-    const newXValue = denormalizeValue(x, xParam.min, xParam.max, width);
-    const newYValue = denormalizeValue(y, yParam.min, yParam.max, height, true);
-    
-    onParamChange(xParam.paramKey, newXValue);
-    onParamChange(yParam.paramKey, newYValue);
-  };
+  const updatePosition = React.useCallback(
+    (clientX: number, clientY: number) => {
+      if (!padRef.current) return;
+
+      const rect = padRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(width, clientX - rect.left));
+      const y = Math.max(0, Math.min(height, clientY - rect.top));
+
+      setPosition({ x, y });
+
+      // 更新参数值
+      const newXValue = denormalizeValue(x, xParam.min, xParam.max, width);
+      const newYValue = denormalizeValue(
+        y,
+        yParam.min,
+        yParam.max,
+        height,
+        true
+      );
+
+      onParamChange(xParam.paramKey, newXValue);
+      onParamChange(yParam.paramKey, newYValue);
+    },
+    [padRef, width, height, xParam, yParam, onParamChange]
+  );
 
   // 处理鼠标/触摸事件
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -103,26 +126,34 @@ const XYPad: React.FC<XYPadProps> = ({
     updatePosition(touch.clientX, touch.clientY);
   };
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+  // 使用 useEffect 的依赖中加入 updatePosition 会导致循环依赖
+  // 使用 useCallback 避免依赖问题
+  const handleMouseMove = React.useCallback(
+    (e: MouseEvent) => {
       if (isDragging) {
         e.preventDefault();
         updatePosition(e.clientX, e.clientY);
       }
-    };
+    },
+    [isDragging, updatePosition]
+  );
 
-    const handleTouchMove = (e: TouchEvent) => {
+  const handleTouchMove = React.useCallback(
+    (e: TouchEvent) => {
       if (isDragging && e.touches[0]) {
         e.preventDefault();
         const touch = e.touches[0];
         updatePosition(touch.clientX, touch.clientY);
       }
-    };
+    },
+    [isDragging, updatePosition]
+  );
 
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
+  const handleMouseUp = React.useCallback(() => {
+    setIsDragging(false);
+  }, []);
 
+  useEffect(() => {
     // 添加事件监听
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -136,16 +167,25 @@ const XYPad: React.FC<XYPadProps> = ({
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleMouseUp);
     };
-  }, [isDragging]);
+  }, [isDragging, handleMouseMove, handleTouchMove, handleMouseUp]);
 
   // 当参数值外部更改时，更新点的位置
   useEffect(() => {
     setPosition({
       x: normalizeValue(xValue, xParam.min, xParam.max, width),
-      y: normalizeValue(yValue, yParam.min, yParam.max, height, true)
+      y: normalizeValue(yValue, yParam.min, yParam.max, height, true),
     });
-  }, [xValue, yValue, xParam.min, xParam.max, yParam.min, yParam.max, width, height]);
-  
+  }, [
+    xValue,
+    yValue,
+    xParam.min,
+    xParam.max,
+    yParam.min,
+    yParam.max,
+    width,
+    height,
+  ]);
+
   return (
     <div className="xypad-container my-2">
       <div className="xypad-labels flex justify-between text-xs mb-1">
@@ -159,29 +199,29 @@ const XYPad: React.FC<XYPadProps> = ({
           width: `${width}px`,
           height: `${height}px`,
           backgroundColor: backgroundColor,
-          touchAction: 'none'
+          touchAction: 'none',
         }}
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
       >
         {/* 十字线 */}
         <div className="absolute inset-0 pointer-events-none">
-          <div 
+          <div
             className="absolute bg-gray-400/40 h-px w-full"
             style={{ top: position.y }}
           />
-          <div 
+          <div
             className="absolute bg-gray-400/40 w-px h-full"
             style={{ left: position.x }}
           />
         </div>
-        
+
         {/* 控制点 */}
         <div
           className="absolute w-4 h-4 rounded-full bg-blue-500 border-2 border-white shadow-md transform -translate-x-1/2 -translate-y-1/2"
           style={{
             left: position.x,
-            top: position.y
+            top: position.y,
           }}
         />
       </div>

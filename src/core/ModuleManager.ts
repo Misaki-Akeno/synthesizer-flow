@@ -26,8 +26,8 @@ export class ModuleManager {
     speaker: SpeakerModule,
     reverb: ReverbModule,
     lfo: LFOModule,
-    advancedoscillator: AdvancedOscillatorModule, 
-    midiinput: MIDIInputModule, 
+    advancedoscillator: AdvancedOscillatorModule,
+    midiinput: MIDIInputModule,
   };
 
   // 创建模块实例

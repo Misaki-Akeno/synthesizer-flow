@@ -3,22 +3,40 @@ import { useFlowStore } from '../../store/store';
 import { presetManager } from '../../core/PresetManager';
 import { moduleManager } from '../../core/ModuleManager';
 
-const PresetLoader: React.FC = () => {
-  const { currentPresetId, loadPreset, edges, nodes, getDefaultPresetId } = useFlowStore();
+interface PresetLoaderProps {
+  initialPresetId?: string;
+}
+
+const PresetLoader: React.FC<PresetLoaderProps> = ({ initialPresetId }) => {
+  const { currentPresetId, loadPreset, edges, nodes, getDefaultPresetId } =
+    useFlowStore();
   const presets = presetManager.getPresets();
 
   // 使用ref记录上一次的edges长度
   const prevEdgesLength = useRef(0);
+  // 使用ref跟踪是否已经处理了初始预设ID
+  const initialPresetLoaded = useRef(false);
 
-  // 在组件挂载时，如果没有选择预设则加载默认预设
+  // 在组件挂载时，检查URL传入的预设ID
   useEffect(() => {
-    if (!currentPresetId) {
-      const defaultPresetId = getDefaultPresetId();
-      if (defaultPresetId) {
-        loadPreset(defaultPresetId);
+    if (!initialPresetLoaded.current) {
+      initialPresetLoaded.current = true;
+
+      // 优先尝试加载URL指定的预设ID
+      if (initialPresetId && presetManager.getPreset(initialPresetId)) {
+        loadPreset(initialPresetId);
+        return;
+      }
+
+      // 如果没有有效的URL预设ID，且当前未选择预设，则加载默认预设
+      if (!currentPresetId) {
+        const defaultPresetId = getDefaultPresetId();
+        if (defaultPresetId) {
+          loadPreset(defaultPresetId);
+        }
       }
     }
-  }, [currentPresetId, loadPreset, getDefaultPresetId]);
+  }, [initialPresetId, currentPresetId, loadPreset, getDefaultPresetId]);
 
   useEffect(() => {
     if (edges.length > 0 && nodes.length > 0) {

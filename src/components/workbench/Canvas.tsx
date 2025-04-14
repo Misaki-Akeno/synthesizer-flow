@@ -20,7 +20,11 @@ const nodeTypes = {
   default: DefaultNode,
 };
 
-export default function App() {
+interface CanvasProps {
+  initialPresetId?: string;
+}
+
+export default function App({ initialPresetId }: CanvasProps = {}) {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect } =
     useFlowStore();
 
@@ -68,7 +72,7 @@ export default function App() {
         onEdgeContextMenu={onEdgeContextMenu}
         isValidConnection={isValidConnection}
       >
-        <PresetLoader />
+        <PresetLoader initialPresetId={initialPresetId} />
         <DevTools />
         <Controls />
         <Background variant={BackgroundVariant.Dots} gap={12} size={1} />

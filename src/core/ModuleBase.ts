@@ -30,8 +30,12 @@ export interface ParameterDefinition {
   max?: number;
   step?: number;
   options?: string[]; // 用于LIST类型，选项列表
-  uiOptions?: { // 用于UI相关配置
-    advanced?: boolean; // 表示是否为高级参数（应被折叠）
+  uiOptions?: {
+    // 用于UI相关配置
+    hide?: boolean; // 是否在UI中隐藏该参数
+    group?: string; // 参数分组名称
+    describe?: string; // 参数说明/描述文本
+    label?: string; // 参数显示名称（替代参数键名）
     [key: string]: unknown; // 允许其他UI配置选项
   };
 }
@@ -64,7 +68,6 @@ export abstract class ModuleBase {
       step?: number;
       options?: string[];
       uiOptions?: {
-        advanced?: boolean;
         [key: string]: unknown;
       };
     };
@@ -157,7 +160,6 @@ export abstract class ModuleBase {
     step?: number;
     options?: string[];
     uiOptions?: {
-      advanced?: boolean;
       [key: string]: unknown;
     };
   } {
@@ -167,7 +169,6 @@ export abstract class ModuleBase {
         min: 0,
         max: 1,
         step: 0.1,
-        uiOptions: { advanced: false },
       }
     );
   }
@@ -625,7 +626,9 @@ export abstract class ModuleBase {
    * 获取模块的自定义UI组件信息
    * @returns 自定义UI组件信息，包含类型和props
    */
-  public getCustomUI(): { type: string; props?: Record<string, unknown> } | undefined {
+  public getCustomUI():
+    | { type: string; props?: Record<string, unknown> }
+    | undefined {
     return this.customUI;
   }
 

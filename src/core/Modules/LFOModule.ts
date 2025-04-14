@@ -21,6 +21,10 @@ export class LFOModule extends AudioModuleBase {
         min: 0.1,
         max: 20.0,
         step: 0.1,
+        uiOptions: {
+          label: '速率',
+          describe: 'LFO循环频率，单位为Hz',
+        },
       },
       depth: {
         type: ParameterType.NUMBER,
@@ -28,12 +32,20 @@ export class LFOModule extends AudioModuleBase {
         min: 0,
         max: 1.0,
         step: 0.01,
+        uiOptions: {
+          label: '深度',
+          describe: '调制信号的强度，0为无效果，1为最大强度',
+        },
       },
       waveform: {
         type: ParameterType.LIST,
         value: 'sine',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
-        uiOptions: { advanced: true }, // 替换folded为uiOptions.advanced
+        uiOptions: {
+          group: '不常见参数',
+          label: '波形',
+          describe: '选择LFO调制信号的波形类型',
+        },
       },
     };
 

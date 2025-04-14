@@ -40,7 +40,8 @@ interface FlowState {
 
 // 使用PresetManager的默认预设ID
 const defaultPresetId = presetManager.getDefaultPresetId();
-const { nodes: initialNodes, edges: initialEdges } = presetManager.loadPresetWithModules(defaultPresetId);
+const { nodes: initialNodes, edges: initialEdges } =
+  presetManager.loadPresetWithModules(defaultPresetId);
 
 export const useFlowStore = create<FlowState>((set, get) => {
   // 设置节点获取函数
@@ -120,7 +121,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
 
     getPresets: () => presetManager.getPresets,
-    
+
     getDefaultPresetId: () => presetManager.getDefaultPresetId(),
 
     updateModuleParameter: (nodeId, paramKey, value) => {

@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.6.2 (2025-04-14)
+
+## UI Improvements
+
+### New Components
+
+- Added modular UI components for better code organization:
+  - `ModuleEnableToggle`: Component for toggling module enabled/disabled state
+  - `ModulePorts`: Reusable components for input and output ports
+  - `ParameterControls`: Standardized parameter control components with tooltips
+
+### Parameter Interface Enhancements
+
+- Replaced the "advanced parameters" drawer with Radix UI Accordion groups
+- Added tooltips to parameter labels for better documentation
+- Improved parameter organization with logical grouping
+- Added human-readable labels and descriptions to module parameters
+
+## Core Architecture Updates
+
+- Updated `ModuleBase` parameter metadata to support:
+  - Parameter hiding (`hide: true`)
+  - Parameter grouping (`group: "Group Name"`)
+  - Parameter descriptions (`describe: "Description text"`)
+  - Custom display labels (`label: "Display Name"`)
+- Added URL-based preset loading via query parameters
+  - Enhanced `page.tsx` to support URL query parameters (`?preset=presetId`)
+  - Added `initialPresetId` prop to `Canvas.tsx` component
+  - Updated `PresetLoader.tsx` to prioritize URL-specified presets
+  - Maintained backward compatibility with default preset loading
+  - Examples:
+    - `/` loads default preset
+    - `/?preset=major-chord` loads the major chord preset
+    - `/?preset=midi-input-test` loads MIDI controller test preset
+
+## Module Improvements
+
+- Enhanced `AdvancedOscillatorModule` with comprehensive envelope controls
+- Made `MIDIInputModule` client-side safe with proper browser detection
+- Improved parameter organization across all modules
+
 ## 0.6.1 (2025-04-13)
 
 ### Features

@@ -1,22 +1,21 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { memo, useState } from 'react';
-import { Handle, Position } from '@xyflow/react';
 import { ModuleBase, ParameterType, PortType } from '../../core/ModuleBase';
-import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useFlowStore } from '../../store/store';
 import { useModuleSubscription } from '../../hooks/useModuleSubscription';
 import React from 'react';
 import { AudioModuleBase } from '../../core/AudioModuleBase';
-import { CustomUIComponents } from '../modules/ui';
+import CustomUIComponents, {
+  ParameterControl,
+  InputPort,
+  OutputPort,
+  ModuleEnableToggle,
+} from '../modules/ui';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 interface DefaultNodeProps {
   data: {
@@ -27,337 +26,6 @@ interface DefaultNodeProps {
   id: string;
   selected?: boolean;
 }
-
-// 数值参数控制组件
-const NumberParameterControl = ({
-  paramKey,
-  value,
-  min,
-  max,
-  step,
-  updateParameter,
-}: {
-  paramKey: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  updateParameter: (key: string, value: number) => void;
-}) => {
-  // 使用useEffect来确保inputValue总是跟随value的变化而更新
-  const [inputValue, setInputValue] = useState<string>(
-    typeof value === 'number' ? value.toFixed(2) : '0.00'
-  );
-
-  // 当外部value变化时更新输入框的值
-  React.useEffect(() => {
-    setInputValue(typeof value === 'number' ? value.toFixed(2) : '0.00');
-  }, [value]);
-
-  const [, setIsFocused] = useState(false);
-
-  // 处理滑块值变化
-  const handleSliderChange = (newValue: number[]) => {
-    updateParameter(paramKey, newValue[0]);
-    setInputValue(newValue[0].toFixed(2));
-  };
-
-  // 处理输入框值变化
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
-  };
-
-  // 处理输入框失焦和回车事件
-  const handleInputCommit = () => {
-    const parsed = parseFloat(inputValue);
-    if (!isNaN(parsed)) {
-      const clampedValue = Math.min(Math.max(parsed, min), max);
-      updateParameter(paramKey, clampedValue);
-      setInputValue(clampedValue.toFixed(2));
-    } else {
-      setInputValue(value.toFixed(2));
-    }
-    setIsFocused(false);
-  };
-
-  // 处理键盘事件
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleInputCommit();
-    }
-  };
-
-  return (
-    <div className="mb-3">
-      <div className="flex justify-between items-center text-xs mb-1">
-        <span>{paramKey}:</span>
-        <div className="w-16">
-          <Input
-            type="text"
-            value={inputValue}
-            onChange={handleInputChange}
-            onBlur={handleInputCommit}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setIsFocused(true)}
-            className="h-6 text-xs px-2 py-0.5 leading-tight"
-          />
-        </div>
-      </div>
-      <Slider
-        value={[typeof value === 'number' ? value : 0]}
-        min={min}
-        max={max}
-        step={step}
-        onValueChange={handleSliderChange}
-      />
-    </div>
-  );
-};
-
-// 布尔参数控制组件
-const BooleanParameterControl = ({
-  paramKey,
-  value,
-  updateParameter,
-}: {
-  paramKey: string;
-  value: boolean;
-  updateParameter: (key: string, value: boolean) => void;
-}) => (
-  <div className="mb-3">
-    <div className="flex justify-between items-center text-xs">
-      <span>{paramKey}:</span>
-      <Switch
-        checked={Boolean(value)}
-        onCheckedChange={(checked) => updateParameter(paramKey, checked)}
-      />
-    </div>
-  </div>
-);
-
-// 列表参数控制组件
-const ListParameterControl = ({
-  paramKey,
-  value,
-  options,
-  updateParameter,
-}: {
-  paramKey: string;
-  value: string;
-  options: string[];
-  updateParameter: (key: string, value: string) => void;
-}) => (
-  <div className="mb-3">
-    <div className="flex justify-between text-xs mb-1">
-      <span>{paramKey}:</span>
-    </div>
-    <Select
-      value={String(value)}
-      onValueChange={(val) => updateParameter(paramKey, val)}
-    >
-      <SelectTrigger className="w-full text-xs h-8">
-        <SelectValue placeholder="选择选项" />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option} value={option}>
-            {option}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-);
-
-// 输入端口子组件
-const InputPort = ({
-  portKey,
-  value,
-  portType,
-  index,
-  module,
-  isSelected,
-}: {
-  portKey: string;
-  value: any;
-  portType: PortType;
-  index: number;
-  module: ModuleBase;
-  isSelected: boolean;
-}) => {
-  const portColor = module.getPortColor(portType);
-  const portPosition = 40 + index * 28; // 将间距从20px增加到25px
-
-  // 确定显示的值
-  const displayValue = () => {
-    if (portType === PortType.ARRAY && Array.isArray(value)) {
-      // 如果是数组类型，显示前几个数字
-      const numbers = value.filter(v => typeof v === 'number');
-      if (numbers.length > 0) {
-        const displayLimit = 3; // 最多显示3个数字
-        const displayedNumbers = numbers.slice(0, displayLimit).map(n => n.toFixed(1));
-        return `[${displayedNumbers.join(', ')}${numbers.length > displayLimit ? ', ...' : ''}]`;
-      } else {
-        return '[]'; // 空数组或非数字数组
-      }
-    } else if (typeof value === 'number') {
-      return value.toFixed(2);
-    } else if (value !== undefined && value !== null && value !== '') {
-      return '🔊'; // 音频或其他非空值显示声音emoji
-    } else {
-      return '–';
-    }
-  };
-
-  return (
-    <div key={`input-container-${portKey}`}>
-      <Handle
-        key={`input-${portKey}`}
-        type="target"
-        position={Position.Left}
-        id={portKey}
-        style={{ top: portPosition, backgroundColor: portColor }}
-        className="w-2 h-2"
-        isConnectable={true}
-        data-port-type={portType} // 添加自定义属性存储端口类型
-      />
-      {isSelected && (
-        <div
-          className="text-xs text-gray-700 absolute px-2 py-1 bg-white/60 border border-gray-200 rounded shadow-sm z-10 whitespace-nowrap text-right"
-          style={{
-            top: portPosition - 2,
-            transform: 'translateY(-50%)',
-            right: 'calc(100% + 10px)',
-            left: 'auto',
-          }}
-        >
-          {portKey}: {displayValue()}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// 输出端口子组件
-const OutputPort = ({
-  portKey,
-  value,
-  portType,
-  index,
-  module,
-  isSelected,
-}: {
-  portKey: string;
-  value: any;
-  portType: PortType;
-  index: number;
-  module: ModuleBase;
-  isSelected: boolean;
-}) => {
-  const portColor = module.getPortColor(portType);
-  const portPosition = 40 + index * 28; // 将间距从20px增加到25px
-
-  // 确定显示的值
-  const displayValue = () => {
-    if (portType === PortType.ARRAY && Array.isArray(value)) {
-      // 如果是数组类型，显示前几个数字
-      const numbers = value.filter(v => typeof v === 'number');
-      if (numbers.length > 0) {
-        const displayLimit = 3; // 最多显示3个数字
-        const displayedNumbers = numbers.slice(0, displayLimit).map(n => n.toFixed(1));
-        return `[${displayedNumbers.join(', ')}${numbers.length > displayLimit ? ', ...' : ''}]`;
-      } else {
-        return '[]'; // 空数组或非数字数组
-      }
-    } else if (typeof value === 'number') {
-      return value.toFixed(2);
-    } else if (value !== undefined && value !== null && value !== '') {
-      return '🔊'; // 音频或其他非空值显示声音emoji
-    } else {
-      return '–';
-    }
-  };
-
-  return (
-    <div key={`output-container-${portKey}`} className="text-right">
-      <Handle
-        key={`output-${portKey}`}
-        type="source"
-        position={Position.Right}
-        id={portKey}
-        style={{ top: portPosition, backgroundColor: portColor }}
-        className="w-2 h-2"
-        isConnectable={true}
-        data-port-type={portType} // 添加自定义属性存储端口类型
-      />
-      {isSelected && (
-        <div
-          className="text-xs text-gray-700 absolute px-2 py-1 bg-white/60 border border-gray-200 rounded shadow-sm z-10 whitespace-nowrap text-left"
-          style={{
-            top: portPosition - 2,
-            transform: 'translateY(-50%)',
-            left: 'calc(100% + 10px)',
-            right: 'auto',
-          }}
-        >
-          {portKey}: {displayValue()}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// 模块启用/禁用切换按钮组件
-const ModuleEnableToggle = ({ module }: { module: AudioModuleBase }) => {
-  const [enabled, setEnabled] = useState(module.isEnabled());
-
-  React.useEffect(() => {
-    const subscription = module.enabled.subscribe((value) => {
-      setEnabled(value);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [module]);
-
-  const toggleEnabled = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    module.toggleEnabled();
-  };
-
-  return (
-    <button
-      onClick={toggleEnabled}
-      className="relative w-4 h-4 flex items-center justify-center focus:outline-none"
-      title={enabled ? '点击禁用模块' : '点击启用模块'}
-    >
-      <svg
-        className="w-full h-full"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <circle
-          cx="12"
-          cy="12"
-          r="10"
-          stroke="currentColor"
-          strokeWidth="2"
-          fill={enabled ? '#4ade80' : 'transparent'}
-        />
-        {!enabled && (
-          <line
-            x1="6"
-            y1="6"
-            x2="18"
-            y2="18"
-            stroke="currentColor"
-            strokeWidth="2"
-          />
-        )}
-      </svg>
-    </button>
-  );
-};
 
 const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
   const { module: moduleInstance } = data;
@@ -373,9 +41,6 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     outputPortValues,
     outputPortTypes,
   } = useModuleSubscription(moduleInstance);
-
-  // 折叠参数抽屉的展开状态
-  const [isAdvancedExpanded, setIsAdvancedExpanded] = useState(false);
 
   // 追踪模块是否启用的状态
   const [moduleEnabled, setModuleEnabled] = useState(
@@ -405,114 +70,117 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     }
   };
 
-  // 切换高级参数抽屉的展开状态
-  const toggleAdvancedParams = () => {
-    setIsAdvancedExpanded(!isAdvancedExpanded);
-  };
-
-  // 渲染参数控制器
-  const renderParameterControl = (paramKey: string) => {
-    if (!moduleInstance) return null;
-
-    const meta = moduleInstance.getParameterMeta(paramKey);
-    const value = paramValues[paramKey];
-
-    switch (meta.type) {
-      case ParameterType.NUMBER:
-        return (
-          <NumberParameterControl
-            key={paramKey}
-            paramKey={paramKey}
-            value={typeof value === 'number' ? value : 0}
-            min={meta.min || 0}
-            max={meta.max || 1}
-            step={meta.step || 0.1}
-            updateParameter={handleParameterChange}
-          />
-        );
-      case ParameterType.BOOLEAN:
-        return (
-          <BooleanParameterControl
-            key={paramKey}
-            paramKey={paramKey}
-            value={Boolean(value)}
-            updateParameter={handleParameterChange}
-          />
-        );
-      case ParameterType.LIST:
-        return (
-          <ListParameterControl
-            key={paramKey}
-            paramKey={paramKey}
-            value={String(value)}
-            options={meta.options || []}
-            updateParameter={handleParameterChange}
-          />
-        );
-      default:
-        return <div key={paramKey}>未知参数类型</div>;
-    }
-  };
-
   // 渲染自定义UI组件
   const renderCustomUI = () => {
     if (!moduleInstance) return null;
-    
+
     const customUI = moduleInstance.getCustomUI();
     if (!customUI) return null;
-    
-    const { type, props } = customUI;
-    // 使用in操作符检查type是否为有效的组件类型
+
+    const { type, props = {} } = customUI;
+    // 检查type是否为有效的组件类型
     if (!(type in CustomUIComponents)) {
-      return <div className="text-xs text-red-500">未知的自定义UI组件: {type}</div>;
+      return (
+        <div className="text-xs text-red-500">未知的自定义UI组件: {type}</div>
+      );
     }
-    
-    const CustomComponent = CustomUIComponents[type as keyof typeof CustomUIComponents];
-    
+
+    // 类型断言为字符串类型的键
+    const componentType = type as keyof typeof CustomUIComponents;
+    const CustomComponent = CustomUIComponents[componentType];
+
     // 处理参数更改的回调函数
-    const handleParamChange = (paramKey: string, value: number | boolean | string) => {
+    const handleParamChange = (
+      paramKey: string,
+      value: number | boolean | string
+    ) => {
       handleParameterChange(paramKey, value);
     };
-    
-    // 将模块参数和metaData与UI组件props合并
+
+    // 将模块参数和metaData与UI组件props合并（使用安全类型）
     return (
       <div className="custom-ui-container border-t">
-        <CustomComponent 
-        xParam={{
-          paramKey: '',
-          label: undefined,
-          min: 0,
-          max: 0
-        }} yParam={{
-          paramKey: '',
-          label: undefined,
-          min: 0,
-          max: 0
-        }} {...props}
-        module={moduleInstance}
-        paramValues={paramValues}
-        onParamChange={handleParamChange}        />
+        <CustomComponent
+          xParam={{
+            paramKey: 'x',
+            label: 'X',
+            min: 0,
+            max: 1,
+          }}
+          yParam={{
+            paramKey: 'y',
+            label: 'Y',
+            min: 0,
+            max: 1,
+          }}
+          module={moduleInstance}
+          paramValues={paramValues}
+          onParamChange={handleParamChange}
+          {...(props as Record<string, unknown>)}
+        />
       </div>
     );
   };
-  
-  // 将参数分为主要参数和高级参数
-  const mainParameters: string[] = [];
-  const advancedParameters: string[] = [];
-  
+
+  // 处理参数分组和提取信息
+  type ParameterItem = {
+    key: string;
+    type: ParameterType;
+    label: string;
+    describe?: string;
+    meta: {
+      min?: number;
+      max?: number;
+      step?: number;
+      options?: string[];
+    };
+    value: number | boolean | string;
+  };
+
+  // 按组分类的参数
+  const groupedParameters: Record<string, ParameterItem[]> = { '': [] };
+
   if (moduleInstance) {
-    Object.keys(moduleInstance.parameters).forEach(paramKey => {
+    Object.keys(moduleInstance.parameters).forEach((paramKey) => {
       const meta = moduleInstance.getParameterMeta(paramKey);
-      if (meta.uiOptions?.advanced) {
-        advancedParameters.push(paramKey);
-      } else {
-        mainParameters.push(paramKey);
+
+      if (meta.uiOptions?.hide) {
+        return;
       }
+
+      const displayName = (meta.uiOptions?.label as string) || paramKey;
+      const description = meta.uiOptions?.describe as string | undefined;
+      const group = (meta.uiOptions?.group as string) || '';
+      const value = paramValues[paramKey];
+
+      // 创建参数对象
+      const paramObj: ParameterItem = {
+        key: paramKey,
+        type: meta.type,
+        label: displayName,
+        describe: description,
+        meta: {
+          min: meta.min,
+          max: meta.max,
+          step: meta.step,
+          options: meta.options,
+        },
+        value,
+      };
+
+      // 按组分类
+      if (!groupedParameters[group]) {
+        groupedParameters[group] = [];
+      }
+      groupedParameters[group].push(paramObj);
     });
   }
-  
-  // 检查是否有高级参数
-  const hasAdvancedParams = advancedParameters.length > 0;
+
+  // 检查是否有分组参数
+  const hasGroups =
+    Object.keys(groupedParameters).filter(
+      (g) => g !== '' && groupedParameters[g].length > 0
+    ).length > 0;
 
   return (
     <div
@@ -533,41 +201,52 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
       {/* 自定义UI组件 */}
       {renderCustomUI()}
 
-      {/* 主要参数控制列表 */}
-      {moduleInstance && mainParameters.map(renderParameterControl)}
+      {/* 默认组参数 */}
+      {groupedParameters['']?.map((param) => (
+        <ParameterControl
+          key={param.key}
+          paramKey={param.key}
+          paramType={param.type}
+          value={param.value}
+          meta={param.meta}
+          updateParameter={handleParameterChange}
+          label={param.label}
+          description={param.describe}
+        />
+      ))}
 
-      {/* 高级参数抽屉切换按钮 */}
-      {hasAdvancedParams && (
-        <div
-          className="text-xs text-center mt-1 mb-1 cursor-pointer hover:bg-gray-100 py-1 rounded flex items-center justify-center"
-          onClick={toggleAdvancedParams}
-        >
-          <div className="flex items-center">
-            <span className="mr-1">
-              {isAdvancedExpanded ? '收起高级选项' : '显示高级选项'}
-            </span>
-            <svg
-              className={`w-3 h-3 transition-transform ${isAdvancedExpanded ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M19 9l-7 7-7-7"
-              ></path>
-            </svg>
-          </div>
-        </div>
-      )}
-
-      {/* 高级参数抽屉 */}
-      {isAdvancedExpanded && hasAdvancedParams && (
-        <div className="border-t pt-2 mt-1 mb-1">
-          {advancedParameters.map(renderParameterControl)}
+      {/* 带分组的参数 */}
+      {hasGroups && (
+        <div className="mt-2">
+          <Accordion type="single" collapsible className="w-full">
+            {Object.keys(groupedParameters)
+              .filter(
+                (group) => group !== '' && groupedParameters[group].length > 0
+              )
+              .map((group) => (
+                <AccordionItem value={group} key={group}>
+                  <AccordionTrigger className="text-xs py-2">
+                    {group}
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="pl-1">
+                      {groupedParameters[group].map((param) => (
+                        <ParameterControl
+                          key={param.key}
+                          paramKey={param.key}
+                          paramType={param.type}
+                          value={param.value}
+                          meta={param.meta}
+                          updateParameter={handleParameterChange}
+                          label={param.label}
+                          description={param.describe}
+                        />
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+          </Accordion>
         </div>
       )}
 
@@ -578,7 +257,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
             key={inputKey}
             portKey={inputKey}
             value={inputPortValues[inputKey]}
-            portType={inputPortTypes[inputKey] || PortType.NUMBER}
+            portType={inputPortTypes[inputKey] as PortType}
             index={index}
             module={moduleInstance}
             isSelected={!!selected}
@@ -592,7 +271,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
             key={outputKey}
             portKey={outputKey}
             value={outputPortValues[outputKey]}
-            portType={outputPortTypes[outputKey] || PortType.NUMBER}
+            portType={outputPortTypes[outputKey] as PortType}
             index={index}
             module={moduleInstance}
             isSelected={!!selected}

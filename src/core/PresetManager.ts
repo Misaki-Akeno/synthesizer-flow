@@ -35,7 +35,8 @@ export class PresetManager {
     // 深拷贝预设，避免引用问题
     this.presets = JSON.parse(JSON.stringify(initialPresets));
     // 设置默认预设ID，如果未指定则使用第一个预设
-    this.defaultPresetId = defaultPresetId || (this.presets.length > 0 ? this.presets[0].id : '');
+    this.defaultPresetId =
+      defaultPresetId || (this.presets.length > 0 ? this.presets[0].id : '');
   }
 
   // 获取所有预设
@@ -66,7 +67,10 @@ export class PresetManager {
     edges: Edge[];
   } {
     // 如果未指定预设ID或者预设不存在，使用默认预设
-    const preset = this.getPreset(presetId) || this.getPreset(this.defaultPresetId) || this.presets[0];
+    const preset =
+      this.getPreset(presetId) ||
+      this.getPreset(this.defaultPresetId) ||
+      this.presets[0];
     if (!preset) {
       throw new Error('No presets available');
     }
@@ -211,7 +215,6 @@ const majorChordPreset: Preset = {
   ],
 };
 
-
 // MIDI输入测试预设
 const midiInputTestPreset: Preset = {
   id: 'midi-input-test',
@@ -293,7 +296,8 @@ const midiInputTestPreset: Preset = {
   ],
 };
 
-
-
 // 创建并导出预设管理器实例，设置'midi-input-test'为默认预设
-export const presetManager = new PresetManager([majorChordPreset, midiInputTestPreset], 'midi-input-test');
+export const presetManager = new PresetManager(
+  [majorChordPreset, midiInputTestPreset],
+  'midi-input-test'
+);

@@ -21,7 +21,11 @@ export class SimpleOscillatorModule extends AudioModuleBase {
         min: 0,
         max: 2.0,
         step: 0.1,
-        uiOptions: { advanced: true },
+        uiOptions: {
+          group: '不常见参数',
+          label: '音量',
+          describe: '控制振荡器的输出音量大小',
+        },
       },
       freq: {
         type: ParameterType.NUMBER,
@@ -29,12 +33,20 @@ export class SimpleOscillatorModule extends AudioModuleBase {
         min: 20,
         max: 2000,
         step: 10,
-        uiOptions: { advanced: true },
+        uiOptions: {
+          group: '不常见参数',
+          label: '频率',
+          describe: '控制振荡器的基础频率(Hz)',
+        },
       },
       waveform: {
         type: ParameterType.LIST,
         value: 'sine',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
+        uiOptions: {
+          label: '波形',
+          describe: '选择振荡器的波形类型',
+        },
       },
       freqModDepth: {
         type: ParameterType.NUMBER,
@@ -42,7 +54,11 @@ export class SimpleOscillatorModule extends AudioModuleBase {
         min: 0,
         max: 20,
         step: 1,
-        uiOptions: { advanced: true },
+        uiOptions: {
+          group: '不常见参数',
+          label: '频率调制深度',
+          describe: '控制频率调制的强度',
+        },
       },
       gainModDepth: {
         type: ParameterType.NUMBER,
@@ -50,7 +66,11 @@ export class SimpleOscillatorModule extends AudioModuleBase {
         min: 0,
         max: 1,
         step: 0.05,
-        uiOptions: { advanced: true },
+        uiOptions: {
+          group: '不常见参数',
+          label: '音量调制深度',
+          describe: '控制音量调制的强度',
+        },
       },
     };
 
@@ -78,7 +98,7 @@ export class SimpleOscillatorModule extends AudioModuleBase {
     };
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
-    
+
     this.setCustomUI('XYPad', {
       xParam: {
         paramKey: 'freq',
