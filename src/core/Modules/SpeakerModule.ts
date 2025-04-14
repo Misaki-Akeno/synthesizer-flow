@@ -19,8 +19,11 @@ export class SpeakerModule extends AudioModuleBase {
         min: -60,
         max: 0,
         step: 0.1,
+        uiOptions: {
+          label: '音量',
+          describe: '控制输出音频的音量大小(dB)',
+        },
       },
-      // enabled参数已移除
     };
 
     // 定义端口

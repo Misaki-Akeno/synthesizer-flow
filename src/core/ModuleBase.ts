@@ -5,6 +5,7 @@ import { BehaviorSubject, Subscription } from 'rxjs';
 export enum PortType {
   NUMBER = 'number',
   AUDIO = 'audio',
+  ARRAY = 'array', // 新增：用于传输数组数据（如复音MIDI数据）
 }
 
 // 参数类型枚举
@@ -14,8 +15,8 @@ export enum ParameterType {
   LIST = 'list',
 }
 
-// 允许接口的数据类型是 number 或 audio
-export type ModuleInterface = number | Audio;
+// 允许接口的数据类型是 number、audio 或数组
+export type ModuleInterface = number | Audio | Array<number | object>;
 
 // 定义一个音频类型
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,12 +30,21 @@ export interface ParameterDefinition {
   max?: number;
   step?: number;
   options?: string[]; // 用于LIST类型，选项列表
+  uiOptions?: {
+    // 用于UI相关配置
+    hide?: boolean; // 是否在UI中隐藏该参数
+    group?: string; // 参数分组名称
+    describe?: string; // 参数说明/描述文本
+    label?: string; // 参数显示名称（替代参数键名）
+    [key: string]: unknown; // 允许其他UI配置选项
+  };
 }
 
 // 端口颜色映射
 export const PORT_COLORS = {
   [PortType.NUMBER]: '#1D4ED8', // 数字端口为蓝色
   [PortType.AUDIO]: '#047857', // 音频端口为绿色
+  [PortType.ARRAY]: '#9333EA', // 数组端口为紫色
 };
 
 // 模块抽象类
@@ -57,7 +67,16 @@ export abstract class ModuleBase {
       max?: number;
       step?: number;
       options?: string[];
+      uiOptions?: {
+        [key: string]: unknown;
+      };
     };
+  };
+
+  // 添加自定义UI支持
+  protected customUI?: {
+    type: string;
+    props?: Record<string, unknown>;
   };
 
   // 输入接口，使用BehaviorSubject
@@ -105,6 +124,7 @@ export abstract class ModuleBase {
         max: param.max,
         step: param.step,
         options: param.options,
+        uiOptions: param.uiOptions,
       };
     }
 
@@ -139,6 +159,9 @@ export abstract class ModuleBase {
     max?: number;
     step?: number;
     options?: string[];
+    uiOptions?: {
+      [key: string]: unknown;
+    };
   } {
     return (
       this.parameterMeta[paramKey] || {
@@ -597,6 +620,25 @@ export abstract class ModuleBase {
    */
   protected addInternalSubscriptions(subscriptions: Subscription[]): void {
     subscriptions.forEach((sub) => this.internalSubscriptions.push(sub));
+  }
+
+  /**
+   * 获取模块的自定义UI组件信息
+   * @returns 自定义UI组件信息，包含类型和props
+   */
+  public getCustomUI():
+    | { type: string; props?: Record<string, unknown> }
+    | undefined {
+    return this.customUI;
+  }
+
+  /**
+   * 设置模块的自定义UI
+   * @param type 自定义UI组件类型
+   * @param props 组件属性
+   */
+  protected setCustomUI(type: string, props?: Record<string, unknown>): void {
+    this.customUI = { type, props };
   }
 
   /**

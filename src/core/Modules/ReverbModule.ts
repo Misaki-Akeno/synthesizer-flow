@@ -19,6 +19,11 @@ export class ReverbModule extends AudioModuleBase {
         min: 0.1,
         max: 10.0,
         step: 0.1,
+        uiOptions: {
+          group: '不常见参数',
+          label: '衰减时间',
+          describe: '控制混响效果的衰减时间长度',
+        },
       },
       wet: {
         type: ParameterType.NUMBER,
@@ -26,6 +31,11 @@ export class ReverbModule extends AudioModuleBase {
         min: 0,
         max: 1.0,
         step: 0.01,
+        uiOptions: {
+          group: '不常见参数',
+          label: '湿度',
+          describe: '调节原始信号与混响效果的混合比例',
+        },
       },
       preDelay: {
         type: ParameterType.NUMBER,
@@ -33,8 +43,12 @@ export class ReverbModule extends AudioModuleBase {
         min: 0,
         max: 0.5,
         step: 0.01,
+        uiOptions: {
+          group: '不常见参数',
+          label: '预延迟',
+          describe: '设置直接声音与混响开始之间的延迟时间',
+        },
       },
-      // bypass参数已移除
     };
 
     // 定义输入和输出端口
@@ -53,6 +67,23 @@ export class ReverbModule extends AudioModuleBase {
     };
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
+
+    this.setCustomUI('XYPad', {
+      xParam: {
+        paramKey: 'decay',
+        label: 'Decay',
+        min: 0.1,
+        max: 10,
+      },
+      yParam: {
+        paramKey: 'wet',
+        label: 'Wet',
+        min: 0,
+        max: 1.0,
+      },
+      width: 180,
+      height: 120,
+    });
   }
 
   /**

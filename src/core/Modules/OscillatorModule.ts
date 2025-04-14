@@ -5,17 +5,15 @@ import { AudioModuleBase } from '../AudioModuleBase';
 /**
  * 振荡器模块，生成音频信号并根据参数调整输出
  */
-export class OscillatorModule extends AudioModuleBase {
+export class SimpleOscillatorModule extends AudioModuleBase {
   private oscillator: any;
   private gainNode: any; // 用于渐变控制
 
-  // 存储调制信号的当前值
   private currentFreqMod: number = 0;
   private currentGainMod: number = 0;
 
   constructor(id: string, name: string = '振荡器') {
-    // 初始化基本参数
-    const moduleType = 'oscillator';
+    const moduleType = 'simpleoscillator';
     const parameters = {
       gain: {
         type: ParameterType.NUMBER,
@@ -23,6 +21,11 @@ export class OscillatorModule extends AudioModuleBase {
         min: 0,
         max: 2.0,
         step: 0.1,
+        uiOptions: {
+          group: '不常见参数',
+          label: '音量',
+          describe: '控制振荡器的输出音量大小',
+        },
       },
       freq: {
         type: ParameterType.NUMBER,
@@ -30,20 +33,32 @@ export class OscillatorModule extends AudioModuleBase {
         min: 20,
         max: 2000,
         step: 10,
+        uiOptions: {
+          group: '不常见参数',
+          label: '频率',
+          describe: '控制振荡器的基础频率(Hz)',
+        },
       },
       waveform: {
         type: ParameterType.LIST,
         value: 'sine',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
+        uiOptions: {
+          label: '波形',
+          describe: '选择振荡器的波形类型',
+        },
       },
-      // enabled参数已移除
-      // 调制深度参数
       freqModDepth: {
         type: ParameterType.NUMBER,
         value: 2,
         min: 0,
         max: 20,
         step: 1,
+        uiOptions: {
+          group: '不常见参数',
+          label: '频率调制深度',
+          describe: '控制频率调制的强度',
+        },
       },
       gainModDepth: {
         type: ParameterType.NUMBER,
@@ -51,6 +66,11 @@ export class OscillatorModule extends AudioModuleBase {
         min: 0,
         max: 1,
         step: 0.05,
+        uiOptions: {
+          group: '不常见参数',
+          label: '音量调制深度',
+          describe: '控制音量调制的强度',
+        },
       },
     };
 
@@ -78,6 +98,23 @@ export class OscillatorModule extends AudioModuleBase {
     };
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
+
+    this.setCustomUI('XYPad', {
+      xParam: {
+        paramKey: 'freq',
+        label: '频率',
+        min: 20,
+        max: 2000,
+      },
+      yParam: {
+        paramKey: 'gain',
+        label: '增益',
+        min: 0,
+        max: 2.0,
+      },
+      width: 180,
+      height: 120,
+    });
   }
 
   /**
