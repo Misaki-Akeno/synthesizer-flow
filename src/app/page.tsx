@@ -17,10 +17,11 @@ export default async function PlaygroundPage({
   searchParams: Promise<SearchParams>;
 }) {
   const resolvedSearchParams = await searchParams;
-  const presetId =
-    typeof resolvedSearchParams.preset === 'string'
-      ? resolvedSearchParams.preset
-      : undefined;
+  
+  // 只使用project参数
+  const projectId = typeof resolvedSearchParams.project === 'string'
+    ? resolvedSearchParams.project
+    : undefined;
 
   return (
     <div className="h-screen flex flex-col">
@@ -28,7 +29,7 @@ export default async function PlaygroundPage({
         <div className="flex-1 overflow-hidden">
           <ReactFlowProvider>
             <ContextMenuProvider>
-              <Canvas initialProjectId={presetId} />
+              <Canvas projectId={projectId} />
             </ContextMenuProvider>
           </ReactFlowProvider>
         </div>

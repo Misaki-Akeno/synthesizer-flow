@@ -2,17 +2,23 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useFlowStore } from './store';
 import { getAllPresets } from '../lib/getpresetjson';
+import { nanoid } from 'nanoid';
+
+// 生成短UUID的工具函数
+function generateShortId(): string {
+  return nanoid(10); // 生成10个字符的短ID
+}
 
 export interface ProjectConfig {
-  name: string;
+  id: string;         // 项目唯一标识符，现在是必填项
+  name: string;       // 项目名称，用于显示
   description?: string;
   created: string;
   lastModified: string;
-  data: string; // JSON 格式的画布数据
+  data: string;       // JSON 格式的画布数据
   thumbnail?: string; // Base64格式的画布缩略图
   tags?: string[];
   isBuiltIn?: boolean; // 标记是否为内置预设
-  id?: string; // 内置预设的ID
 }
 
 interface PersistState {
@@ -37,6 +43,9 @@ interface PersistState {
   // 获取所有可用项目（包括内置预设和用户项目）
   getAllProjects: () => ProjectConfig[];
 
+  // 获取项目
+  getProjectById: (id: string) => ProjectConfig | null;
+
   // 项目管理方法
   saveCurrentCanvas: (name: string, description?: string) => Promise<boolean>;
   loadProject: (projectData: ProjectConfig) => Promise<boolean>;
@@ -58,30 +67,8 @@ const jsonUtils = {
   }
 };
 
-// 将内置预设JSON转换为项目格式
-function convertPresetsToProjects(): ProjectConfig[] {
-  const presets = getAllPresets();
-  
-  return presets.map((preset, index) => {
-    // 使用预设JSON数据
-    const presetJson = JSON.stringify(preset);
-    
-    // 创建项目配置
-    const now = new Date().toISOString();
-    return {
-      name: preset.nodes[0]?.data?.label || `预设 ${index + 1}`,
-      description: `内置预设: ${preset.nodes[0]?.data?.label || `预设 ${index + 1}`}`,
-      created: now,
-      lastModified: now,
-      data: jsonUtils.makeJsonUrlSafe(presetJson),
-      isBuiltIn: true,
-      id: `builtin-preset-${index}`
-    };
-  });
-}
-
-// 准备内置预设项目
-const builtInProjects = convertPresetsToProjects();
+// 直接从getpresetjson中获取内置预设
+const builtInProjects = getAllPresets();
 
 export const usePersistStore = create<PersistState>()(
   persist(
@@ -109,6 +96,13 @@ export const usePersistStore = create<PersistState>()(
         const { recentProjects, builtInProjects } = get();
         return [...builtInProjects, ...recentProjects];
       },
+      
+      // 按ID获取项目
+      getProjectById: (id: string) => {
+        const { recentProjects, builtInProjects } = get();
+        const allProjects = [...builtInProjects, ...recentProjects];
+        return allProjects.find(p => p.id === id) || null;
+      },
 
       // 保存当前画布状态为新项目
       saveCurrentCanvas: async (name: string, description?: string) => {
@@ -121,28 +115,38 @@ export const usePersistStore = create<PersistState>()(
           
           // 创建项目配置
           const now = new Date().toISOString();
-          const project: ProjectConfig = {
-            name,
-            description,
-            created: now,
-            lastModified: now,
-            data: safeJson,
-            // TODO: 添加缩略图生成功能
-          };
           
-          // 更新状态
           set((state) => {
             // 检查是否已存在同名项目
             const existingIndex = state.recentProjects.findIndex(
               (p) => p.name === name
             );
             
+            let project: ProjectConfig;
             const updatedProjects = [...state.recentProjects];
+            
             if (existingIndex >= 0) {
-              // 更新现有项目
+              // 更新现有项目，保留原有ID
+              project = {
+                ...updatedProjects[existingIndex],
+                name,
+                description,
+                lastModified: now,
+                data: safeJson,
+              };
               updatedProjects[existingIndex] = project;
             } else {
-              // 添加新项目
+              // 添加新项目，生成唯一ID
+              project = {
+                name,
+                description,
+                created: now,
+                lastModified: now,
+                data: safeJson,
+                id: generateShortId(),
+                // TODO: 添加缩略图生成功能
+              };
+              
               updatedProjects.unshift(project);
               // 保持列表长度不超过20个项目
               if (updatedProjects.length > 20) {
@@ -166,6 +170,39 @@ export const usePersistStore = create<PersistState>()(
       // 加载已保存的项目
       loadProject: async (projectData: ProjectConfig) => {
         try {
+          const currentNodes = useFlowStore.getState().nodes;
+          if (currentNodes.length > 0) {
+            const speakerNodes = currentNodes.filter(node => 
+              node.data?.module?.moduleType === 'speaker'
+            );
+            
+            speakerNodes.forEach(node => {
+              if (node.data?.module?.dispose) {
+                try {
+                  node.data.module.dispose();
+                  console.debug(`已停止音频输出: ${node.id}`);
+                } catch (e) {
+                  console.warn(`停止音频输出失败: ${node.id}`, e);
+                }
+              }
+            });
+            
+            // 然后清理其他节点
+            currentNodes.forEach(node => {
+              if (node.data?.module?.dispose && node.data.module.moduleType !== 'speaker') {
+                try {
+                  node.data.module.dispose();
+                  console.debug(`已释放模块资源: ${node.id}`);
+                } catch (e) {
+                  console.warn(`释放模块资源失败: ${node.id}`, e);
+                }
+              }
+            });
+            
+            // 为了安全起见，引入短暂延迟确保资源释放完成
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+
           // 将URL安全的JSON转换回标准JSON
           const jsonData = jsonUtils.restoreUrlSafeJson(projectData.data);
           
@@ -253,6 +290,7 @@ export const usePersistStore = create<PersistState>()(
               created: now,
               lastModified: now,
               data: safeJson,
+              id: generateShortId(),
             };
             
             set((state) => ({

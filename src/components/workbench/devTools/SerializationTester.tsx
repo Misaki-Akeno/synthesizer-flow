@@ -179,6 +179,19 @@ export default function SerializationTester() {
           >
             下载 JSON 文件
           </Button>
+          <Button 
+            size="sm" 
+            variant="outline"
+            onClick={() => {
+              if (confirm('确定要清空本地存储(localStorage)吗? 这将删除所有保存的项目和设置。')) {
+                localStorage.clear();
+                alert('本地存储已清空。应用需要刷新以应用更改。');
+                window.location.reload();
+              }
+            }}
+          >
+            清空本地存储
+          </Button>
         </div>
       </div>
       
