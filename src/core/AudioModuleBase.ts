@@ -13,9 +13,9 @@ export abstract class AudioModuleBase extends ModuleBase {
   // 初始化完成标志
   protected initialized: boolean = false;
   // 默认渐变时间，用于避免爆破音
-  protected fadeTime: number = 0.01;
+  protected fadeTime: number = 0.001;
   // 较长的渐变时间，用于某些参数的平滑变化
-  protected smoothTime: number = 0.05;
+  protected smoothTime: number = 0.005;
   // 待处理的音频输入队列
   protected pendingAudioInputs: Array<{
     sourceModuleId: string;

@@ -52,7 +52,7 @@ const presets: ProjectConfig[] = [
       "timestamp":1744964800320,
       "nodes":[
         {"id":"midiInput","position":{"x":200,"y":200},"data":{"type":"midiinput","label":"MIDI控制器输入","parameters":{"channel":0,"inputDevice":"","transpose":0,"velocitySensitivity":1}}},
-        {"id":"polyOsc","position":{"x":500,"y":200},"data":{"type":"advancedoscillator","label":"复音振荡器","parameters":{"detune":0,"octave":0,"semi":0,"gainDb":0,"waveform":"sine","voiceCount":8,"attackVelSens":0.8,"attack":0.2,"decay":0.5,"sustain":0.7,"sustainTime":0,"release":0.8}}},
+        {"id":"polyOsc","position":{"x":500,"y":200},"data":{"type":"advancedoscillator","label":"复音振荡器","parameters":{"detune":0,"octave":0,"semi":0,"gainDb":0,"waveform":"triangle","voiceCount":8,"attackVelSens":0.8,"attack":0.2,"decay":0.5,"sustain":0.7,"sustainTime":0,"release":0.8}}},
         {"id":"reverbEffect","position":{"x":800,"y":200},"data":{"type":"reverb","label":"混响效果器","parameters":{"decay":1.8,"wet":0.35,"preDelay":0.01}}},
         {"id":"speaker","position":{"x":1100,"y":200},"data":{"type":"speaker","label":"扬声器","parameters":{"level":-12}}}
       ],

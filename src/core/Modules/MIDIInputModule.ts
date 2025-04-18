@@ -342,7 +342,7 @@ export class MIDIInputModule extends AudioModuleBase {
    * 处理音符按下事件
    */
   private handleNoteOn(note: number, velocity: number): void {
-    // 获取当前时间戳，用于防抖动
+    // 获取当前时间戳，用于批处理
     const currentTime = performance.now();
 
     // 应用音高转置
@@ -359,12 +359,10 @@ export class MIDIInputModule extends AudioModuleBase {
     // 添加到活跃音符 Map 中，存储音符和对应的力度
     this.activeNoteVelocities.set(transposedNote, scaledVelocity);
 
-    // 更新输出端口（加入防抖动，避免频繁更新）
-    if (currentTime - this.lastNoteChangeTime > 5) {
-      // 5ms的防抖动时间
-      this.updateOutputPorts();
-      this.lastNoteChangeTime = currentTime;
-    }
+    // 始终立即更新输出端口，但使用批处理方式减少更新频率
+    // 移除条件检查，确保每个音符变化都会更新
+    this.updateOutputPorts();
+    this.lastNoteChangeTime = currentTime;
   }
 
   /**
@@ -378,7 +376,7 @@ export class MIDIInputModule extends AudioModuleBase {
     // 从活跃音符 Map 中移除
     this.activeNoteVelocities.delete(transposedNote);
 
-    // 更新输出端口
+    // 始终立即更新输出端口
     this.updateOutputPorts();
   }
 
