@@ -4,10 +4,12 @@ import { useCallback } from 'react';
 import { Node, Edge, useReactFlow } from '@xyflow/react';
 import { useContextMenu } from './useContextMenu';
 import { MenuItem } from '../types';
+import { useModuleSelectorContext } from '../ModuleSelectorContext';
 
 export const useFlowContextMenu = () => {
   const { handleContextMenu } = useContextMenu();
   const reactFlowInstance = useReactFlow();
+  const { showModuleSelector } = useModuleSelectorContext();
 
   // 处理事件类型的辅助函数
   const handleEvent = (
@@ -43,11 +45,19 @@ export const useFlowContextMenu = () => {
           id: 'add-node',
           label: '添加节点',
           onClick: () => {
+            // 将显示模块选择器替换原来的直接添加节点
+            showModuleSelector(clientX, clientY);
+          },
+        },
+        {
+          id: 'paste-node',
+          label: '粘贴节点',
+          onClick: () => {
             const position = reactFlowInstance.screenToFlowPosition({
               x: clientX,
               y: clientY,
             });
-            console.info('添加节点在位置', position);
+            console.info('粘贴节点在位置', position);
           },
         },
         {
@@ -61,7 +71,7 @@ export const useFlowContextMenu = () => {
 
       handleContextMenu(handleEvent(event), paneMenuItems);
     },
-    [handleContextMenu, reactFlowInstance]
+    [handleContextMenu, reactFlowInstance, showModuleSelector]
   );
 
   // 节点右键菜单
@@ -110,13 +120,6 @@ export const useFlowContextMenu = () => {
           label: '删除连接',
           onClick: () => {
             console.info('删除连接', edge.id);
-          },
-        },
-        {
-          id: 'edit-edge',
-          label: '编辑连接',
-          onClick: () => {
-            console.info('编辑连接', edge.id);
           },
         },
       ];

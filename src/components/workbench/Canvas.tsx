@@ -7,6 +7,7 @@ import {
   Background,
   BackgroundVariant,
   IsValidConnection,
+  ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import DevTools from './devTools/DevTools';
@@ -14,6 +15,8 @@ import DefaultNode from './DefaultNode';
 import PresetLoader from './PresetLoader';
 import { useFlowStore } from '../../store/store';
 import { ContextMenu } from '../contextMenu/ContextMenu';
+import { ContextMenuProvider } from '../contextMenu/ContextMenuProvider';
+import { ModuleSelectorProvider } from '../contextMenu/ModuleSelectorContext';
 import { useFlowContextMenu } from '../contextMenu/hooks/useFlowContextMenu';
 
 const nodeTypes = {
@@ -24,7 +27,8 @@ interface CanvasProps {
   initialPresetId?: string;
 }
 
-export default function App({ initialPresetId }: CanvasProps = {}) {
+// 内部Canvas组件，包含实际的ReactFlow
+const CanvasInner = ({ initialPresetId }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect } =
     useFlowStore();
 
@@ -56,28 +60,41 @@ export default function App({ initialPresetId }: CanvasProps = {}) {
   };
 
   return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      onConnect={onConnect}
+      nodeTypes={nodeTypes}
+      onPaneContextMenu={onPaneContextMenu}
+      onNodeContextMenu={onNodeContextMenu}
+      onEdgeContextMenu={onEdgeContextMenu}
+      isValidConnection={isValidConnection}
+    >
+      <PresetLoader initialPresetId={initialPresetId} />
+      <DevTools />
+      <Controls />
+      <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+      <ContextMenu />
+    </ReactFlow>
+  );
+};
+
+// 外层Canvas组件，提供所有必要的上下文
+export default function Canvas({ initialPresetId }: CanvasProps = {}) {
+  return (
     <div
       style={{ width: '100vw', height: '100vh' }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        onPaneContextMenu={onPaneContextMenu}
-        onNodeContextMenu={onNodeContextMenu}
-        onEdgeContextMenu={onEdgeContextMenu}
-        isValidConnection={isValidConnection}
-      >
-        <PresetLoader initialPresetId={initialPresetId} />
-        <DevTools />
-        <Controls />
-        <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-        <ContextMenu />
-      </ReactFlow>
+      <ReactFlowProvider>
+        <ContextMenuProvider>
+          <ModuleSelectorProvider>
+            <CanvasInner initialPresetId={initialPresetId} />
+          </ModuleSelectorProvider>
+        </ContextMenuProvider>
+      </ReactFlowProvider>
     </div>
   );
 }

@@ -34,8 +34,9 @@ interface FlowState {
     type: string,
     label: string,
     position: { x: number; y: number }
-  ) => void;
+  ) => string;
   addEdge: (source: string, target: string) => void;
+  deleteNode: (nodeId: string) => void; // 新增删除节点方法
 }
 
 // 使用PresetManager的默认预设ID
@@ -151,10 +152,41 @@ export const useFlowStore = create<FlowState>((set, get) => {
     // 添加新边
     addEdge: (source, target) => {
       const edgeId = `edge_${source}_${target}_${Date.now()}`;
-      const newEdge = moduleManager.createEdge(edgeId, source, target);
+      const newEdge = moduleManager.createEdge(source, target);
 
       set({
         edges: [...get().edges, newEdge],
+      });
+    },
+    
+    // 删除节点（及其相关的边）
+    deleteNode: (nodeId) => {
+      const node = get().nodes.find(n => n.id === nodeId);
+      
+      if (!node) return;
+      
+      // 1. 找到与该节点相连的所有边
+      const connectedEdges = get().edges.filter(
+        edge => edge.source === nodeId || edge.target === nodeId
+      );
+      
+      // 2. 解除所有边的绑定
+      connectedEdges.forEach(edge => {
+        moduleManager.removeEdgeBinding(edge);
+      });
+      
+      // 3. 如果节点有模块实例，释放其资源
+      if (node.data?.module) {
+        node.data.module.dispose();
+        
+        // 记录模块销毁事件
+        moduleInitManager.recordDisposal(nodeId);
+      }
+      
+      // 4. 从状态中移除节点和相连的边
+      set({
+        nodes: get().nodes.filter(n => n.id !== nodeId),
+        edges: get().edges.filter(e => e.source !== nodeId && e.target !== nodeId)
       });
     },
   };
