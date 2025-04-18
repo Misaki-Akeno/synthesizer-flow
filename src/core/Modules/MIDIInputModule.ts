@@ -420,8 +420,25 @@ export class MIDIInputModule extends AudioModuleBase {
     // 输入设备参数
     const inputDeviceSubscription = this.parameters['inputDevice'].subscribe(
       (value: number | boolean | string) => {
-        if (typeof value === 'string' && value) {
-          this.connectToDevice(value);
+        if (typeof value === 'string') {
+          if (value) {
+            // 检查设备ID是否在有效列表中
+            const deviceOptions = this.parameterMeta['inputDevice']?.options || [];
+            if (deviceOptions.includes(value)) {
+              this.connectToDevice(value);
+            } else {
+              console.debug(
+                `[${this.moduleType}Module ${this.id}] 设备ID "${value}"不在当前可用设备列表中，尝试连接默认设备`
+              );
+              if (this.midiInputs.length > 0) {
+                const defaultDevice = this.midiInputs[0].id;
+                // 静默更新参数值，避免触发警告
+                if (defaultDevice) {
+                  this.parameters['inputDevice'].next(defaultDevice);
+                }
+              }
+            }
+          }
         }
       }
     );
@@ -430,14 +447,10 @@ export class MIDIInputModule extends AudioModuleBase {
     const channelSubscription = this.parameters['channel'].subscribe(() => {});
 
     // 转置参数
-    const transposeSubscription = this.parameters['transpose'].subscribe(
-      () => {}
-    );
+    const transposeSubscription = this.parameters['transpose'].subscribe(() => {});
 
     // 力度灵敏度参数
-    const velocitySensitivitySubscription = this.parameters[
-      'velocitySensitivity'
-    ].subscribe(() => {});
+    const velocitySensitivitySubscription = this.parameters['velocitySensitivity'].subscribe(() => {});
 
     this.addInternalSubscriptions([
       inputDeviceSubscription,

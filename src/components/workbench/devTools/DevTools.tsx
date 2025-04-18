@@ -14,6 +14,7 @@ import NodeInspector from './NodeInspector';
 import ChangeLogger from './ChangeLogger';
 import ViewportLogger from './ViewportLogger';
 import EdgeModuleLogger from './EdgeModuleLogger';
+import SerializationTester from './SerializationTester';
 
 export default function DevTools() {
   const [isOpen, setIsOpen] = useState(true);
@@ -84,7 +85,13 @@ export default function DevTools() {
         {/* 内容区域 */}
         {isOpen && (
           <div className="overflow-y-auto max-h-[80vh]">
-            <Accordion type="multiple" defaultValue={['edge-module-logger']}>
+            <Accordion type="multiple" defaultValue={['serialization-tester', 'edge-module-logger']}>
+              <DevToolSection id="serialization-tester" title="项目保存/加载">
+                <div className="px-4 py-2">
+                  <SerializationTester />
+                </div>
+              </DevToolSection>
+            
               <DevToolSection id="edge-module-logger" title="边和模块信息">
                 <div className="px-4 py-2">
                   <EdgeModuleLogger />

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.4 (2025-05-01)
+
+### Features
+
+- **项目持久化**: 添加项目保存和加载功能
+  - 实现`SerializationManager`类，提供模块和画布的序列化/反序列化功能
+  - 使用Zustand的persist中间件实现本地存储
+  - 添加项目管理UI界面，支持保存、加载、导出和导入项目
+  - 支持Base64格式的画布数据导入导出
+  - URL安全的Base64转换，确保序列化数据可用于URL参数
+
+### Bug Fixes
+
+- 修复`ModuleInitManager`中模块注册逻辑，优化模块初始化流程
+- 减少`AdvancedOscillatorModule`中的冗余日志输出
+- 修复`MIDIInputModule`中无效设备ID处理逻辑
+
 ## 0.6.3 (2025-04-18)
 
 ### UI Improvements

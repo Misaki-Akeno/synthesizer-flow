@@ -11,6 +11,8 @@ import {
 import { presetManager } from '../core/PresetManager';
 import { moduleManager, FlowNode } from '../core/ModuleManager';
 import { moduleInitManager } from '../core/ModuleInitManager';
+import { serializationManager } from '../core/SerializationManager'; // 导入序列化管理器
+import { SerializedModule } from '@/core/types/SerializationTypes';
 
 // --------------------------------
 //        Reactflow管理部分
@@ -36,7 +38,14 @@ interface FlowState {
     position: { x: number; y: number }
   ) => string;
   addEdge: (source: string, target: string) => void;
-  deleteNode: (nodeId: string) => void; // 新增删除节点方法
+  deleteNode: (nodeId: string) => void;
+  
+  // 修改序列化相关方法
+  exportCanvasToJson: () => string;
+  importCanvasFromJson: (jsonString: string) => boolean;
+  getModuleAsJson: (moduleId: string) => unknown | null;
+  getModuleAsString: (moduleId: string) => string | null;
+  importModuleFromData: (data: unknown) => string | null;
 }
 
 // 使用PresetManager的默认预设ID
@@ -151,7 +160,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
     // 添加新边
     addEdge: (source, target) => {
-      const edgeId = `edge_${source}_${target}_${Date.now()}`;
+      const _edgeId = `edge_${source}_${target}_${Date.now()}`;
       const newEdge = moduleManager.createEdge(source, target);
 
       set({
@@ -188,6 +197,95 @@ export const useFlowStore = create<FlowState>((set, get) => {
         nodes: get().nodes.filter(n => n.id !== nodeId),
         edges: get().edges.filter(e => e.source !== nodeId && e.target !== nodeId)
       });
+    },
+
+    // 序列化整个画布到JSON格式
+    exportCanvasToJson: () => {
+      return serializationManager.serializeCanvasToJson(
+        get().nodes, 
+        get().edges
+      );
+    },
+
+    // 从JSON格式导入画布
+    importCanvasFromJson: (jsonString) => {
+      try {
+        const { nodes, edges } = serializationManager.deserializeCanvasFromJson(jsonString);
+        
+        // 重置初始化管理器
+        moduleInitManager.reset();
+
+        // 更新状态
+        set({
+          nodes,
+          edges,
+          currentPresetId: 'custom-imported'
+        });
+
+        // 初始化连接
+        moduleInitManager.onAllModulesReady(() => {
+          moduleManager.setupAllEdgeBindings(edges);
+        });
+
+        return true;
+      } catch (error) {
+        console.error('导入画布数据失败:', error);
+        return false;
+      }
+    },
+
+    // 获取模块的JSON表示
+    getModuleAsJson: (moduleId) => {
+      const node = get().nodes.find(n => n.id === moduleId);
+      if (!node || !node.data?.module) return null;
+
+      return serializationManager.serializeModule(node.data.module);
+    },
+
+    // 获取模块的JSON字符串表示
+    getModuleAsString: (moduleId) => {
+      const node = get().nodes.find(n => n.id === moduleId);
+      if (!node || !node.data?.module) return null;
+
+      return serializationManager.serializeModuleToJson(node.data.module);
+    },
+
+    // 从序列化数据导入模块（可以是JSON字符串或JSON对象）
+    importModuleFromData: (data) => {
+      try {
+        let moduleInstance;
+        
+        if (typeof data === 'string') {
+          // 假设是JSON字符串
+          moduleInstance = serializationManager.deserializeModuleFromJson(data);
+        } else {
+          // 假设是已经解析的对象
+          moduleInstance = serializationManager.deserializeModule(data as SerializedModule);
+        }
+        
+        if (!moduleInstance) {
+          return null;
+        }
+
+        // 创建一个新节点，位置居中
+        const center = { x: 500, y: 300 };
+        const newNode = moduleManager.createNode(
+          moduleInstance.id, 
+          moduleInstance.moduleType, 
+          moduleInstance.name, 
+          center
+        );
+
+        // 更新节点列表
+        set({
+          nodes: [...get().nodes, newNode]
+        });
+
+        return moduleInstance.id;
+      } catch (error) {
+        console.error('导入模块失败:', error);
+        return null;
+      }
     },
   };
 });
