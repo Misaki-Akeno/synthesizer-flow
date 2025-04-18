@@ -99,7 +99,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
 
     // 将模块参数和metaData与UI组件props合并（使用安全类型）
     return (
-      <div className="custom-ui-container border-t">
+      <div className="custom-ui-container">
         <CustomComponent
           xParam={{
             paramKey: 'x',

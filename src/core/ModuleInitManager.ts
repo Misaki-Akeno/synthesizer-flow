@@ -49,7 +49,7 @@ class ModuleInitManager {
    */
   public markModuleAsInitialized(moduleId: string): void {
     if (!this.pendingModules.has(moduleId)) {
-      console.warn(`Module ${moduleId} was not registered as pending`);
+      this.registerPendingModule(moduleId);
     }
 
     this.pendingModules.delete(moduleId);

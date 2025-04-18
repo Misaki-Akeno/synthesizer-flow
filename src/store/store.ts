@@ -8,9 +8,10 @@ import {
   applyEdgeChanges,
   Edge,
 } from '@xyflow/react';
-import { presetManager } from '../core/PresetManager';
 import { moduleManager, FlowNode } from '../core/ModuleManager';
 import { moduleInitManager } from '../core/ModuleInitManager';
+import { serializationManager } from '../core/SerializationManager';
+import { SerializedModule } from '@/core/types/SerializationTypes';
 
 // --------------------------------
 //        Reactflow管理部分
@@ -18,13 +19,10 @@ import { moduleInitManager } from '../core/ModuleInitManager';
 interface FlowState {
   nodes: FlowNode[];
   edges: Edge[];
-  currentPresetId: string;
+  currentProjectId: string; // 修改：预设ID改为项目ID
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
-  loadPreset: (presetId: string) => void;
-  getPresets: () => typeof presetManager.getPresets;
-  getDefaultPresetId: () => string;
   updateModuleParameter: (
     nodeId: string,
     paramKey: string,
@@ -34,14 +32,21 @@ interface FlowState {
     type: string,
     label: string,
     position: { x: number; y: number }
-  ) => void;
+  ) => string;
   addEdge: (source: string, target: string) => void;
+  deleteNode: (nodeId: string) => void;
+  
+  // 序列化相关方法
+  exportCanvasToJson: () => string;
+  importCanvasFromJson: (jsonString: string) => boolean;
+  getModuleAsJson: (moduleId: string) => unknown | null;
+  getModuleAsString: (moduleId: string) => string | null;
+  importModuleFromData: (data: unknown) => string | null;
 }
 
-// 使用PresetManager的默认预设ID
-const defaultPresetId = presetManager.getDefaultPresetId();
-const { nodes: initialNodes, edges: initialEdges } =
-  presetManager.loadPresetWithModules(defaultPresetId);
+// 创建空的初始状态
+const initialNodes: FlowNode[] = [];
+const initialEdges: Edge[] = [];
 
 export const useFlowStore = create<FlowState>((set, get) => {
   // 设置节点获取函数
@@ -50,7 +55,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
   return {
     nodes: initialNodes,
     edges: initialEdges,
-    currentPresetId: defaultPresetId,
+    currentProjectId: '',  // 初始为空，由Canvas组件加载第一个项目
 
     onNodesChange: (changes) => {
       set({
@@ -101,29 +106,6 @@ export const useFlowStore = create<FlowState>((set, get) => {
       });
     },
 
-    loadPreset: (presetId) => {
-      const { nodes, edges } = presetManager.loadPresetWithModules(presetId);
-      moduleInitManager.reset();
-
-      set({
-        nodes,
-        edges,
-        currentPresetId: presetId,
-      });
-
-      // 等待所有模块初始化完成后再设置边绑定
-      moduleInitManager.onAllModulesReady(() => {
-        moduleManager.setupAllEdgeBindings(edges);
-      });
-      setTimeout(() => {
-        moduleInitManager.onAllModulesReady(() => {});
-      }, 1000);
-    },
-
-    getPresets: () => presetManager.getPresets,
-
-    getDefaultPresetId: () => presetManager.getDefaultPresetId(),
-
     updateModuleParameter: (nodeId, paramKey, value) => {
       set({
         nodes: get().nodes.map((node) => {
@@ -150,12 +132,131 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
     // 添加新边
     addEdge: (source, target) => {
-      const edgeId = `edge_${source}_${target}_${Date.now()}`;
-      const newEdge = moduleManager.createEdge(edgeId, source, target);
+      const edge = moduleManager.createEdgeWithBinding(source, target);
+      if (edge) {
+        set({
+          edges: [...get().edges, edge],
+        });
+      }
+    },
 
+    // 删除节点及相连的边
+    deleteNode: (nodeId) => {
+      // 1. 找到与该节点相连的所有边
+      const connectedEdges = get().edges.filter(
+        (edge) => edge.source === nodeId || edge.target === nodeId
+      );
+
+      // 2. 解除这些边的绑定
+      connectedEdges.forEach((edge) => {
+        moduleManager.removeEdgeBinding(edge);
+      });
+
+      // 3. 释放节点资源
+      const node = get().nodes.find((n) => n.id === nodeId);
+      if (node?.data?.module) {
+        node.data.module.dispose();
+        
+        // 记录模块销毁事件
+        moduleInitManager.recordDisposal(nodeId);
+      }
+      
+      // 4. 从状态中移除节点和相连的边
       set({
-        edges: [...get().edges, newEdge],
+        nodes: get().nodes.filter(n => n.id !== nodeId),
+        edges: get().edges.filter(e => e.source !== nodeId && e.target !== nodeId)
       });
     },
+
+    // 序列化整个画布到JSON格式
+    exportCanvasToJson: () => {
+      return serializationManager.serializeCanvasToJson(
+        get().nodes, 
+        get().edges
+      );
+    },
+
+    // 从JSON格式导入画布
+    importCanvasFromJson: (jsonString) => {
+      try {
+        const { nodes, edges } = serializationManager.deserializeCanvasFromJson(jsonString);
+        
+        // 重置初始化管理器
+        moduleInitManager.reset();
+
+        // 更新状态
+        set({
+          nodes,
+          edges,
+          currentProjectId: 'imported-project'
+        });
+
+        // 初始化连接
+        moduleInitManager.onAllModulesReady(() => {
+          moduleManager.setupAllEdgeBindings(edges);
+        });
+
+        return true;
+      } catch (error) {
+        console.error('导入画布数据失败:', error);
+        return false;
+      }
+    },
+
+    // 获取模块的JSON表示
+    getModuleAsJson: (moduleId) => {
+      const node = get().nodes.find(n => n.id === moduleId);
+      if (!node || !node.data?.module) return null;
+
+      return serializationManager.serializeModule(node.data.module);
+    },
+
+    // 获取模块的JSON字符串表示
+    getModuleAsString: (moduleId) => {
+      const node = get().nodes.find(n => n.id === moduleId);
+      if (!node || !node.data?.module) return null;
+
+      return serializationManager.serializeModuleToJson(node.data.module);
+    },
+
+    // 从序列化数据导入模块（可以是JSON字符串或JSON对象）
+    importModuleFromData: (data) => {
+      try {
+        let moduleInstance;
+        
+        if (typeof data === 'string') {
+          moduleInstance = serializationManager.deserializeModuleFromJson(data);
+        } else {
+          moduleInstance = serializationManager.deserializeModule(data as SerializedModule);
+        }
+        
+        if (!moduleInstance) {
+          return null;
+        }
+        
+        // 创建节点
+        const nodeId = `node_${Date.now()}`;
+        const node: FlowNode = {
+          id: nodeId,
+          type: 'default',
+          position: { x: 100, y: 100 }, // 默认位置，可以进一步优化
+          data: {
+            module: moduleInstance,
+            label: moduleInstance.name,
+            type: moduleInstance.moduleType
+          }
+        };
+        
+        // 添加节点到画布
+        set({
+          nodes: [...get().nodes, node]
+        });
+        
+        return nodeId;
+      } catch (error) {
+        console.error('从数据导入模块失败:', error);
+        return null;
+      }
+    }
   };
 });

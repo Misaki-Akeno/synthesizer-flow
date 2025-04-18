@@ -91,6 +91,9 @@ export abstract class ModuleBase {
   // 存储订阅关系以便取消订阅
   private subscriptions: { [key: string]: Subscription } = {};
 
+  // 存储输出连接
+  private outputConnections: Map<string, Array<{targetModule: ModuleBase, targetPort: string}>> = new Map();
+
   // 存储内部订阅关系
   private internalSubscriptions: Subscription[] = [];
   type: string | undefined;
@@ -604,6 +607,97 @@ export abstract class ModuleBase {
     _sourcePortName?: string
   ): void {
     // 默认实现为空，子类应该重写此方法
+  }
+
+  /**
+   * 将此模块的一个输出端口连接到目标模块的输入端口
+   * @param outputPortName 本模块的输出端口名
+   * @param targetModule 目标模块
+   * @param targetPortName 目标模块的输入端口名
+   */
+  public connectOutput(
+    outputPortName: string,
+    targetModule: ModuleBase,
+    targetPortName: string
+  ): void {
+    // 检查输出端口是否存在
+    if (!this.outputPorts[outputPortName]) {
+      throw new Error(
+        `Output port '${outputPortName}' not found on module ${this.id}`
+      );
+    }
+
+    // 检查目标模块的输入端口是否存在
+    if (!targetModule.inputPorts[targetPortName]) {
+      throw new Error(
+        `Input port '${targetPortName}' not found on target module ${targetModule.id}`
+      );
+    }
+
+    // 检查端口类型是否兼容
+    const outputType = this.outputPortTypes[outputPortName];
+    const inputType = targetModule.inputPortTypes[targetPortName];
+    
+    if (outputType !== inputType) {
+      throw new Error(
+        `Type mismatch: Cannot connect ${outputType} output to ${inputType} input`
+      );
+    }
+
+    // 建立连接
+    targetModule.bindInputToOutput(targetPortName, this, outputPortName);
+    
+    // 记录输出连接
+    if (!this.outputConnections.has(outputPortName)) {
+      this.outputConnections.set(outputPortName, []);
+    }
+    
+    const connections = this.outputConnections.get(outputPortName);
+    connections?.push({ targetModule, targetPort: targetPortName });
+  }
+
+  /**
+   * 断开此模块的输出端口与目标模块输入端口的连接
+   * @param outputPortName 本模块的输出端口名
+   * @param targetModule 目标模块
+   * @param targetPortName 目标模块的输入端口名
+   */
+  public disconnectOutput(
+    outputPortName: string,
+    targetModule: ModuleBase,
+    targetPortName: string
+  ): void {
+    // 检查输出端口是否存在
+    if (!this.outputPorts[outputPortName]) {
+      console.warn(`Output port '${outputPortName}' not found on module ${this.id}`);
+      return;
+    }
+
+    // 请求目标模块解除输入绑定
+    targetModule.unbindInput(targetPortName, this.id, outputPortName);
+    
+    // 更新输出连接记录
+    const connections = this.outputConnections.get(outputPortName);
+    if (connections) {
+      const index = connections.findIndex(
+        (conn) => conn.targetModule.id === targetModule.id && conn.targetPort === targetPortName
+      );
+      
+      if (index !== -1) {
+        connections.splice(index, 1);
+      }
+    }
+  }
+
+  /**
+   * 获取一个输出端口的所有连接
+   * @param outputPortName 输出端口名称
+   * @returns 连接到该输出端口的所有目标模块和端口信息
+   */
+  public getOutputConnections(
+    outputPortName: string
+  ): Array<{ targetModule: ModuleBase; targetPort: string }> {
+    return this.outputConnections.get(outputPortName) || [];
   }
 
   /**

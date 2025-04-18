@@ -321,9 +321,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       (value: number | boolean | string) => {
         if (typeof value === 'number') {
           this.maxVoices = value;
-          console.debug(
-            `[${this.moduleType}Module ${this.id}] 设置最大声部数: ${this.maxVoices}`
-          );
         }
       }
     );
@@ -337,9 +334,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
               voice.oscillator.type = value;
             }
           });
-          console.debug(
-            `[${this.moduleType}Module ${this.id}] 更新所有声部波形: ${value}`
-          );
         }
       }
     );
@@ -360,9 +354,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
               );
             }
           });
-          console.debug(
-            `[${this.moduleType}Module ${this.id}] 更新所有声部微调: ${value}`
-          );
         }
       }
     );
@@ -373,9 +364,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         if (typeof value === 'number') {
           // 更新所有声部的频率
           this.updateAllVoicesFrequency();
-          console.debug(
-            `[${this.moduleType}Module ${this.id}] 设置八度移调: ${value}`
-          );
         }
       }
     );
@@ -386,9 +374,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         if (typeof value === 'number') {
           // 更新所有声部的频率
           this.updateAllVoicesFrequency();
-          console.debug(
-            `[${this.moduleType}Module ${this.id}] 设置半音移调: ${value}`
-          );
         }
       }
     );
@@ -400,9 +385,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
           // 将dB转换为线性增益
           const linearGain = Math.pow(10, value / 20);
           this.applyParameterRamp(this.mainGainDb.gain, linearGain, 0.02);
-          console.debug(
-            `[${this.moduleType}Module ${this.id}] 设置增益: ${value}dB (${linearGain})`
-          );
         }
       }
     );
@@ -557,8 +539,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       }
     });
 
-    this.debugInfo = `复音处理: ${notes.length}个音符活跃`;
-    console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
   }
 
   /**
@@ -686,8 +666,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
           note: note,
           triggerTime: now,
         });
-
-        this.debugInfo = `创建新声部: note=${note}, 频率=${midiNoteToFrequency(note).toFixed(2)}Hz, 力度=${velocity.toFixed(2)}`;
       } catch (error) {
         console.error(
           `[${this.moduleType}Module ${this.id}] 创建声部失败:`,
@@ -696,7 +674,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       }
     }
 
-    console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
   }
 
   /**
@@ -767,9 +744,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
     // 标记为非激活
     voice.active = false;
-
-    this.debugInfo = `释放声部: note=${note}`;
-    console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
   }
 
   /**
@@ -784,9 +758,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
     // 重触发包络以更新力度
     this.triggerEnvelope(voice, velocity);
-
-    this.debugInfo = `更新声部力度: note=${note}, 力度=${velocity.toFixed(2)}`;
-    console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
   }
 
   /**
