@@ -1,5 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { PresetNode, PresetEdge } from '../PresetManager';
+
+/**
+ * 序列化节点数据
+ */
+export interface SerializedNode {
+  id: string;
+  position: { x: number; y: number };
+  data: {
+    type: string;
+    label?: string;
+    parameters?: { [key: string]: number | boolean | string };
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * 序列化边数据
+ */
+export interface SerializedEdge {
+  source: string;
+  target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
+}
 
 /**
  * 序列化后的模块数据
@@ -24,9 +47,18 @@ export interface SerializedModule {
 export interface SerializedCanvas {
   version: string;
   timestamp: number;
-  nodes: PresetNode[];
-  edges: PresetEdge[];
+  nodes: SerializedNode[];
+  edges: SerializedEdge[];
   metadata?: Record<string, any>;
+}
+
+/**
+ * 内置预设项目接口
+ */
+export interface BuiltInProject {
+  id: string;
+  name: string;
+  canvasData: SerializedCanvas;
 }
 
 /**

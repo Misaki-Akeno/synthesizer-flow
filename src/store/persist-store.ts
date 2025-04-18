@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { useFlowStore } from './store';
+import { getAllPresets } from '../lib/getpresetjson';
 
 export interface ProjectConfig {
   name: string;
@@ -10,6 +11,8 @@ export interface ProjectConfig {
   data: string; // JSON 格式的画布数据
   thumbnail?: string; // Base64格式的画布缩略图
   tags?: string[];
+  isBuiltIn?: boolean; // 标记是否为内置预设
+  id?: string; // 内置预设的ID
 }
 
 interface PersistState {
@@ -27,6 +30,12 @@ interface PersistState {
   
   // 当前加载的项目
   currentProject: ProjectConfig | null;
+
+  // 内置预设项目
+  builtInProjects: ProjectConfig[];
+
+  // 获取所有可用项目（包括内置预设和用户项目）
+  getAllProjects: () => ProjectConfig[];
 
   // 项目管理方法
   saveCurrentCanvas: (name: string, description?: string) => Promise<boolean>;
@@ -49,6 +58,31 @@ const jsonUtils = {
   }
 };
 
+// 将内置预设JSON转换为项目格式
+function convertPresetsToProjects(): ProjectConfig[] {
+  const presets = getAllPresets();
+  
+  return presets.map((preset, index) => {
+    // 使用预设JSON数据
+    const presetJson = JSON.stringify(preset);
+    
+    // 创建项目配置
+    const now = new Date().toISOString();
+    return {
+      name: preset.nodes[0]?.data?.label || `预设 ${index + 1}`,
+      description: `内置预设: ${preset.nodes[0]?.data?.label || `预设 ${index + 1}`}`,
+      created: now,
+      lastModified: now,
+      data: jsonUtils.makeJsonUrlSafe(presetJson),
+      isBuiltIn: true,
+      id: `builtin-preset-${index}`
+    };
+  });
+}
+
+// 准备内置预设项目
+const builtInProjects = convertPresetsToProjects();
+
 export const usePersistStore = create<PersistState>()(
   persist(
     (set, get) => ({
@@ -64,8 +98,17 @@ export const usePersistStore = create<PersistState>()(
       // 保存的项目列表
       recentProjects: [],
       
+      // 内置预设项目
+      builtInProjects,
+      
       // 当前项目
       currentProject: null,
+
+      // 获取所有可用项目（包括内置预设和用户项目）
+      getAllProjects: () => {
+        const { recentProjects, builtInProjects } = get();
+        return [...builtInProjects, ...recentProjects];
+      },
 
       // 保存当前画布状态为新项目
       saveCurrentCanvas: async (name: string, description?: string) => {
@@ -149,6 +192,12 @@ export const usePersistStore = create<PersistState>()(
       // 删除已保存的项目
       deleteProject: (projectName: string) => {
         set((state) => {
+          // 不允许删除内置预设
+          const projectToDelete = state.recentProjects.find(p => p.name === projectName);
+          if (!projectToDelete || projectToDelete.isBuiltIn) {
+            return state;
+          }
+          
           const updatedProjects = state.recentProjects.filter(
             (p) => p.name !== projectName
           );
@@ -164,22 +213,25 @@ export const usePersistStore = create<PersistState>()(
       
       // 导出项目到文件
       exportProjectToFile: (projectName: string) => {
-        const { recentProjects } = get();
-        const project = recentProjects.find((p) => p.name === projectName);
+        const { recentProjects, builtInProjects } = get();
+        const allProjects = [...recentProjects, ...builtInProjects];
+        const project = allProjects.find((p) => p.name === projectName);
         
         if (!project) {
           console.error('找不到要导出的项目:', projectName);
           return;
         }
         
-        // 创建下载链接
-        const dataStr = JSON.stringify(project);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        // 获取项目的JSON数据
+        const jsonData = jsonUtils.restoreUrlSafeJson(project.data);
+        
+        // 创建下载链接来导出画布数据
+        const dataBlob = new Blob([jsonData], { type: 'application/json' });
         const url = URL.createObjectURL(dataBlob);
         
         const link = document.createElement('a');
         link.href = url;
-        link.download = `${projectName.replace(/\s+/g, '_')}.sfproj`;
+        link.download = `synthesizerflow_canvas_${new Date().toISOString().slice(0,10)}.json`;
         link.click();
         
         // 清理资源

@@ -5,13 +5,17 @@ import { usePersistStore, type ProjectConfig } from '@/store/persist-store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { useFlowStore } from '@/store/store';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function SerializationTester() {
   const [projectName, setProjectName] = useState('测试项目');
   const [projectDesc, setProjectDesc] = useState('自动创建的测试项目');
+  const [activeTab, setActiveTab] = useState('user-projects');
 
   const { 
     recentProjects, 
+    builtInProjects,
     currentProject,
     saveCurrentCanvas, 
     loadProject,
@@ -47,6 +51,9 @@ export default function SerializationTester() {
             )}
             <div><span className="font-medium">创建时间:</span> {formatDate(currentProject.created)}</div>
             <div><span className="font-medium">最后修改:</span> {formatDate(currentProject.lastModified)}</div>
+            {currentProject.isBuiltIn && (
+              <Badge variant="outline" className="text-xs">内置预设</Badge>
+            )}
           </div>
         ) : (
           <div className="text-xs text-muted-foreground">暂无加载的项目</div>
@@ -175,33 +182,59 @@ export default function SerializationTester() {
         </div>
       </div>
       
-      {/* 已保存项目列表 */}
+      {/* 项目列表和内置预设 */}
       <div>
-        <h3 className="text-sm font-medium mb-2">已保存项目 ({recentProjects.length})</h3>
-        <ScrollArea className="h-52 border rounded">
-          <div className="p-2 space-y-2">
-            {recentProjects.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">
-                暂无保存的项目
-              </p>
-            ) : (
-              recentProjects.map((project) => (
-                <ProjectCard 
-                  key={project.name}
-                  project={project}
-                  onLoad={() => loadProject(project)}
-                  onExport={() => exportProjectToFile(project.name)}
-                  onDelete={() => {
-                    if (confirm(`确定要删除项目"${project.name}"吗?`)) {
-                      deleteProject(project.name);
-                    }
-                  }}
-                  isActive={currentProject?.name === project.name}
-                />
-              ))
-            )}
-          </div>
-        </ScrollArea>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid grid-cols-2 mb-2">
+            <TabsTrigger value="user-projects">用户项目 ({recentProjects.length})</TabsTrigger>
+            <TabsTrigger value="built-in">内置预设 ({builtInProjects.length})</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="user-projects">
+            <ScrollArea className="h-52 border rounded">
+              <div className="p-2 space-y-2">
+                {recentProjects.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">
+                    暂无保存的项目
+                  </p>
+                ) : (
+                  recentProjects.map((project) => (
+                    <ProjectCard 
+                      key={project.name}
+                      project={project}
+                      onLoad={() => loadProject(project)}
+                      onExport={() => exportProjectToFile(project.name)}
+                      onDelete={() => {
+                        if (confirm(`确定要删除项目"${project.name}"吗?`)) {
+                          deleteProject(project.name);
+                        }
+                      }}
+                      isActive={currentProject?.name === project.name}
+                    />
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+          
+          <TabsContent value="built-in">
+            <ScrollArea className="h-52 border rounded">
+              <div className="p-2 space-y-2">
+                {builtInProjects.map((project) => (
+                  <ProjectCard 
+                    key={project.id || project.name}
+                    project={project}
+                    onLoad={() => loadProject(project)}
+                    onExport={() => exportProjectToFile(project.name)}
+                    onDelete={() => {}}  // 内置预设不允许删除
+                    isActive={currentProject?.name === project.name}
+                    isBuiltIn
+                  />
+                ))}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
@@ -212,18 +245,23 @@ function ProjectCard({
   onLoad, 
   onDelete, 
   onExport,
-  isActive
+  isActive,
+  isBuiltIn
 }: { 
   project: ProjectConfig, 
   onLoad: () => void,
   onDelete: () => void,
   onExport: () => void,
-  isActive: boolean
+  isActive: boolean,
+  isBuiltIn?: boolean
 }) {
   return (
     <Card className={`text-xs ${isActive ? 'border-primary' : ''}`}>
-      <CardContent className="p-3 pb-0">
-        <div className="font-medium">{project.name}</div>
+      <CardContent>
+        <div className="font-medium flex items-center gap-2">
+          {project.name}
+          {isBuiltIn && <Badge variant="outline" className="text-[9px]">内置预设</Badge>}
+        </div>
         {project.description && (
           <div className="text-muted-foreground mt-1 line-clamp-1">{project.description}</div>
         )}
@@ -231,7 +269,7 @@ function ProjectCard({
           创建于: {new Date(project.created).toLocaleDateString()}
         </div>
       </CardContent>
-      <CardFooter className="p-2 pt-2 flex justify-between">
+      <CardFooter>
         <div className="flex gap-1">
           <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onLoad}>
             加载
@@ -240,9 +278,11 @@ function ProjectCard({
             导出
           </Button>
         </div>
-        <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" onClick={onDelete}>
-          删除
-        </Button>
+        {!isBuiltIn && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" onClick={onDelete}>
+            删除
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );

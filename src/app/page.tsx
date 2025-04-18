@@ -28,7 +28,7 @@ export default async function PlaygroundPage({
         <div className="flex-1 overflow-hidden">
           <ReactFlowProvider>
             <ContextMenuProvider>
-              <Canvas initialPresetId={presetId} />
+              <Canvas initialProjectId={presetId} />
             </ContextMenuProvider>
           </ReactFlowProvider>
         </div>

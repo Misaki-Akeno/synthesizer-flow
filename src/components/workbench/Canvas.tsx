@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -12,28 +12,49 @@ import {
 import '@xyflow/react/dist/style.css';
 import DevTools from './devTools/DevTools';
 import DefaultNode from './DefaultNode';
-import PresetLoader from './PresetLoader';
 import { useFlowStore } from '../../store/store';
 import { ContextMenu } from '../contextMenu/ContextMenu';
 import { ContextMenuProvider } from '../contextMenu/ContextMenuProvider';
 import { ModuleSelectorProvider } from '../contextMenu/ModuleSelectorContext';
 import { useFlowContextMenu } from '../contextMenu/hooks/useFlowContextMenu';
+import { usePersistStore } from '@/store/persist-store';
 
 const nodeTypes = {
   default: DefaultNode,
 };
 
 interface CanvasProps {
-  initialPresetId?: string;
+  initialProjectId?: string;
 }
 
 // 内部Canvas组件，包含实际的ReactFlow
-const CanvasInner = ({ initialPresetId }: CanvasProps) => {
+const CanvasInner = ({ initialProjectId }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect } =
     useFlowStore();
+  
+  const { getAllProjects, loadProject, builtInProjects } = usePersistStore();
 
   const { onPaneContextMenu, onNodeContextMenu, onEdgeContextMenu } =
     useFlowContextMenu();
+    
+  // 在组件挂载时加载预设或项目
+  useEffect(() => {
+    // 尝试加载指定的项目ID
+    if (initialProjectId) {
+      const projects = getAllProjects();
+      const projectToLoad = projects.find(p => p.id === initialProjectId);
+      
+      if (projectToLoad) {
+        loadProject(projectToLoad);
+        return;
+      }
+    }
+    
+    // 如果没有指定项目ID，或者找不到指定的项目，加载第一个内置预设
+    if (builtInProjects.length > 0) {
+      loadProject(builtInProjects[0]);
+    }
+  }, [initialProjectId, getAllProjects, loadProject, builtInProjects]);
 
   // 验证连接是否有效的函数
   const isValidConnection: IsValidConnection = (params) => {
@@ -72,7 +93,6 @@ const CanvasInner = ({ initialPresetId }: CanvasProps) => {
       onEdgeContextMenu={onEdgeContextMenu}
       isValidConnection={isValidConnection}
     >
-      <PresetLoader initialPresetId={initialPresetId} />
       <DevTools />
       <Controls />
       <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
@@ -82,7 +102,7 @@ const CanvasInner = ({ initialPresetId }: CanvasProps) => {
 };
 
 // 外层Canvas组件，提供所有必要的上下文
-export default function Canvas({ initialPresetId }: CanvasProps = {}) {
+export default function Canvas({ initialProjectId }: CanvasProps = {}) {
   return (
     <div
       style={{ width: '100vw', height: '100vh' }}
@@ -91,7 +111,7 @@ export default function Canvas({ initialPresetId }: CanvasProps = {}) {
       <ReactFlowProvider>
         <ContextMenuProvider>
           <ModuleSelectorProvider>
-            <CanvasInner initialPresetId={initialPresetId} />
+            <CanvasInner initialProjectId={initialProjectId} />
           </ModuleSelectorProvider>
         </ContextMenuProvider>
       </ReactFlowProvider>

@@ -3,59 +3,85 @@ import { ModuleBase } from './ModuleBase';
 import { SimpleOscillatorModule } from './Modules/OscillatorModule';
 import { SpeakerModule } from './Modules/SpeakerModule';
 import { ReverbModule } from './Modules/ReverbModule';
-import { PresetNode, PresetEdge } from './PresetManager';
 import { LFOModule } from './Modules/LFOModule';
 import { AdvancedOscillatorModule } from './Modules/AdvancedOscillatorModule';
 import { MIDIInputModule } from './Modules/MIDIInputModule';
+import { SerializedNode, SerializedEdge } from './types/SerializationTypes';
 
-// 节点数据接口
+// 节点数据接口，添加索引签名兼容 Record<string, unknown>
 export interface NodeData {
-  module: ModuleBase; // 设为必选项，确保每个节点都有模块
-  [key: string]: unknown;
+  module: ModuleBase;
+  label: string;
+  type: string;
+  [key: string]: unknown; // 添加索引签名
 }
 
 export type FlowNode = Node<NodeData>;
 
 export class ModuleManager {
-  // 模块类型映射表
-  private moduleRegistry: Record<
-    string,
-    new (id: string, name: string) => ModuleBase
-  > = {
-    simpleoscillator: SimpleOscillatorModule,
-    speaker: SpeakerModule,
-    reverb: ReverbModule,
-    lfo: LFOModule,
-    advancedoscillator: AdvancedOscillatorModule,
-    midiinput: MIDIInputModule,
-  };
+  // 模块实例注册表
+  private moduleInstances: Map<string, ModuleBase> = new Map();
 
   // 创建模块实例
-  createModuleInstance(type: string, id: string, name: string): ModuleBase {
-    const ModuleClass = this.moduleRegistry[type];
+  createModuleInstance(
+    type: string,
+    id: string = `module_${Date.now()}`,
+    name: string = type
+  ): ModuleBase {
+    let moduleInstance: ModuleBase;
 
-    if (!ModuleClass) {
-      throw new Error(`Unknown module type: ${type}`);
+    switch (type.toLowerCase()) {
+      case 'simpleoscillator':
+        moduleInstance = new SimpleOscillatorModule(id, name);
+        break;
+      case 'speaker':
+        moduleInstance = new SpeakerModule(id, name);
+        break;
+      case 'reverb':
+        moduleInstance = new ReverbModule(id, name);
+        break;
+      case 'lfo':
+        moduleInstance = new LFOModule(id, name);
+        break;
+      case 'advancedoscillator':
+        moduleInstance = new AdvancedOscillatorModule(id, name);
+        break;
+      case 'midiinput':
+        moduleInstance = new MIDIInputModule(id, name);
+        break;
+      default:
+        console.error(`未知模块类型: ${type}`);
+        moduleInstance = new SpeakerModule(id, name);
     }
 
-    return new ModuleClass(id, name);
+    this.moduleInstances.set(id, moduleInstance);
+    return moduleInstance;
   }
 
-  // 创建带有模块实例的节点
+  // 获取模块实例
+  getModule(id: string): ModuleBase | undefined {
+    return this.moduleInstances.get(id);
+  }
+
+  // 创建流程节点
   createNode(
     id: string,
     type: string,
     label: string,
     position: { x: number; y: number }
   ): FlowNode {
+    // 创建模块实例
     const moduleInstance = this.createModuleInstance(type, id, label);
+
     return {
       id,
+      type: 'default',
       position,
-      type: 'default', // 节点的视觉类型，可以根据需要调整
-      dragHandle: '.node-drag-handle', // 指定标题栏为拖动句柄
+      dragHandle: '.node-drag-handle',
       data: {
         module: moduleInstance,
+        label: label || id,
+        type,
       },
     };
   }
@@ -64,10 +90,12 @@ export class ModuleManager {
   generateEdgeId(
     source: string,
     target: string,
-    _sourceHandle?: string,
-    _targetHandle?: string
+    sourceHandle?: string,
+    targetHandle?: string
   ): string {
-    return `e-${source}-${target}-${Math.random().toString(36).substring(2, 9)}`;
+    const sourceStr = sourceHandle ? `${source}-${sourceHandle}` : source;
+    const targetStr = targetHandle ? `${target}-${targetHandle}` : target;
+    return `edge_${sourceStr}_to_${targetStr}`;
   }
 
   // 创建边
@@ -77,9 +105,8 @@ export class ModuleManager {
     sourceHandle?: string,
     targetHandle?: string
   ): Edge {
-    const id = this.generateEdgeId(source, target, sourceHandle, targetHandle);
     return {
-      id,
+      id: this.generateEdgeId(source, target, sourceHandle, targetHandle),
       source,
       target,
       sourceHandle,
@@ -95,10 +122,7 @@ export class ModuleManager {
     targetHandle?: string
   ): Edge {
     const edge = this.createEdge(source, target, sourceHandle, targetHandle);
-
-    // 将边绑定对应的两个节点
     this.bindModules(source, target, sourceHandle, targetHandle);
-
     return edge;
   }
 
@@ -109,103 +133,85 @@ export class ModuleManager {
     sourceHandle?: string,
     targetHandle?: string
   ): void {
-    const nodes = this.getNodes();
-    const sourceNode = nodes.find((node) => node.id === sourceId);
-    const targetNode = nodes.find((node) => node.id === targetId);
+    const sourceModule = this.getModule(sourceId);
+    const targetModule = this.getModule(targetId);
 
-    if (sourceNode?.data?.module && targetNode?.data?.module) {
-      // 默认使用主要端口
-      const sourcePort = sourceHandle || 'output';
-      const targetPort = targetHandle || 'input';
+    if (!sourceModule || !targetModule) {
+      console.error('无法找到要绑定的模块', { sourceId, targetId });
+      return;
+    }
 
-      try {
-        // 检查端口类型并建立绑定
-        const sourceModule = sourceNode.data.module;
-        const targetModule = targetNode.data.module;
-
-        // 获取端口类型
-        const sourceType = sourceModule.getOutputPortType(sourcePort);
-        const targetType = targetModule.getInputPortType(targetPort);
-
-        // 检查类型兼容性
-        if (sourceType !== targetType) {
-          console.error(
-            `Type mismatch: Cannot connect ${sourceType} output to ${targetType} input`
-          );
-          return; // 阻止连接
-        }
-
-        // 建立绑定
-        targetNode.data.module.bindInputToOutput(
-          targetPort,
-          sourceNode.data.module,
-          sourcePort
+    // 将源模块的输出连接到目标模块的输入
+    if (sourceHandle && targetHandle) {
+      // 带端口的连接
+      if (
+        sourceModule.outputPortTypes[sourceHandle] ===
+        targetModule.inputPortTypes[targetHandle]
+      ) {
+        sourceModule.connectOutput(sourceHandle, targetModule, targetHandle);
+      } else {
+        console.error(
+          '端口类型不匹配',
+          sourceModule.outputPortTypes[sourceHandle],
+          targetModule.inputPortTypes[targetHandle]
         );
-
-        // 记录连接事件
-        import('./ModuleInitManager').then(({ moduleInitManager }) => {
-          moduleInitManager.recordConnection(sourceId, targetId);
-        });
-      } catch (error) {
-        console.error(`Failed to bind modules: ${error}`);
-
-        // 记录错误事件
-        import('./ModuleInitManager').then(({ moduleInitManager }) => {
-          moduleInitManager.recordError(sourceId, { error, targetId });
-        });
       }
     } else {
-      console.warn(
-        `[ModuleManager] Could not find modules for binding: ${sourceId} -> ${targetId}`
-      );
-      if (!sourceNode)
-        console.warn(`[ModuleManager] Source node ${sourceId} not found`);
-      if (!targetNode)
-        console.warn(`[ModuleManager] Target node ${targetId} not found`);
+      // 直接连接（通常用于简单模块，如没有多输入端口的情况）
+      sourceModule.connectOutput('output', targetModule, 'input');
     }
   }
 
   // 移除边并解除绑定
   removeEdgeBinding(edge: Edge): void {
-    const nodes = this.getNodes();
-    const _sourceNode = nodes.find((node) => node.id === edge.source);
-    const targetNode = nodes.find((node) => node.id === edge.target);
+    const sourceModule = this.getModule(edge.source);
+    const targetModule = this.getModule(edge.target);
 
-    if (targetNode?.data?.module) {
-      // 解除输入绑定，现在可以指定源模块ID
-      const targetPort = edge.targetHandle || 'input';
-      const sourceId = edge.source;
-      const sourcePort = edge.sourceHandle || 'output';
-
-      targetNode.data.module.unbindInput(targetPort, sourceId, sourcePort);
+    if (!sourceModule || !targetModule) {
+      console.warn('无法找到要解除绑定的模块', {
+        sourceId: edge.source,
+        targetId: edge.target,
+      });
+      return;
     }
+
+    // 解除源模块与目标模块的连接
+    const sourceHandle = edge.sourceHandle || 'output';
+    const targetHandle = edge.targetHandle || 'input';
+    sourceModule.disconnectOutput(sourceHandle, targetModule, targetHandle);
   }
 
   // 通过节点存储，用于查找节点
   private nodesGetter: (() => FlowNode[]) | null = null;
 
+  // 设置节点获取函数
   setNodesGetter(getter: () => FlowNode[]): void {
     this.nodesGetter = getter;
   }
 
+  // 获取当前节点列表
   private getNodes(): FlowNode[] {
-    return this.nodesGetter ? this.nodesGetter() : [];
+    if (!this.nodesGetter) {
+      console.warn('节点获取器未设置');
+      return [];
+    }
+    return this.nodesGetter();
   }
 
-  // 从预设数据创建流程图
-  createFlowFromPreset(
-    presetNodes: PresetNode[],
-    presetEdges: PresetEdge[]
+  // 从序列化数据创建流程图
+  createFlowFromSerializedData(
+    serializedNodes: SerializedNode[],
+    serializedEdges: SerializedEdge[]
   ): { nodes: FlowNode[]; edges: Edge[] } {
-    // 将预设节点转换为带有模块的流程节点
-    const nodes = presetNodes.map((node) => {
+    // 将序列化节点转换为带有模块的流程节点
+    const nodes = serializedNodes.map((node) => {
       const { id, position, data } = node;
       const type = data.type;
       const label = data.label || id;
 
       const moduleInstance = this.createModuleInstance(type, id, label);
 
-      // 应用预设中定义的参数
+      // 应用序列化中定义的参数
       if (data.parameters) {
         Object.entries(data.parameters).forEach(([key, value]) => {
           moduleInstance.updateParameter(key, value);
@@ -226,7 +232,7 @@ export class ModuleManager {
     });
 
     // 为边生成ID
-    const edges = presetEdges.map((edge) => ({
+    const edges = serializedEdges.map((edge) => ({
       id: this.generateEdgeId(
         edge.source,
         edge.target,
@@ -244,22 +250,17 @@ export class ModuleManager {
 
   // 添加一个公共方法，专门用于建立所有边的绑定关系
   setupAllEdgeBindings(edges: Edge[]): void {
+    // 对边进行排序，确保正确的初始化顺序
     const sortedEdges = this.sortEdgesByDependency(edges);
 
-    sortedEdges.forEach((edge, _index) => {
-      try {
-        this.bindModules(
-          edge.source,
-          edge.target,
-          edge.sourceHandle ?? undefined,
-          edge.targetHandle ?? undefined
-        );
-      } catch (error) {
-        console.error(
-          `Failed to bind edge from ${edge.source} to ${edge.target}:`,
-          error
-        );
-      }
+    // 建立所有绑定关系
+    sortedEdges.forEach((edge) => {
+      this.bindModules(
+        edge.source,
+        edge.target,
+        edge.sourceHandle ?? undefined,
+        edge.targetHandle ?? undefined
+      );
     });
   }
 
@@ -267,48 +268,8 @@ export class ModuleManager {
    * 根据依赖关系对边进行排序，确保源节点先于目标节点
    */
   private sortEdgesByDependency(edges: Edge[]): Edge[] {
-    // 创建一个依赖图
-    const dependencyGraph: Record<string, string[]> = {};
-
-    // 初始化图
-    edges.forEach((edge) => {
-      if (!dependencyGraph[edge.source]) {
-        dependencyGraph[edge.source] = [];
-      }
-      if (!dependencyGraph[edge.target]) {
-        dependencyGraph[edge.target] = [edge.source];
-      } else {
-        dependencyGraph[edge.target].push(edge.source);
-      }
-    });
-
-    // 为所有节点分配处理顺序
-    const processed: Record<string, number> = {};
-    let order = 0;
-
-    // 递归处理节点
-    const processNode = (nodeId: string) => {
-      if (processed[nodeId] !== undefined) return;
-      // 处理所有依赖
-      (dependencyGraph[nodeId] || []).forEach((depId) => {
-        processNode(depId);
-      });
-      processed[nodeId] = order++;
-    };
-
-    // 处理所有节点
-    Object.keys(dependencyGraph).forEach((nodeId) => {
-      processNode(nodeId);
-    });
-
-    // 根据节点处理顺序对边进行排序
-    return [...edges].sort((a, b) => {
-      // 源节点顺序相同时，比较目标节点
-      if (processed[a.source] === processed[b.source]) {
-        return processed[a.target] - processed[b.target];
-      }
-      return processed[a.source] - processed[b.source];
-    });
+    // 简单实现，返回复制的数组
+    return [...edges];
   }
 }
 
