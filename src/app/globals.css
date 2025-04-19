@@ -178,4 +178,41 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* VS Code 风格滚动条 */
+  .vscode-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(128, 128, 128, 0.4) transparent;
+  }
+  
+  .vscode-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .vscode-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .vscode-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(128, 128, 128, 0.4);
+    border-radius: 4px;
+  }
+  
+  .vscode-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(128, 128, 128, 0.6);
+  }
+
+  /* 深色模式滚动条 */
+  .dark .vscode-scrollbar {
+    scrollbar-color: rgba(128, 128, 128, 0.5) transparent;
+  }
+  
+  .dark .vscode-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(160, 160, 160, 0.5);
+  }
+  
+  .dark .vscode-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(160, 160, 160, 0.7);
+  }
 }

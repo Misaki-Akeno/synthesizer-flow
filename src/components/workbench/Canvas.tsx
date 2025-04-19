@@ -7,15 +7,11 @@ import {
   Background,
   BackgroundVariant,
   IsValidConnection,
-  ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import DevTools from './devTools/DevTools';
 import DefaultNode from './DefaultNode';
 import { useFlowStore } from '../../store/store';
 import { ContextMenu } from '../contextMenu/ContextMenu';
-import { ContextMenuProvider } from '../contextMenu/ContextMenuProvider';
-import { ModuleSelectorProvider } from '../contextMenu/ModuleSelectorContext';
 import { useFlowContextMenu } from '../contextMenu/hooks/useFlowContextMenu';
 import { usePersistStore } from '@/store/persist-store';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
@@ -123,7 +119,6 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
       onEdgeContextMenu={onEdgeContextMenu}
       isValidConnection={isValidConnection}
     >
-      <DevTools />
       <Controls />
       <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
       <ContextMenu />
@@ -135,16 +130,11 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
 export default function Canvas({ projectId }: CanvasProps = {}) {
   return (
     <div
-      style={{ width: '100vw', height: '100vh' }}
+      style={{ width: '100%', height: '100%' }}
       onContextMenu={(e) => e.preventDefault()}
+      className="h-full w-full"
     >
-      <ReactFlowProvider>
-        <ContextMenuProvider>
-          <ModuleSelectorProvider>
-            <CanvasInner projectId={projectId} />
-          </ModuleSelectorProvider>
-        </ContextMenuProvider>
-      </ReactFlowProvider>
+      <CanvasInner projectId={projectId} />
     </div>
   );
 }

@@ -3,6 +3,9 @@ import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import Canvas from '@/components/workbench/Canvas';
 import { ContextMenuProvider } from '@/components/contextMenu/ContextMenuProvider';
+import { Header } from '@/components/layout/Header';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { ModuleSelectorProvider } from '@/components/contextMenu/ModuleSelectorContext';
 
 export const metadata: Metadata = {
   title: 'Synthsizer Playground',
@@ -25,14 +28,18 @@ export default async function PlaygroundPage({
 
   return (
     <div className="h-screen flex flex-col">
-      <div className="hidden h-full flex-col md:flex flex-1">
-        <div className="flex-1 overflow-hidden">
+      <Header />
+      <div className="flex-1 flex overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 relative">
           <ReactFlowProvider>
             <ContextMenuProvider>
-              <Canvas projectId={projectId} />
+              <ModuleSelectorProvider>
+                <Canvas projectId={projectId} />
+              </ModuleSelectorProvider>
             </ContextMenuProvider>
           </ReactFlowProvider>
-        </div>
+        </main>
       </div>
     </div>
   );
