@@ -2,93 +2,119 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { ProjectManager } from './ProjectManager';
+import { ModuleBrowser } from './ModuleBrowser';
 import DevTools from '@/components/workbench/devTools/DevTools';
+import { NavUser } from './NavUser';
 import { Button } from '@/components/ui/button';
 import { 
   Code, 
-  Settings, 
-  FileText, 
   Cpu, 
-  PanelRight 
+  FileText, 
+  User,
+  Settings,
+  HelpCircle
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip';
 
 interface SidebarProps {
   className?: string;
 }
 
-type PanelType = 'dev-tools' | 'settings' | 'explorer' | 'modules' | null;
+// 侧边栏面板类型
+type PanelType = 'project-manager' | 'module-browser' | 'dev-tools' | null;
 
 export function Sidebar({ className }: SidebarProps) {
-  const [activePanel, setActivePanel] = useState<PanelType>(null);
+  const [activePanel, setActivePanel] = useState<PanelType>('dev-tools');
+
+  // 模拟用户数据
+  const user = {
+    name: "测试用户",
+    email: "user@example.com",
+    avatar: "https://github.com/shadcn.png"
+  };
 
   const togglePanel = (panel: PanelType) => {
     setActivePanel(activePanel === panel ? null : panel);
   };
 
   return (
-    <div className={cn('flex h-full', className)}>
-      {/* 固定的窄图标栏 */}
-      <div className="w-12 flex flex-col border-r bg-background">
-        <ActivityBarButton 
-          icon={<FileText size={22} />} 
-          active={activePanel === 'explorer'}
-          tooltip="资源管理器" 
-          onClick={() => togglePanel('explorer')}
-        />
-        <ActivityBarButton 
-          icon={<Cpu size={22} />} 
-          active={activePanel === 'modules'}
-          tooltip="模块库" 
-          onClick={() => togglePanel('modules')}
-        />
-        <ActivityBarButton 
-          icon={<Code size={22} />} 
-          active={activePanel === 'dev-tools'}
-          tooltip="开发工具" 
-          onClick={() => togglePanel('dev-tools')}
-        />
-        <div className="mt-auto">
-          <ActivityBarButton 
-            icon={<Settings size={22} />} 
-            active={activePanel === 'settings'}
-            tooltip="设置" 
-            onClick={() => togglePanel('settings')}
-          />
-        </div>
-      </div>
+    <TooltipProvider>
+      <SidebarProvider>
+        <div className={cn('flex h-full', className)}>
+          {/* 左侧图标栏 - 使用纯白背景，固定 48px 宽度 */}
+          <div className="w-[48px] flex flex-col border-r bg-white dark:bg-gray-900">
+            {/* 顶部图标 - 触发侧面板的选项 */}
+            <div className="flex flex-col">
+              <ActivityBarButton 
+                icon={<FileText size={20} />} 
+                active={activePanel === 'project-manager'}
+                tooltip="项目管理器" 
+                onClick={() => togglePanel('project-manager')}
+              />
+              <ActivityBarButton 
+                icon={<Cpu size={20} />} 
+                active={activePanel === 'module-browser'}
+                tooltip="模块浏览器" 
+                onClick={() => togglePanel('module-browser')}
+              />
+              <ActivityBarButton 
+                icon={<Code size={20} />} 
+                active={activePanel === 'dev-tools'}
+                tooltip="开发工具" 
+                onClick={() => togglePanel('dev-tools')}
+              />
+            </div>
 
-      {/* 可展开的面板 */}
-      {activePanel && (
-        <div className="w-[320px] border-r bg-background flex flex-col">
-          <div className="flex items-center justify-between p-2 border-b">
-            <h2 className="text-sm font-medium">
-              {activePanel === 'dev-tools' && '开发工具'}
-              {activePanel === 'settings' && '设置'}
-              {activePanel === 'explorer' && '资源管理器'}
-              {activePanel === 'modules' && '模块库'}
-            </h2>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setActivePanel(null)}
-              className="h-6 w-6"
-            >
-              <PanelRight size={16} />
-            </Button>
+            {/* 底部图标 - 下拉菜单选项 */}
+            <div className="mt-auto flex flex-col border-t">
+              <MenuBarButton 
+                icon={<User size={20} />} 
+                tooltip="用户"
+                menu={<NavUser user={user} />}
+              />
+              <MenuBarButton 
+                icon={<Settings size={20} />} 
+                tooltip="设置" 
+                menu={null}
+              />
+              <MenuBarButton 
+                icon={<HelpCircle size={20} />} 
+                tooltip="帮助" 
+                menu={null}
+              />
+            </div>
           </div>
-          
-          <div className="flex-1 overflow-y-auto p-2 vscode-scrollbar">
-            {activePanel === 'dev-tools' && <DevTools inSidebar />}
-            {activePanel === 'settings' && <div>设置面板内容（待实现）</div>}
-            {activePanel === 'explorer' && <div>资源管理器内容（待实现）</div>}
-            {activePanel === 'modules' && <div>模块库内容（待实现）</div>}
-          </div>
+
+          {/* 右侧面板内容 - 保持 #FAFAFA 背景 */}
+          {activePanel && (
+            <div className="w-[320px] border-r bg-[#FAFAFA] dark:bg-gray-900 flex flex-col">
+              <div className="flex-1 overflow-hidden">
+                {activePanel === 'project-manager' && (
+                  <ProjectManager onClose={() => setActivePanel(null)} />
+                )}
+                {activePanel === 'module-browser' && (
+                  <ModuleBrowser onClose={() => setActivePanel(null)} />
+                )}
+                {activePanel === 'dev-tools' && (
+                  <DevTools onClose={() => setActivePanel(null)} />
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </SidebarProvider>
+    </TooltipProvider>
   );
 }
 
+// 顶部活动栏按钮组件 - 触发侧面板
 interface ActivityBarButtonProps {
   icon: React.ReactNode;
   active: boolean;
@@ -98,19 +124,53 @@ interface ActivityBarButtonProps {
 
 function ActivityBarButton({ icon, active, tooltip, onClick }: ActivityBarButtonProps) {
   return (
-    <div className="relative">
-      <Button
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "h-12 w-12 rounded-none",
-          active && "bg-accent border-l-2 border-primary"
-        )}
-        onClick={onClick}
-        title={tooltip}
-      >
-        <span className={cn("opacity-70", active && "opacity-100")}>{icon}</span>
-      </Button>
-    </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "w-full h-12 rounded-none relative flex items-center justify-center",
+            active && "bg-accent text-accent-foreground before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-primary"
+          )}
+          onClick={onClick}
+        >
+          {icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={4}>
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// 底部菜单栏按钮组件 - 显示下拉菜单
+interface MenuBarButtonProps {
+  icon: React.ReactNode;
+  tooltip: string;
+  menu: React.ReactNode | null;
+}
+
+function MenuBarButton({ icon, tooltip, menu }: MenuBarButtonProps) {
+  if (menu) {
+    return <div className="w-full">{menu}</div>;
+  }
+  
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-full h-12 rounded-none flex items-center justify-center"
+        >
+          {icon}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={4}>
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import {
   Accordion,
   AccordionContent,
@@ -6,7 +6,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, Minimize } from 'lucide-react';
+import { PanelRight } from 'lucide-react';
 
 import NodeInspector from './NodeInspector';
 import ChangeLogger from './ChangeLogger';
@@ -15,36 +15,36 @@ import EdgeModuleLogger from './EdgeModuleLogger';
 import SerializationTester from './SerializationTester';
 
 interface DevToolsProps {
-  inSidebar?: boolean;
+  onClose: () => void;
 }
 
-export default function DevTools({ }: DevToolsProps) {
-  const [isOpen, setIsOpen] = useState(true);
-
+export default function DevTools({ onClose }: DevToolsProps) {
   return (
-    <div className="w-full">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-medium">开发工具</h2>
+    <div className="w-full h-full flex flex-col">
+      {/* 标题栏 */}
+      <div className="flex items-center justify-between p-2 border-b">
+        <h2 className="text-sm font-medium pl-1">开发工具</h2>
         <Button
           variant="ghost"
-          size="sm"
-          className="h-6 w-6"
-          onClick={() => setIsOpen(!isOpen)}
+          size="icon"
+          onClick={onClose}
+          className="h-7 w-7"
         >
-          {isOpen ? <Minimize className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          <PanelRight size={15} />
         </Button>
       </div>
 
-      {isOpen && (
-        <Accordion 
-          type="multiple" 
-          defaultValue={['serialization-tester']}
+      {/* 内容区域 */}
+      <div className="flex-1 overflow-auto">
+        <Accordion
+          type="multiple"
+          defaultValue={['serialization-tester', 'edge-module-logger']}
           className="w-full"
         >
           <DevToolSection id="serialization-tester" title="项目保存/加载">
             <SerializationTester />
           </DevToolSection>
-          
+
           <DevToolSection id="edge-module-logger" title="边和模块信息">
             <EdgeModuleLogger />
           </DevToolSection>
@@ -61,7 +61,7 @@ export default function DevTools({ }: DevToolsProps) {
             <ChangeLogger />
           </DevToolSection>
         </Accordion>
-      )}
+      </div>
     </div>
   );
 }
