@@ -1,6 +1,6 @@
 'use client';
 
-import { ParameterType, PortType } from '../ModuleBase';
+import { ParameterType, PortType, ModuleMetadata } from '../ModuleBase';
 import { AudioModuleBase } from '../AudioModuleBase';
 
 /**
@@ -12,6 +12,15 @@ const isBrowser = typeof window !== 'undefined';
  * MIDI输入模块，接收外部MIDI控制器的输入，并将其转换为系统内部的信号
  */
 export class MIDIInputModule extends AudioModuleBase {
+  // 模块元数据
+  public static metadata: ModuleMetadata = {
+    type: 'midiinput',
+    label: 'MIDI输入器',
+    description: 'MIDI输入模块，接收并处理外部MIDI控制器的输入信号',
+    category: '输入',
+    iconType: 'Music',
+  };
+
   // WebMIDI API相关
   private midiAccess: WebMidi.MIDIAccess | null = null;
   private midiInputs: WebMidi.MIDIInput[] = [];
@@ -421,7 +430,8 @@ export class MIDIInputModule extends AudioModuleBase {
         if (typeof value === 'string') {
           if (value) {
             // 检查设备ID是否在有效列表中
-            const deviceOptions = this.parameterMeta['inputDevice']?.options || [];
+            const deviceOptions =
+              this.parameterMeta['inputDevice']?.options || [];
             if (deviceOptions.includes(value)) {
               this.connectToDevice(value);
             } else {
@@ -445,10 +455,14 @@ export class MIDIInputModule extends AudioModuleBase {
     const channelSubscription = this.parameters['channel'].subscribe(() => {});
 
     // 转置参数
-    const transposeSubscription = this.parameters['transpose'].subscribe(() => {});
+    const transposeSubscription = this.parameters['transpose'].subscribe(
+      () => {}
+    );
 
     // 力度灵敏度参数
-    const velocitySensitivitySubscription = this.parameters['velocitySensitivity'].subscribe(() => {});
+    const velocitySensitivitySubscription = this.parameters[
+      'velocitySensitivity'
+    ].subscribe(() => {});
 
     this.addInternalSubscriptions([
       inputDeviceSubscription,

@@ -60,4 +60,3 @@ export interface BuiltInProject {
   name: string;
   canvasData: SerializedCanvas;
 }
-

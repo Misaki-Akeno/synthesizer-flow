@@ -2,7 +2,12 @@
 import { FlowNode, moduleManager } from './ModuleManager';
 import { Edge } from '@xyflow/react';
 import { ModuleBase } from './ModuleBase';
-import { SerializedCanvas, SerializedModule, SerializedNode, SerializedEdge } from './types/SerializationTypes';
+import {
+  SerializedCanvas,
+  SerializedModule,
+  SerializedNode,
+  SerializedEdge,
+} from './types/SerializationTypes';
 
 /**
  * 序列化管理器，提供模块和画布序列化/反序列化功能
@@ -42,11 +47,14 @@ export class SerializationManager {
       parameters,
       inputPortTypes,
       outputPortTypes,
-      customUI: customUI ? {
-        type: customUI.type,
-        props: customUI.props || {}
-      } : undefined,
-      enabled: module instanceof ModuleBase ? (module as any).isEnabled?.() : true
+      customUI: customUI
+        ? {
+            type: customUI.type,
+            props: customUI.props || {},
+          }
+        : undefined,
+      enabled:
+        module instanceof ModuleBase ? (module as any).isEnabled?.() : true,
     };
   }
 
@@ -84,7 +92,10 @@ export class SerializationManager {
       }
 
       // 设置启用状态（如果支持）
-      if (data.enabled !== undefined && typeof (moduleInstance as any).setEnabled === 'function') {
+      if (
+        data.enabled !== undefined &&
+        typeof (moduleInstance as any).setEnabled === 'function'
+      ) {
         (moduleInstance as any).setEnabled(data.enabled);
       }
 
@@ -118,7 +129,7 @@ export class SerializationManager {
    */
   serializeCanvas(nodes: FlowNode[], edges: Edge[]): SerializedCanvas {
     // 转换节点为可序列化格式
-    const serializedNodes: SerializedNode[] = nodes.map(node => {
+    const serializedNodes: SerializedNode[] = nodes.map((node) => {
       // 序列化模块
       const activemodule = node.data?.module;
       const parameters: Record<string, any> = {};
@@ -136,28 +147,28 @@ export class SerializationManager {
         data: {
           type: activemodule?.moduleType || 'unknown',
           label: (node.data?.label || activemodule?.name || node.id) as string,
-          parameters
-        }
+          parameters,
+        },
       };
     });
 
     // 转换边为可序列化格式
-    const serializedEdges: SerializedEdge[] = edges.map(edge => ({
+    const serializedEdges: SerializedEdge[] = edges.map((edge) => ({
       source: edge.source,
       target: edge.target,
       sourceHandle: edge.sourceHandle || undefined,
-      targetHandle: edge.targetHandle || undefined
+      targetHandle: edge.targetHandle || undefined,
     }));
 
     // 构建画布数据
     return {
-      version: "1.0",
+      version: '1.0',
       timestamp: Date.now(),
       nodes: serializedNodes,
-      edges: serializedEdges
+      edges: serializedEdges,
     };
   }
-  
+
   /**
    * 序列化整个画布为JSON字符串
    * @param nodes 画布节点列表
@@ -174,7 +185,10 @@ export class SerializationManager {
    * @param canvasData 序列化的画布数据
    * @returns 反序列化后的节点和边
    */
-  deserializeCanvas(canvasData: SerializedCanvas): { nodes: FlowNode[], edges: Edge[] } {
+  deserializeCanvas(canvasData: SerializedCanvas): {
+    nodes: FlowNode[];
+    edges: Edge[];
+  } {
     try {
       // 使用ModuleManager创建节点和边
       return moduleManager.createFlowFromSerializedData(
@@ -186,13 +200,16 @@ export class SerializationManager {
       return { nodes: [], edges: [] };
     }
   }
-  
+
   /**
    * 从JSON字符串反序列化画布
    * @param jsonString JSON字符串形式的画布数据
    * @returns 反序列化后的节点和边
    */
-  deserializeCanvasFromJson(jsonString: string): { nodes: FlowNode[], edges: Edge[] } {
+  deserializeCanvasFromJson(jsonString: string): {
+    nodes: FlowNode[];
+    edges: Edge[];
+  } {
     try {
       const canvasData = JSON.parse(jsonString) as SerializedCanvas;
       return this.deserializeCanvas(canvasData);

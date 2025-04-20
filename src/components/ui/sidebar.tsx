@@ -22,7 +22,7 @@ interface SidebarMenuProps {
 }
 
 export function SidebarMenu({ children, className }: SidebarMenuProps) {
-  return <div className={cn("flex flex-col gap-1", className)}>{children}</div>;
+  return <div className={cn('flex flex-col gap-1', className)}>{children}</div>;
 }
 
 interface SidebarMenuItemProps {
@@ -31,26 +31,27 @@ interface SidebarMenuItemProps {
 }
 
 export function SidebarMenuItem({ children, className }: SidebarMenuItemProps) {
-  return <div className={cn("px-1", className)}>{children}</div>;
+  return <div className={cn('px-1', className)}>{children}</div>;
 }
 
-interface SidebarMenuButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  size?: "default" | "sm" | "lg";
+interface SidebarMenuButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  size?: 'default' | 'sm' | 'lg';
 }
 
-export function SidebarMenuButton({ 
-  size = "default", 
-  children, 
-  className, 
-  ...props 
+export function SidebarMenuButton({
+  size = 'default',
+  children,
+  className,
+  ...props
 }: SidebarMenuButtonProps) {
   return (
     <button
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground",
-        size === "sm" && "py-1",
-        size === "default" && "py-1.5",
-        size === "lg" && "py-2",
+        'flex w-full items-center gap-2 rounded-md px-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground',
+        size === 'sm' && 'py-1',
+        size === 'default' && 'py-1.5',
+        size === 'lg' && 'py-2',
         className
       )}
       {...props}
@@ -67,7 +68,7 @@ interface SidebarProviderProps {
 
 export function SidebarProvider({
   isMobile = false,
-  children
+  children,
 }: SidebarProviderProps) {
   return (
     <SidebarContext.Provider value={{ isMobile }}>

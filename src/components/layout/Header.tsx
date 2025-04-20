@@ -10,7 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
 interface HeaderProps {
@@ -19,7 +19,12 @@ interface HeaderProps {
 
 export function Header({ className }: HeaderProps) {
   return (
-    <header className={cn('grid grid-cols-3 h-12 items-center border-b px-4 bg-background', className)}>
+    <header
+      className={cn(
+        'grid grid-cols-3 h-12 items-center border-b px-4 bg-background',
+        className
+      )}
+    >
       {/* 左侧区域：图标和菜单 - 自适应处理 */}
       <div className="flex items-center gap-2">
         <div className="flex items-center">
@@ -31,17 +36,27 @@ export function Header({ className }: HeaderProps) {
             className="dark:invert"
           />
           {/* 优先隐藏 Synthesizer Flow 文字 */}
-          <span className="font-medium text-sm ml-2 hidden sm:inline-block">Synthesizer Flow</span>
+          <span className="font-medium text-sm ml-2 hidden sm:inline-block">
+            Synthesizer Flow
+          </span>
         </div>
-        
+
         {/* 桌面视图的普通菜单 */}
         <div className="hidden lg:flex items-center gap-2 ml-4">
-          <Button variant="ghost" size="sm" className="text-xs">文件</Button>
-          <Button variant="ghost" size="sm" className="text-xs">编辑</Button>
-          <Button variant="ghost" size="sm" className="text-xs">视图</Button>
-          <Button variant="ghost" size="sm" className="text-xs">帮助</Button>
+          <Button variant="ghost" size="sm" className="text-xs">
+            文件
+          </Button>
+          <Button variant="ghost" size="sm" className="text-xs">
+            编辑
+          </Button>
+          <Button variant="ghost" size="sm" className="text-xs">
+            视图
+          </Button>
+          <Button variant="ghost" size="sm" className="text-xs">
+            帮助
+          </Button>
         </div>
-        
+
         {/* 移动视图的折叠菜单 */}
         <div className="lg:hidden ml-1">
           <DropdownMenu>
@@ -69,7 +84,13 @@ export function Header({ className }: HeaderProps) {
 
       {/* 右侧区域：按钮 */}
       <div className="flex justify-end items-center gap-2">
-        <Button variant="outline" size="sm" className="text-xs whitespace-nowrap">保存项目</Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs whitespace-nowrap"
+        >
+          保存项目
+        </Button>
       </div>
     </header>
   );

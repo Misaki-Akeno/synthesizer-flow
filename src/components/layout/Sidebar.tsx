@@ -8,19 +8,12 @@ import { ModuleBrowser } from './ModuleBrowser';
 import DevTools from '@/components/workbench/devTools/DevTools';
 import { NavUser } from './NavUser';
 import { Button } from '@/components/ui/button';
-import { 
-  Code, 
-  Cpu, 
-  FileText, 
-  User,
-  Settings,
-  HelpCircle
-} from 'lucide-react';
+import { Code, Cpu, FileText, User, Settings, HelpCircle } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
-  TooltipTrigger
+  TooltipTrigger,
 } from '@/components/ui/tooltip';
 
 interface SidebarProps {
@@ -35,9 +28,9 @@ export function Sidebar({ className }: SidebarProps) {
 
   // 模拟用户数据
   const user = {
-    name: "测试用户",
-    email: "user@example.com",
-    avatar: "https://github.com/shadcn.png"
+    name: '测试用户',
+    email: 'user@example.com',
+    avatar: 'https://github.com/shadcn.png',
   };
 
   const togglePanel = (panel: PanelType) => {
@@ -52,41 +45,41 @@ export function Sidebar({ className }: SidebarProps) {
           <div className="w-[48px] flex flex-col border-r bg-white dark:bg-gray-900">
             {/* 顶部图标 - 触发侧面板的选项 */}
             <div className="flex flex-col">
-              <ActivityBarButton 
-                icon={<FileText size={20} />} 
+              <ActivityBarButton
+                icon={<FileText size={20} />}
                 active={activePanel === 'project-manager'}
-                tooltip="项目管理器" 
+                tooltip="项目管理器"
                 onClick={() => togglePanel('project-manager')}
               />
-              <ActivityBarButton 
-                icon={<Cpu size={20} />} 
+              <ActivityBarButton
+                icon={<Cpu size={20} />}
                 active={activePanel === 'module-browser'}
-                tooltip="模块浏览器" 
+                tooltip="模块浏览器"
                 onClick={() => togglePanel('module-browser')}
               />
-              <ActivityBarButton 
-                icon={<Code size={20} />} 
+              <ActivityBarButton
+                icon={<Code size={20} />}
                 active={activePanel === 'dev-tools'}
-                tooltip="开发工具" 
+                tooltip="开发工具"
                 onClick={() => togglePanel('dev-tools')}
               />
             </div>
 
             {/* 底部图标 - 下拉菜单选项 */}
             <div className="mt-auto flex flex-col border-t">
-              <MenuBarButton 
-                icon={<User size={20} />} 
+              <MenuBarButton
+                icon={<User size={20} />}
                 tooltip="用户"
                 menu={<NavUser user={user} />}
               />
-              <MenuBarButton 
-                icon={<Settings size={20} />} 
-                tooltip="设置" 
+              <MenuBarButton
+                icon={<Settings size={20} />}
+                tooltip="设置"
                 menu={null}
               />
-              <MenuBarButton 
-                icon={<HelpCircle size={20} />} 
-                tooltip="帮助" 
+              <MenuBarButton
+                icon={<HelpCircle size={20} />}
+                tooltip="帮助"
                 menu={null}
               />
             </div>
@@ -122,7 +115,12 @@ interface ActivityBarButtonProps {
   onClick: () => void;
 }
 
-function ActivityBarButton({ icon, active, tooltip, onClick }: ActivityBarButtonProps) {
+function ActivityBarButton({
+  icon,
+  active,
+  tooltip,
+  onClick,
+}: ActivityBarButtonProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -130,8 +128,9 @@ function ActivityBarButton({ icon, active, tooltip, onClick }: ActivityBarButton
           variant="ghost"
           size="icon"
           className={cn(
-            "w-full h-12 rounded-none relative flex items-center justify-center",
-            active && "bg-accent text-accent-foreground before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-primary"
+            'w-full h-12 rounded-none relative flex items-center justify-center',
+            active &&
+              'bg-accent text-accent-foreground before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-primary'
           )}
           onClick={onClick}
         >
@@ -153,10 +152,6 @@ interface MenuBarButtonProps {
 }
 
 function MenuBarButton({ icon, tooltip, menu }: MenuBarButtonProps) {
-  if (menu) {
-    return <div className="w-full">{menu}</div>;
-  }
-  
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -166,6 +161,7 @@ function MenuBarButton({ icon, tooltip, menu }: MenuBarButtonProps) {
           className="w-full h-12 rounded-none flex items-center justify-center"
         >
           {icon}
+          {menu && <div className="absolute">{menu}</div>}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="right" sideOffset={4}>

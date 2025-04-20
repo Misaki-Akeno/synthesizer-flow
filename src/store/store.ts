@@ -35,7 +35,7 @@ interface FlowState {
   ) => string;
   addEdge: (source: string, target: string) => void;
   deleteNode: (nodeId: string) => void;
-  
+
   // 序列化相关方法
   exportCanvasToJson: () => string;
   importCanvasFromJson: (jsonString: string) => boolean;
@@ -55,7 +55,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
   return {
     nodes: initialNodes,
     edges: initialEdges,
-    currentProjectId: '',  // 初始为空，由Canvas组件加载第一个项目
+    currentProjectId: '', // 初始为空，由Canvas组件加载第一个项目
 
     onNodesChange: (changes) => {
       set({
@@ -156,22 +156,24 @@ export const useFlowStore = create<FlowState>((set, get) => {
       const node = get().nodes.find((n) => n.id === nodeId);
       if (node?.data?.module) {
         node.data.module.dispose();
-        
+
         // 记录模块销毁事件
         moduleInitManager.recordDisposal(nodeId);
       }
-      
+
       // 4. 从状态中移除节点和相连的边
       set({
-        nodes: get().nodes.filter(n => n.id !== nodeId),
-        edges: get().edges.filter(e => e.source !== nodeId && e.target !== nodeId)
+        nodes: get().nodes.filter((n) => n.id !== nodeId),
+        edges: get().edges.filter(
+          (e) => e.source !== nodeId && e.target !== nodeId
+        ),
       });
     },
 
     // 序列化整个画布到JSON格式
     exportCanvasToJson: () => {
       return serializationManager.serializeCanvasToJson(
-        get().nodes, 
+        get().nodes,
         get().edges
       );
     },
@@ -179,8 +181,9 @@ export const useFlowStore = create<FlowState>((set, get) => {
     // 从JSON格式导入画布
     importCanvasFromJson: (jsonString) => {
       try {
-        const { nodes, edges } = serializationManager.deserializeCanvasFromJson(jsonString);
-        
+        const { nodes, edges } =
+          serializationManager.deserializeCanvasFromJson(jsonString);
+
         // 重置初始化管理器
         moduleInitManager.reset();
 
@@ -188,7 +191,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
         set({
           nodes,
           edges,
-          currentProjectId: 'imported-project'
+          currentProjectId: 'imported-project',
         });
 
         // 初始化连接
@@ -205,7 +208,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
     // 获取模块的JSON表示
     getModuleAsJson: (moduleId) => {
-      const node = get().nodes.find(n => n.id === moduleId);
+      const node = get().nodes.find((n) => n.id === moduleId);
       if (!node || !node.data?.module) return null;
 
       return serializationManager.serializeModule(node.data.module);
@@ -213,7 +216,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
     // 获取模块的JSON字符串表示
     getModuleAsString: (moduleId) => {
-      const node = get().nodes.find(n => n.id === moduleId);
+      const node = get().nodes.find((n) => n.id === moduleId);
       if (!node || !node.data?.module) return null;
 
       return serializationManager.serializeModuleToJson(node.data.module);
@@ -223,17 +226,19 @@ export const useFlowStore = create<FlowState>((set, get) => {
     importModuleFromData: (data) => {
       try {
         let moduleInstance;
-        
+
         if (typeof data === 'string') {
           moduleInstance = serializationManager.deserializeModuleFromJson(data);
         } else {
-          moduleInstance = serializationManager.deserializeModule(data as SerializedModule);
+          moduleInstance = serializationManager.deserializeModule(
+            data as SerializedModule
+          );
         }
-        
+
         if (!moduleInstance) {
           return null;
         }
-        
+
         // 创建节点
         const nodeId = `node_${Date.now()}`;
         const node: FlowNode = {
@@ -243,20 +248,20 @@ export const useFlowStore = create<FlowState>((set, get) => {
           data: {
             module: moduleInstance,
             label: moduleInstance.name,
-            type: moduleInstance.moduleType
-          }
+            type: moduleInstance.moduleType,
+          },
         };
-        
+
         // 添加节点到画布
         set({
-          nodes: [...get().nodes, node]
+          nodes: [...get().nodes, node],
         });
-        
+
         return nodeId;
       } catch (error) {
         console.error('从数据导入模块失败:', error);
         return null;
       }
-    }
+    },
   };
 });

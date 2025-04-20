@@ -21,30 +21,31 @@ const nodeTypes = {
 };
 
 interface CanvasProps {
-  projectId?: string;  // 简化为仅使用projectId
+  projectId?: string; // 简化为仅使用projectId
 }
 
 // 内部Canvas组件，包含实际的ReactFlow
 const CanvasInner = ({ projectId }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect } =
     useFlowStore();
-  
-  const { getProjectById, loadProject, builtInProjects, currentProject } = usePersistStore();
+
+  const { getProjectById, loadProject, builtInProjects, currentProject } =
+    usePersistStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  
+
   const hasLoadedProject = useRef(false);
   const hasUpdatedUrl = useRef(false);
 
   const { onPaneContextMenu, onNodeContextMenu, onEdgeContextMenu } =
     useFlowContextMenu();
-    
+
   // 在组件挂载时加载项目
   useEffect(() => {
     // 如果已经手动加载了项目，不再执行自动加载
     if (hasLoadedProject.current) return;
-    
+
     const loadInitialProject = async () => {
       if (projectId) {
         const projectToLoad = getProjectById(projectId);
@@ -54,20 +55,19 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
           return;
         }
       }
-      
 
       if (!hasLoadedProject.current && builtInProjects.length > 0) {
         hasLoadedProject.current = true;
         await loadProject(builtInProjects[0]);
       }
     };
-    
+
     loadInitialProject();
   }, [projectId, getProjectById, loadProject, builtInProjects]);
 
   useEffect(() => {
     if (!currentProject) return;
-    
+
     if (hasUpdatedUrl.current) {
       setTimeout(() => {
         hasUpdatedUrl.current = false;
@@ -75,7 +75,6 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
       return;
     }
     hasUpdatedUrl.current = true;
-    
 
     const params = new URLSearchParams(searchParams);
     params.set('project', currentProject.id);

@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ParameterType, PortType, ModuleInterface } from '../ModuleBase';
+import {
+  ParameterType,
+  PortType,
+  ModuleInterface,
+  ModuleMetadata,
+} from '../ModuleBase';
 import { AudioModuleBase } from '../AudioModuleBase';
 import { AudioInputHandler } from '../AudioInputHandler';
 
@@ -7,6 +12,15 @@ import { AudioInputHandler } from '../AudioInputHandler';
  * 音频输出模块，接收音频信号并输出到扬声器
  */
 export class SpeakerModule extends AudioModuleBase {
+  // 模块元数据
+  public static metadata: ModuleMetadata = {
+    type: 'speaker',
+    label: '扬声器',
+    description: '音频输出模块，接收音频信号并输出到系统扬声器',
+    category: '输出',
+    iconType: 'Speaker',
+  };
+
   private lastInputValue: number = 0;
   private gain: any = null;
 

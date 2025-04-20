@@ -15,7 +15,7 @@ export function SearchBar({ className }: SearchBarProps) {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const { currentProject } = usePersistStore();
-  
+
   // 激活搜索
   const activateSearch = () => {
     setIsSearchActive(true);
@@ -23,21 +23,21 @@ export function SearchBar({ className }: SearchBarProps) {
       document.getElementById('search-input')?.focus();
     }, 100);
   };
-  
+
   // 取消激活搜索
   const deactivateSearch = () => {
     if (!searchQuery) {
       setIsSearchActive(false);
     }
   };
-  
+
   // 处理搜索
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     // 执行搜索逻辑
     console.log('Searching for:', searchQuery);
   };
-  
+
   // 处理按键事件
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {

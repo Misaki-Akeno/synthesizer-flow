@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ParameterType, PortType } from '../ModuleBase';
+import { ParameterType, PortType, ModuleMetadata } from '../ModuleBase';
 import { AudioModuleBase } from '../AudioModuleBase';
 import { AudioInputHandler } from '../AudioInputHandler';
 
@@ -7,6 +7,15 @@ import { AudioInputHandler } from '../AudioInputHandler';
  * 混响效果器模块，处理音频信号并添加混响效果
  */
 export class ReverbModule extends AudioModuleBase {
+  // 模块元数据
+  public static metadata: ModuleMetadata = {
+    type: 'reverb',
+    label: '混响效果',
+    description: '添加空间混响效果到输入的音频信号',
+    category: '效果',
+    iconType: 'Sliders',
+  };
+
   private reverb: any;
 
   constructor(id: string, name: string = '混响效果器') {

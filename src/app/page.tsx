@@ -20,11 +20,11 @@ export default async function PlaygroundPage({
   searchParams: Promise<SearchParams>;
 }) {
   const resolvedSearchParams = await searchParams;
-  
-  // 只使用project参数
-  const projectId = typeof resolvedSearchParams.project === 'string'
-    ? resolvedSearchParams.project
-    : undefined;
+
+  const projectId =
+    typeof resolvedSearchParams.project === 'string'
+      ? resolvedSearchParams.project
+      : undefined;
 
   return (
     <div className="h-screen flex flex-col">

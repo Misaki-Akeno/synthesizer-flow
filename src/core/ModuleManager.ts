@@ -1,11 +1,6 @@
 import { Node, Edge } from '@xyflow/react';
 import { ModuleBase } from './ModuleBase';
-import { SimpleOscillatorModule } from './Modules/OscillatorModule';
-import { SpeakerModule } from './Modules/SpeakerModule';
-import { ReverbModule } from './Modules/ReverbModule';
-import { LFOModule } from './Modules/LFOModule';
-import { AdvancedOscillatorModule } from './Modules/AdvancedOscillatorModule';
-import { MIDIInputModule } from './Modules/MIDIInputModule';
+import { moduleClassMap } from './Modules';
 import { SerializedNode, SerializedEdge } from './types/SerializationTypes';
 
 // 节点数据接口，添加索引签名兼容 Record<string, unknown>
@@ -28,32 +23,14 @@ export class ModuleManager {
     id: string = `module_${Date.now()}`,
     name: string = type
   ): ModuleBase {
-    let moduleInstance: ModuleBase;
-
-    switch (type.toLowerCase()) {
-      case 'simpleoscillator':
-        moduleInstance = new SimpleOscillatorModule(id, name);
-        break;
-      case 'speaker':
-        moduleInstance = new SpeakerModule(id, name);
-        break;
-      case 'reverb':
-        moduleInstance = new ReverbModule(id, name);
-        break;
-      case 'lfo':
-        moduleInstance = new LFOModule(id, name);
-        break;
-      case 'advancedoscillator':
-        moduleInstance = new AdvancedOscillatorModule(id, name);
-        break;
-      case 'midiinput':
-        moduleInstance = new MIDIInputModule(id, name);
-        break;
-      default:
-        console.error(`未知模块类型: ${type}`);
-        moduleInstance = new SpeakerModule(id, name);
+    const ModuleClass = moduleClassMap[type.toLowerCase()];
+    if (!ModuleClass) {
+      console.error(`未知模块类型: ${type}`);
+      // 使用 SpeakerModule 作为默认后备选择
+      return new moduleClassMap.speaker(id, name);
     }
 
+    const moduleInstance = new ModuleClass(id, name);
     this.moduleInstances.set(id, moduleInstance);
     return moduleInstance;
   }

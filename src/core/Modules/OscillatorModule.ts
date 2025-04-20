@@ -1,11 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ParameterType, PortType } from '../ModuleBase';
+import { ParameterType, PortType, ModuleMetadata } from '../ModuleBase';
 import { AudioModuleBase } from '../AudioModuleBase';
 
 /**
  * 振荡器模块，生成音频信号并根据参数调整输出
  */
 export class SimpleOscillatorModule extends AudioModuleBase {
+  // 模块元数据
+  public static metadata: ModuleMetadata = {
+    type: 'simpleoscillator',
+    label: '简单振荡器',
+    description: '生成基本波形的振荡器，提供频率和波形控制',
+    category: '信号源',
+    iconType: 'Waves',
+  };
+
   private oscillator: any;
   private gainNode: any; // 用于渐变控制
 
