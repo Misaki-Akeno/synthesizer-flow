@@ -8,7 +8,7 @@ import { ModuleBrowser } from './ModuleBrowser';
 import DevTools from '@/components/workbench/devTools/DevTools';
 import { NavUser } from './NavUser';
 import { Button } from '@/components/ui/button';
-import { Code, Cpu, FileText, User, Settings, HelpCircle } from 'lucide-react';
+import { Code, Cpu, FileText, Settings, HelpCircle } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -25,13 +25,6 @@ type PanelType = 'project-manager' | 'module-browser' | 'dev-tools' | null;
 
 export function Sidebar({ className }: SidebarProps) {
   const [activePanel, setActivePanel] = useState<PanelType>('dev-tools');
-
-  // 模拟用户数据
-  const user = {
-    name: '测试用户',
-    email: 'user@example.com',
-    avatar: 'https://github.com/shadcn.png',
-  };
 
   const togglePanel = (panel: PanelType) => {
     setActivePanel(activePanel === panel ? null : panel);
@@ -67,20 +60,17 @@ export function Sidebar({ className }: SidebarProps) {
 
             {/* 底部图标 - 下拉菜单选项 */}
             <div className="mt-auto flex flex-col border-t">
-              <MenuBarButton
-                icon={<User size={20} />}
-                tooltip="用户"
-                menu={<NavUser user={user} />}
-              />
+              <NavUser />
+              
               <MenuBarButton
                 icon={<Settings size={20} />}
                 tooltip="设置"
-                menu={null}
+                onClick={() => {}}
               />
               <MenuBarButton
                 icon={<HelpCircle size={20} />}
                 tooltip="帮助"
-                menu={null}
+                onClick={() => {}}
               />
             </div>
           </div>
@@ -144,14 +134,14 @@ function ActivityBarButton({
   );
 }
 
-// 底部菜单栏按钮组件 - 显示下拉菜单
+// 修改 MenuBarButton 组件，删除不再需要的 menu 参数
 interface MenuBarButtonProps {
   icon: React.ReactNode;
   tooltip: string;
-  menu: React.ReactNode | null;
+  onClick: () => void;
 }
 
-function MenuBarButton({ icon, tooltip, menu }: MenuBarButtonProps) {
+function MenuBarButton({ icon, tooltip, onClick }: MenuBarButtonProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -159,9 +149,9 @@ function MenuBarButton({ icon, tooltip, menu }: MenuBarButtonProps) {
           variant="ghost"
           size="icon"
           className="w-full h-12 rounded-none flex items-center justify-center"
+          onClick={onClick}
         >
           {icon}
-          {menu && <div className="absolute">{menu}</div>}
         </Button>
       </TooltipTrigger>
       <TooltipContent side="right" sideOffset={4}>
