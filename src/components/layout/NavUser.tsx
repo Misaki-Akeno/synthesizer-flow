@@ -28,6 +28,7 @@ export function NavUser({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
+        {/* 这里必须用div而不是button，因为父组件是一个button */}
         <div className="w-full h-12 flex items-center justify-center hover:bg-accent hover:text-accent-foreground rounded-none cursor-pointer">
           <Avatar className="h-6 w-6 rounded">
             <AvatarImage src={user.avatar} alt={user.name} />
