@@ -1,3 +1,4 @@
+'use client'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { FlowNode, moduleManager } from './ModuleManager';
 import { Edge } from '@xyflow/react';

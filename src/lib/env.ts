@@ -1,9 +1,5 @@
 // src/lib/env.ts
 import { z } from 'zod';
-import { createModuleLogger } from './logger';
-
-// 创建环境变量专用日志记录器
-const logger = createModuleLogger('Environment');
 
 /**
  * 使用zod定义并验证环境变量
@@ -36,9 +32,8 @@ function parseEnv() {
 
   try {
     return envSchema.parse(env);
-  } catch (error) {
+  } catch (_error) {
     // 捕获所有验证失败的环境变量
-    logger.error('❌ 环境变量验证失败:', error);
     throw new Error('环境变量配置错误，请检查.env文件');
   }
 }
