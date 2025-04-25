@@ -16,6 +16,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+// 导入统一的模块元数据和辅助函数
+import { getModuleDescription } from '@/core/Modules';
 
 interface DefaultNodeProps {
   data: {
@@ -101,6 +109,10 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     return (
       <div className="custom-ui-container">
         <CustomComponent
+          label={''}
+          onClick={function (): void {
+            throw new Error('Function not implemented.');
+          }}
           xParam={{
             paramKey: 'x',
             label: 'X',
@@ -190,7 +202,20 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     >
       {/* 模块标题栏 */}
       <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center node-drag-handle cursor-move">
-        <div>{data.label || moduleInstance?.name || '模块'}</div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="cursor-help">
+                {data.label || moduleInstance?.name || '模块'}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="max-w-xs break-words text-xs">
+                {getModuleDescription(data.type)}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
         {/* 启用/禁用切换按钮 */}
         {moduleInstance instanceof AudioModuleBase && (

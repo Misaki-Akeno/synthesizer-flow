@@ -44,3 +44,7 @@ docs
 
 # MDX files
 *.mdx
+
+.vscode
+
+src/db/migrations/

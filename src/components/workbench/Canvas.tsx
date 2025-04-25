@@ -7,15 +7,11 @@ import {
   Background,
   BackgroundVariant,
   IsValidConnection,
-  ReactFlowProvider,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import DevTools from './devTools/DevTools';
 import DefaultNode from './DefaultNode';
 import { useFlowStore } from '../../store/store';
 import { ContextMenu } from '../contextMenu/ContextMenu';
-import { ContextMenuProvider } from '../contextMenu/ContextMenuProvider';
-import { ModuleSelectorProvider } from '../contextMenu/ModuleSelectorContext';
 import { useFlowContextMenu } from '../contextMenu/hooks/useFlowContextMenu';
 import { usePersistStore } from '@/store/persist-store';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
@@ -25,30 +21,31 @@ const nodeTypes = {
 };
 
 interface CanvasProps {
-  projectId?: string;  // 简化为仅使用projectId
+  projectId?: string; // 简化为仅使用projectId
 }
 
 // 内部Canvas组件，包含实际的ReactFlow
 const CanvasInner = ({ projectId }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect } =
     useFlowStore();
-  
-  const { getProjectById, loadProject, builtInProjects, currentProject } = usePersistStore();
+
+  const { getProjectById, loadProject, builtInProjects, currentProject } =
+    usePersistStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  
+
   const hasLoadedProject = useRef(false);
   const hasUpdatedUrl = useRef(false);
 
   const { onPaneContextMenu, onNodeContextMenu, onEdgeContextMenu } =
     useFlowContextMenu();
-    
+
   // 在组件挂载时加载项目
   useEffect(() => {
     // 如果已经手动加载了项目，不再执行自动加载
     if (hasLoadedProject.current) return;
-    
+
     const loadInitialProject = async () => {
       if (projectId) {
         const projectToLoad = getProjectById(projectId);
@@ -58,20 +55,19 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
           return;
         }
       }
-      
 
       if (!hasLoadedProject.current && builtInProjects.length > 0) {
         hasLoadedProject.current = true;
         await loadProject(builtInProjects[0]);
       }
     };
-    
+
     loadInitialProject();
   }, [projectId, getProjectById, loadProject, builtInProjects]);
 
   useEffect(() => {
     if (!currentProject) return;
-    
+
     if (hasUpdatedUrl.current) {
       setTimeout(() => {
         hasUpdatedUrl.current = false;
@@ -79,7 +75,6 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
       return;
     }
     hasUpdatedUrl.current = true;
-    
 
     const params = new URLSearchParams(searchParams);
     params.set('project', currentProject.id);
@@ -123,7 +118,6 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
       onEdgeContextMenu={onEdgeContextMenu}
       isValidConnection={isValidConnection}
     >
-      <DevTools />
       <Controls />
       <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
       <ContextMenu />
@@ -135,16 +129,11 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
 export default function Canvas({ projectId }: CanvasProps = {}) {
   return (
     <div
-      style={{ width: '100vw', height: '100vh' }}
+      style={{ width: '100%', height: '100%' }}
       onContextMenu={(e) => e.preventDefault()}
+      className="h-full w-full"
     >
-      <ReactFlowProvider>
-        <ContextMenuProvider>
-          <ModuleSelectorProvider>
-            <CanvasInner projectId={projectId} />
-          </ModuleSelectorProvider>
-        </ContextMenuProvider>
-      </ReactFlowProvider>
+      <CanvasInner projectId={projectId} />
     </div>
   );
 }

@@ -60,17 +60,3 @@ export interface BuiltInProject {
   name: string;
   canvasData: SerializedCanvas;
 }
-
-/**
- * 模块序列化格式
- */
-export type ModuleSerializationFormat = 'json' | 'base64';
-
-/**
- * 压缩级别
- */
-export enum CompressionLevel {
-  NONE = 0,
-  MEDIUM = 1,
-  HIGH = 2
-}

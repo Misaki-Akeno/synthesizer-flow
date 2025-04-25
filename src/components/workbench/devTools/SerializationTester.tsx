@@ -7,22 +7,26 @@ import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { useFlowStore } from '@/store/store';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { createModuleLogger } from '@/lib/logger';
+
+// 创建序列化测试器专用日志记录器
+const logger = createModuleLogger('SerializationTester');
 
 export default function SerializationTester() {
   const [projectName, setProjectName] = useState('测试项目');
   const [projectDesc, setProjectDesc] = useState('自动创建的测试项目');
   const [activeTab, setActiveTab] = useState('user-projects');
 
-  const { 
-    recentProjects, 
+  const {
+    recentProjects,
     builtInProjects,
     currentProject,
-    saveCurrentCanvas, 
+    saveCurrentCanvas,
     loadProject,
     deleteProject,
     exportProjectToFile,
   } = usePersistStore();
-  
+
   // 显示的日期格式化函数
   const formatDate = (dateStr: string) => {
     try {
@@ -31,9 +35,9 @@ export default function SerializationTester() {
         month: 'numeric',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
       });
-    } catch(_e) {
+    } catch (_e) {
       return '无效日期';
     }
   };
@@ -45,14 +49,27 @@ export default function SerializationTester() {
         <h3 className="text-sm font-medium">当前项目</h3>
         {currentProject ? (
           <div className="text-xs space-y-1 mt-1">
-            <div><span className="font-medium">名称:</span> {currentProject.name}</div>
+            <div>
+              <span className="font-medium">名称:</span> {currentProject.name}
+            </div>
             {currentProject.description && (
-              <div><span className="font-medium">描述:</span> {currentProject.description}</div>
+              <div>
+                <span className="font-medium">描述:</span>{' '}
+                {currentProject.description}
+              </div>
             )}
-            <div><span className="font-medium">创建时间:</span> {formatDate(currentProject.created)}</div>
-            <div><span className="font-medium">最后修改:</span> {formatDate(currentProject.lastModified)}</div>
+            <div>
+              <span className="font-medium">创建时间:</span>{' '}
+              {formatDate(currentProject.created)}
+            </div>
+            <div>
+              <span className="font-medium">最后修改:</span>{' '}
+              {formatDate(currentProject.lastModified)}
+            </div>
             {currentProject.isBuiltIn && (
-              <Badge variant="outline" className="text-xs">内置预设</Badge>
+              <Badge variant="outline" className="text-xs">
+                内置预设
+              </Badge>
             )}
           </div>
         ) : (
@@ -63,11 +80,13 @@ export default function SerializationTester() {
       {/* 保存新项目区域 */}
       <div className="border rounded-md p-3 space-y-2">
         <h3 className="text-sm font-medium">保存当前画布</h3>
-        
+
         <div className="grid gap-2">
           <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-            <label htmlFor="project-name" className="text-xs">项目名称</label>
-            <Input 
+            <label htmlFor="project-name" className="text-xs">
+              项目名称
+            </label>
+            <Input
               id="project-name"
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
@@ -75,10 +94,12 @@ export default function SerializationTester() {
               placeholder="输入项目名称"
             />
           </div>
-          
+
           <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-            <label htmlFor="project-desc" className="text-xs">项目描述</label>
-            <Input 
+            <label htmlFor="project-desc" className="text-xs">
+              项目描述
+            </label>
+            <Input
               id="project-desc"
               value={projectDesc}
               onChange={(e) => setProjectDesc(e.target.value)}
@@ -87,10 +108,10 @@ export default function SerializationTester() {
             />
           </div>
         </div>
-        
+
         <div className="flex justify-end pt-1">
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             onClick={async () => {
               if (!projectName.trim()) {
                 alert('请输入项目名称');
@@ -108,82 +129,91 @@ export default function SerializationTester() {
           </Button>
         </div>
       </div>
-      
+
       {/* 调试功能区 */}
       <div className="border rounded-md p-3 space-y-2">
         <h3 className="text-sm font-medium">调试功能</h3>
         <div className="flex flex-wrap gap-2">
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             variant="outline"
             onClick={() => {
               const jsonData = useFlowStore.getState().exportCanvasToJson();
-              console.log('画布数据 (JSON):', jsonData);
+              logger.info('画布数据 (JSON):', jsonData);
               try {
                 // 尝试复制到剪贴板
-                navigator.clipboard.writeText(jsonData)
+                navigator.clipboard
+                  .writeText(jsonData)
                   .then(() => alert('JSON 数据已复制到剪贴板!'))
-                  .catch(err => {
-                    console.error('剪贴板复制失败:', err);
+                  .catch((err) => {
+                    logger.error('剪贴板复制失败:', err);
                     alert('无法复制到剪贴板，请查看控制台获取数据');
                   });
               } catch (error) {
-                console.error('剪贴板操作错误:', error);
+                logger.error('剪贴板操作错误:', error);
                 alert('无法访问剪贴板API，数据已输出到控制台');
               }
             }}
           >
             导出 JSON
           </Button>
-          
-          <Button 
-            size="sm" 
+
+          <Button
+            size="sm"
             variant="outline"
             onClick={() => {
               const input = prompt('请粘贴 JSON 数据:');
               if (!input) return;
-              
+
               try {
-                const success = useFlowStore.getState().importCanvasFromJson(input);
+                const success = useFlowStore
+                  .getState()
+                  .importCanvasFromJson(input);
                 if (success) {
                   alert('画布数据导入成功!');
                 } else {
                   alert('导入失败，格式可能不正确');
                 }
-              } catch(error) {
-                console.error('导入错误:', error);
+              } catch (error) {
+                logger.error('导入错误:', error);
                 alert('导入出错，查看控制台获取详情');
               }
             }}
           >
             导入 JSON
           </Button>
-          
-          <Button 
-            size="sm" 
+
+          <Button
+            size="sm"
             variant="outline"
             onClick={() => {
               // 创建下载链接来导出画布数据
               const jsonData = useFlowStore.getState().exportCanvasToJson();
-              const dataBlob = new Blob([jsonData], { type: 'application/json' });
+              const dataBlob = new Blob([jsonData], {
+                type: 'application/json',
+              });
               const url = URL.createObjectURL(dataBlob);
-              
+
               const link = document.createElement('a');
               link.href = url;
-              link.download = `synthesizerflow_canvas_${new Date().toISOString().slice(0,10)}.json`;
+              link.download = `synthesizerflow_canvas_${new Date().toISOString().slice(0, 10)}.json`;
               link.click();
-              
+
               // 清理资源
               URL.revokeObjectURL(url);
             }}
           >
             下载 JSON 文件
           </Button>
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             variant="outline"
             onClick={() => {
-              if (confirm('确定要清空本地存储(localStorage)吗? 这将删除所有保存的项目和设置。')) {
+              if (
+                confirm(
+                  '确定要清空本地存储(localStorage)吗? 这将删除所有保存的项目和设置。'
+                )
+              ) {
                 localStorage.clear();
                 alert('本地存储已清空。应用需要刷新以应用更改。');
                 window.location.reload();
@@ -194,15 +224,19 @@ export default function SerializationTester() {
           </Button>
         </div>
       </div>
-      
+
       {/* 项目列表和内置预设 */}
       <div>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid grid-cols-2 mb-2">
-            <TabsTrigger value="user-projects">用户项目 ({recentProjects.length})</TabsTrigger>
-            <TabsTrigger value="built-in">内置预设 ({builtInProjects.length})</TabsTrigger>
+            <TabsTrigger value="user-projects">
+              用户项目 ({recentProjects.length})
+            </TabsTrigger>
+            <TabsTrigger value="built-in">
+              内置预设 ({builtInProjects.length})
+            </TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="user-projects">
             <ScrollArea className="h-52 border rounded">
               <div className="p-2 space-y-2">
@@ -212,7 +246,7 @@ export default function SerializationTester() {
                   </p>
                 ) : (
                   recentProjects.map((project) => (
-                    <ProjectCard 
+                    <ProjectCard
                       key={project.name}
                       project={project}
                       onLoad={() => loadProject(project)}
@@ -229,17 +263,17 @@ export default function SerializationTester() {
               </div>
             </ScrollArea>
           </TabsContent>
-          
+
           <TabsContent value="built-in">
             <ScrollArea className="h-52 border rounded">
               <div className="p-2 space-y-2">
                 {builtInProjects.map((project) => (
-                  <ProjectCard 
+                  <ProjectCard
                     key={project.id || project.name}
                     project={project}
                     onLoad={() => loadProject(project)}
                     onExport={() => exportProjectToFile(project.name)}
-                    onDelete={() => {}}  // 内置预设不允许删除
+                    onDelete={() => {}} // 内置预设不允许删除
                     isActive={currentProject?.name === project.name}
                     isBuiltIn
                   />
@@ -253,30 +287,36 @@ export default function SerializationTester() {
   );
 }
 
-function ProjectCard({ 
-  project, 
-  onLoad, 
-  onDelete, 
+function ProjectCard({
+  project,
+  onLoad,
+  onDelete,
   onExport,
   isActive,
-  isBuiltIn
-}: { 
-  project: ProjectConfig, 
-  onLoad: () => void,
-  onDelete: () => void,
-  onExport: () => void,
-  isActive: boolean,
-  isBuiltIn?: boolean
+  isBuiltIn,
+}: {
+  project: ProjectConfig;
+  onLoad: () => void;
+  onDelete: () => void;
+  onExport: () => void;
+  isActive: boolean;
+  isBuiltIn?: boolean;
 }) {
   return (
     <Card className={`text-xs ${isActive ? 'border-primary' : ''}`}>
       <CardContent>
         <div className="font-medium flex items-center gap-2">
           {project.name}
-          {isBuiltIn && <Badge variant="outline" className="text-[9px]">内置预设</Badge>}
+          {isBuiltIn && (
+            <Badge variant="outline" className="text-[9px]">
+              内置预设
+            </Badge>
+          )}
         </div>
         {project.description && (
-          <div className="text-muted-foreground mt-1 line-clamp-1">{project.description}</div>
+          <div className="text-muted-foreground mt-1 line-clamp-1">
+            {project.description}
+          </div>
         )}
         <div className="mt-1 text-[10px] text-muted-foreground">
           创建于: {new Date(project.created).toLocaleDateString()}
@@ -284,15 +324,30 @@ function ProjectCard({
       </CardContent>
       <CardFooter>
         <div className="flex gap-1">
-          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onLoad}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2"
+            onClick={onLoad}
+          >
             加载
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onExport}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2"
+            onClick={onExport}
+          >
             导出
           </Button>
         </div>
         {!isBuiltIn && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" onClick={onDelete}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
             删除
           </Button>
         )}

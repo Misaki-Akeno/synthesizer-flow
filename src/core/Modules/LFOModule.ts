@@ -1,11 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ParameterType, PortType } from '../ModuleBase';
+import { ParameterType, PortType, ModuleMetadata } from '../ModuleBase';
 import { AudioModuleBase } from '../AudioModuleBase';
 
 /**
- * LFO模块，生成低频调制信号用于自动调制声音
+ * 低频振荡器(LFO)模块，产生低频调制信号
  */
 export class LFOModule extends AudioModuleBase {
+  // 模块元数据
+  public static metadata: ModuleMetadata = {
+    type: 'lfo',
+    label: '低频振荡器(LFO)',
+    description: '产生低频调制信号，用于调制其他参数',
+    category: '调制',
+    iconType: 'Sliders',
+  };
+
   private lfo: any;
   private signalScaler: any; // 将-1到1的信号映射到0到1范围
   private intervalId: any = null; // 用于定期更新信号值

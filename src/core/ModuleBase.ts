@@ -22,6 +22,15 @@ export type ModuleInterface = number | Audio | Array<number | object>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Audio = any;
 
+// 模块元数据接口
+export interface ModuleMetadata {
+  type: string; // 模块类型标识符
+  label: string; // 模块显示名称
+  description: string; // 模块描述
+  category: string; // 模块分类
+  iconType?: string; // 可选的图标类型
+}
+
 // 参数定义接口，包含值、类型、范围等
 export interface ParameterDefinition {
   type: ParameterType;
@@ -92,7 +101,10 @@ export abstract class ModuleBase {
   private subscriptions: { [key: string]: Subscription } = {};
 
   // 存储输出连接
-  private outputConnections: Map<string, Array<{targetModule: ModuleBase, targetPort: string}>> = new Map();
+  private outputConnections: Map<
+    string,
+    Array<{ targetModule: ModuleBase; targetPort: string }>
+  > = new Map();
 
   // 存储内部订阅关系
   private internalSubscriptions: Subscription[] = [];
@@ -637,7 +649,7 @@ export abstract class ModuleBase {
     // 检查端口类型是否兼容
     const outputType = this.outputPortTypes[outputPortName];
     const inputType = targetModule.inputPortTypes[targetPortName];
-    
+
     if (outputType !== inputType) {
       throw new Error(
         `Type mismatch: Cannot connect ${outputType} output to ${inputType} input`
@@ -646,12 +658,12 @@ export abstract class ModuleBase {
 
     // 建立连接
     targetModule.bindInputToOutput(targetPortName, this, outputPortName);
-    
+
     // 记录输出连接
     if (!this.outputConnections.has(outputPortName)) {
       this.outputConnections.set(outputPortName, []);
     }
-    
+
     const connections = this.outputConnections.get(outputPortName);
     connections?.push({ targetModule, targetPort: targetPortName });
   }
@@ -669,20 +681,24 @@ export abstract class ModuleBase {
   ): void {
     // 检查输出端口是否存在
     if (!this.outputPorts[outputPortName]) {
-      console.warn(`Output port '${outputPortName}' not found on module ${this.id}`);
+      console.warn(
+        `Output port '${outputPortName}' not found on module ${this.id}`
+      );
       return;
     }
 
     // 请求目标模块解除输入绑定
     targetModule.unbindInput(targetPortName, this.id, outputPortName);
-    
+
     // 更新输出连接记录
     const connections = this.outputConnections.get(outputPortName);
     if (connections) {
       const index = connections.findIndex(
-        (conn) => conn.targetModule.id === targetModule.id && conn.targetPort === targetPortName
+        (conn) =>
+          conn.targetModule.id === targetModule.id &&
+          conn.targetPort === targetPortName
       );
-      
+
       if (index !== -1) {
         connections.splice(index, 1);
       }

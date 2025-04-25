@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ParameterType, PortType } from '../ModuleBase';
+import { ParameterType, PortType, ModuleMetadata } from '../ModuleBase';
 import { AudioModuleBase } from '../AudioModuleBase';
 
 /**
@@ -16,6 +16,15 @@ function midiNoteToFrequency(note: number): number {
  * 复音振荡器模块，支持同时发声多个音符
  */
 export class AdvancedOscillatorModule extends AudioModuleBase {
+  // 模块元数据
+  public static metadata: ModuleMetadata = {
+    type: 'advancedoscillator',
+    label: '高级振荡器',
+    description: '支持复音、包络控制和更多波形选项的高级振荡器',
+    category: '信号源',
+    iconType: 'Waves',
+  };
+
   private gainNode: any; // 用于渐变控制
   private mainGainDb: any; // db单位的增益控制
 
@@ -98,7 +107,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       },
       waveform: {
         type: ParameterType.LIST,
-        value: 'sine',
+        value: 'triangle',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
         uiOptions: {
           label: '波形',
@@ -538,7 +547,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         this.triggerVoice(note, velocity);
       }
     });
-
   }
 
   /**
@@ -673,7 +681,6 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         );
       }
     }
-
   }
 
   /**

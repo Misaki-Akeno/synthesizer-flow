@@ -1,6 +1,6 @@
 'use client';
 
-import { ParameterType, PortType } from '../ModuleBase';
+import { ParameterType, PortType, ModuleMetadata } from '../ModuleBase';
 import { AudioModuleBase } from '../AudioModuleBase';
 
 /**
@@ -12,11 +12,21 @@ const isBrowser = typeof window !== 'undefined';
  * MIDI输入模块，接收外部MIDI控制器的输入，并将其转换为系统内部的信号
  */
 export class MIDIInputModule extends AudioModuleBase {
+  // 模块元数据
+  public static metadata: ModuleMetadata = {
+    type: 'midiinput',
+    label: 'MIDI输入器',
+    description: 'MIDI输入模块，接收并处理外部MIDI控制器的输入信号',
+    category: '输入',
+    iconType: 'Music',
+  };
+
   // WebMIDI API相关
   private midiAccess: WebMidi.MIDIAccess | null = null;
   private midiInputs: WebMidi.MIDIInput[] = [];
   private selectedInput: WebMidi.MIDIInput | null = null;
   private inputDeviceId: string = '';
+  private isRefreshing: boolean = false; // 新增：标记是否正在刷新设备
 
   // 模块状态
   // 使用 Map 存储每个活动音符及其力度
@@ -140,9 +150,6 @@ export class MIDIInputModule extends AudioModuleBase {
         // 如果没有发现设备，尝试延迟再次检测
         setTimeout(() => {
           if (this.midiInputs.length === 0) {
-            console.debug(
-              `[${this.moduleType}Module ${this.id}] 延迟检测MIDI设备...`
-            );
             this.updateMIDIInputDevices();
           }
         }, 1000);
@@ -173,10 +180,6 @@ export class MIDIInputModule extends AudioModuleBase {
 
     // 使用正确的方法访问MIDIInputMap
     try {
-      console.debug(
-        `[${this.moduleType}Module ${this.id}] 开始检测MIDI输入设备...`
-      );
-
       // 获取所有输入设备 - 正确使用iterator
       const inputs = this.midiAccess.inputs.values();
       let input = inputs.next();
@@ -188,10 +191,6 @@ export class MIDIInputModule extends AudioModuleBase {
           midiInput.name || `${midiInput.manufacturer || 'Unknown'} Input`;
         deviceNames.push(deviceName);
         deviceOptions.push(midiInput.id);
-
-        console.debug(
-          `[${this.moduleType}Module ${this.id}] 发现MIDI设备: ${deviceName} (ID: ${midiInput.id}, 状态: ${midiInput.state}, 类型: ${midiInput.type})`
-        );
 
         input = inputs.next();
       }
@@ -209,10 +208,6 @@ export class MIDIInputModule extends AudioModuleBase {
           `[${this.moduleType}Module ${this.id}] 未检测到MIDI输入设备，请确保设备已正确连接并授予浏览器访问权限`
         );
       } else {
-        console.debug(
-          `[${this.moduleType}Module ${this.id}] 发现${deviceNames.length}个MIDI输入设备:`,
-          deviceNames
-        );
       }
     } catch (error) {
       console.error(
@@ -258,9 +253,6 @@ export class MIDIInputModule extends AudioModuleBase {
         `[${this.moduleType}Module ${this.id}] 已连接MIDI输入设备: ${device.name || device.manufacturer}`
       );
     } else {
-      console.warn(
-        `[${this.moduleType}Module ${this.id}] 未找到ID为${deviceId}的MIDI输入设备`
-      );
       // 如果没找到，选择第一个可用设备
       if (this.midiInputs.length > 0) {
         this.connectToDevice(this.midiInputs[0].id);
@@ -277,10 +269,6 @@ export class MIDIInputModule extends AudioModuleBase {
       this.selectedInput.removeEventListener(
         'midimessage',
         this.handleMIDIMessage.bind(this)
-      );
-
-      console.debug(
-        `[${this.moduleType}Module ${this.id}] 已断开MIDI输入设备: ${this.selectedInput.name || this.selectedInput.manufacturer}`
       );
 
       this.selectedInput = null;
@@ -342,7 +330,7 @@ export class MIDIInputModule extends AudioModuleBase {
    * 处理音符按下事件
    */
   private handleNoteOn(note: number, velocity: number): void {
-    // 获取当前时间戳，用于防抖动
+    // 获取当前时间戳，用于批处理
     const currentTime = performance.now();
 
     // 应用音高转置
@@ -359,12 +347,10 @@ export class MIDIInputModule extends AudioModuleBase {
     // 添加到活跃音符 Map 中，存储音符和对应的力度
     this.activeNoteVelocities.set(transposedNote, scaledVelocity);
 
-    // 更新输出端口（加入防抖动，避免频繁更新）
-    if (currentTime - this.lastNoteChangeTime > 5) {
-      // 5ms的防抖动时间
-      this.updateOutputPorts();
-      this.lastNoteChangeTime = currentTime;
-    }
+    // 始终立即更新输出端口，但使用批处理方式减少更新频率
+    // 移除条件检查，确保每个音符变化都会更新
+    this.updateOutputPorts();
+    this.lastNoteChangeTime = currentTime;
   }
 
   /**
@@ -378,7 +364,7 @@ export class MIDIInputModule extends AudioModuleBase {
     // 从活跃音符 Map 中移除
     this.activeNoteVelocities.delete(transposedNote);
 
-    // 更新输出端口
+    // 始终立即更新输出端口
     this.updateOutputPorts();
   }
 
@@ -399,10 +385,6 @@ export class MIDIInputModule extends AudioModuleBase {
    * 实现音频初始化（MIDI模块不需要音频处理，但需要实现这个方法）
    */
   protected async initializeAudio(): Promise<void> {
-    console.debug(
-      `[${this.moduleType}Module ${this.id}] MIDI输入模块不需要初始化音频`
-    );
-
     // 仅在浏览器环境中设置参数绑定
     if (isBrowser) {
       // 设置参数绑定
@@ -423,7 +405,8 @@ export class MIDIInputModule extends AudioModuleBase {
         if (typeof value === 'string') {
           if (value) {
             // 检查设备ID是否在有效列表中
-            const deviceOptions = this.parameterMeta['inputDevice']?.options || [];
+            const deviceOptions =
+              this.parameterMeta['inputDevice']?.options || [];
             if (deviceOptions.includes(value)) {
               this.connectToDevice(value);
             } else {
@@ -447,10 +430,14 @@ export class MIDIInputModule extends AudioModuleBase {
     const channelSubscription = this.parameters['channel'].subscribe(() => {});
 
     // 转置参数
-    const transposeSubscription = this.parameters['transpose'].subscribe(() => {});
+    const transposeSubscription = this.parameters['transpose'].subscribe(
+      () => {}
+    );
 
     // 力度灵敏度参数
-    const velocitySensitivitySubscription = this.parameters['velocitySensitivity'].subscribe(() => {});
+    const velocitySensitivitySubscription = this.parameters[
+      'velocitySensitivity'
+    ].subscribe(() => {});
 
     this.addInternalSubscriptions([
       inputDeviceSubscription,
@@ -484,5 +471,74 @@ export class MIDIInputModule extends AudioModuleBase {
 
     console.debug(`[${this.moduleType}Module ${this.id}] 释放资源`);
     super.dispose();
+  }
+
+  /**
+   * 刷新MIDI设备列表
+   * 用户可通过按钮触发该方法重新扫描可用设备
+   */
+  public refreshMIDIDevices(): void {
+    if (this.isRefreshing) return; // 防止重复刷新
+
+    this.isRefreshing = true;
+    console.debug(`[${this.moduleType}Module ${this.id}] 刷新MIDI设备列表...`);
+
+    try {
+      // 断开当前连接
+      this.disconnectFromDevice();
+
+      // 重新初始化MIDI访问
+      if (
+        isBrowser &&
+        'navigator' in window &&
+        'requestMIDIAccess' in navigator
+      ) {
+        navigator.requestMIDIAccess({ sysex: false }).then(
+          (midiAccess) => {
+            this.midiAccess = midiAccess as unknown as WebMidi.MIDIAccess;
+            // 更新设备列表
+            this.updateMIDIInputDevices();
+            // 恢复状态
+            this.isRefreshing = false;
+            console.debug(
+              `[${this.moduleType}Module ${this.id}] MIDI设备列表已更新`
+            );
+          },
+          (error) => {
+            console.error(
+              `[${this.moduleType}Module ${this.id}] 刷新MIDI设备失败:`,
+              error
+            );
+            this.isRefreshing = false;
+          }
+        );
+      } else {
+        console.warn(
+          `[${this.moduleType}Module ${this.id}] 浏览器不支持WebMIDI API`
+        );
+        this.isRefreshing = false;
+      }
+    } catch (error) {
+      console.error(
+        `[${this.moduleType}Module ${this.id}] 刷新MIDI设备出错:`,
+        error
+      );
+      this.isRefreshing = false;
+    }
+  }
+
+  /**
+   * 获取自定义UI配置
+   * 添加刷新MIDI设备的按钮
+   */
+  public getCustomUI() {
+    return {
+      type: 'RefreshButton',
+      props: {
+        label: '刷新MIDI设备',
+        onClick: () => this.refreshMIDIDevices(),
+        disabled: this.isRefreshing,
+      },
+    };
   }
 }

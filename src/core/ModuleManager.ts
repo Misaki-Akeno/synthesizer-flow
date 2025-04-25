@@ -1,12 +1,11 @@
 import { Node, Edge } from '@xyflow/react';
 import { ModuleBase } from './ModuleBase';
-import { SimpleOscillatorModule } from './Modules/OscillatorModule';
-import { SpeakerModule } from './Modules/SpeakerModule';
-import { ReverbModule } from './Modules/ReverbModule';
-import { LFOModule } from './Modules/LFOModule';
-import { AdvancedOscillatorModule } from './Modules/AdvancedOscillatorModule';
-import { MIDIInputModule } from './Modules/MIDIInputModule';
+import { moduleClassMap } from './Modules';
 import { SerializedNode, SerializedEdge } from './types/SerializationTypes';
+import { createModuleLogger } from '@/lib/logger';
+
+// 创建模块管理器的专用日志记录器
+const logger = createModuleLogger('ModuleManager');
 
 // 节点数据接口，添加索引签名兼容 Record<string, unknown>
 export interface NodeData {
@@ -28,32 +27,14 @@ export class ModuleManager {
     id: string = `module_${Date.now()}`,
     name: string = type
   ): ModuleBase {
-    let moduleInstance: ModuleBase;
-
-    switch (type.toLowerCase()) {
-      case 'simpleoscillator':
-        moduleInstance = new SimpleOscillatorModule(id, name);
-        break;
-      case 'speaker':
-        moduleInstance = new SpeakerModule(id, name);
-        break;
-      case 'reverb':
-        moduleInstance = new ReverbModule(id, name);
-        break;
-      case 'lfo':
-        moduleInstance = new LFOModule(id, name);
-        break;
-      case 'advancedoscillator':
-        moduleInstance = new AdvancedOscillatorModule(id, name);
-        break;
-      case 'midiinput':
-        moduleInstance = new MIDIInputModule(id, name);
-        break;
-      default:
-        console.error(`未知模块类型: ${type}`);
-        moduleInstance = new SpeakerModule(id, name);
+    const ModuleClass = moduleClassMap[type.toLowerCase()];
+    if (!ModuleClass) {
+      logger.error(`未知模块类型: ${type}`);
+      // 使用 SpeakerModule 作为默认后备选择
+      return new moduleClassMap.speaker(id, name);
     }
 
+    const moduleInstance = new ModuleClass(id, name);
     this.moduleInstances.set(id, moduleInstance);
     return moduleInstance;
   }
@@ -137,7 +118,7 @@ export class ModuleManager {
     const targetModule = this.getModule(targetId);
 
     if (!sourceModule || !targetModule) {
-      console.error('无法找到要绑定的模块', { sourceId, targetId });
+      logger.error('无法找到要绑定的模块', { sourceId, targetId });
       return;
     }
 
@@ -150,11 +131,10 @@ export class ModuleManager {
       ) {
         sourceModule.connectOutput(sourceHandle, targetModule, targetHandle);
       } else {
-        console.error(
-          '端口类型不匹配',
-          sourceModule.outputPortTypes[sourceHandle],
-          targetModule.inputPortTypes[targetHandle]
-        );
+        logger.error('端口类型不匹配', {
+          sourceType: sourceModule.outputPortTypes[sourceHandle],
+          targetType: targetModule.inputPortTypes[targetHandle],
+        });
       }
     } else {
       // 直接连接（通常用于简单模块，如没有多输入端口的情况）
@@ -168,7 +148,7 @@ export class ModuleManager {
     const targetModule = this.getModule(edge.target);
 
     if (!sourceModule || !targetModule) {
-      console.warn('无法找到要解除绑定的模块', {
+      logger.warn('无法找到要解除绑定的模块', {
         sourceId: edge.source,
         targetId: edge.target,
       });
@@ -192,7 +172,7 @@ export class ModuleManager {
   // 获取当前节点列表
   private getNodes(): FlowNode[] {
     if (!this.nodesGetter) {
-      console.warn('节点获取器未设置');
+      logger.warn('节点获取器未设置');
       return [];
     }
     return this.nodesGetter();
