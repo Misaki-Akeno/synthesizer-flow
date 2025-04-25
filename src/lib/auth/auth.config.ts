@@ -1,7 +1,7 @@
 // src/lib/auth/auth.config.ts
-import type { AuthOptions } from "next-auth";
-import GitHubProvider from "next-auth/providers/github";
-import { env } from "@/lib/env";
+import type { AuthOptions } from 'next-auth';
+import GitHubProvider from 'next-auth/providers/github';
+import { env } from '@/lib/env';
 
 /**
  * NextAuth配置，在客户端和服务端共享
@@ -14,12 +14,12 @@ export const authConfig: AuthOptions = {
       clientSecret: env.GITHUB_SECRET,
     }),
   ],
-  
+
   // 自定义登录页面路径
   pages: {
-    signIn: "/auth/login",
+    signIn: '/auth/login',
   },
-  
+
   // 回调函数
   callbacks: {
     // 确保用户ID添加到会话中
@@ -39,7 +39,7 @@ export const authConfig: AuthOptions = {
       return token;
     },
   },
-  
+
   // 调试模式
-  debug: process.env.NODE_ENV === "development",
+  debug: process.env.NODE_ENV === 'development',
 };

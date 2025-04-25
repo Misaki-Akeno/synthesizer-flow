@@ -3,9 +3,21 @@
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { signIn } from 'next-auth/react';
 import { Github } from 'lucide-react';
+// 导入 logger 和 toast
+import { createModuleLogger } from '@/lib/logger';
+import { toast } from 'sonner';
+
+// 创建登录页面专用 logger
+const logger = createModuleLogger('LoginPage');
 
 // 使用客户端组件专门处理 useSearchParams
 function LoginForm() {
@@ -19,14 +31,33 @@ function LoginForm() {
     try {
       setIsLoading(true);
       setError(null);
-      
-      // 使用正确的 signIn 选项
-      await signIn('github', { 
-        callbackUrl,
-        redirect: true
+
+      // 记录登录尝试
+      logger.info('用户在登录页面尝试 GitHub 登录', { callbackUrl });
+
+      // 显示 toast 登录中提示
+      toast.loading('正在连接 GitHub', {
+        description: '正在建立安全连接，请稍候...',
+        duration: 10000, // 延长显示时间，因为重定向可能需要时间
       });
+
+      // 使用正确的 signIn 选项
+      await signIn('github', {
+        callbackUrl,
+        redirect: true,
+      });
+
+      // 由于重定向，下面的代码通常不会执行，但仍保留以防需要
+      logger.info('GitHub 登录重定向已发起', { callbackUrl });
     } catch (error) {
-      console.error('登录出错', error);
+      // 记录登录错误
+      logger.error('GitHub 登录失败', error);
+
+      // 显示错误提示
+      toast.error('登录失败', {
+        description: '连接到 GitHub 时出现问题，请稍后再试。',
+      });
+
       setError('登录过程中出现错误，请稍后再试');
       setIsLoading(false);
     }
@@ -63,7 +94,7 @@ function LoginForm() {
       <div className="text-center text-sm text-muted-foreground">
         我们目前只支持GitHub登录
       </div>
-      
+
       <div className="flex justify-center mt-4">
         <Button
           variant="ghost"
@@ -90,11 +121,13 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <Suspense fallback={
-            <div className="text-center py-4">
-              <div className="animate-pulse">加载中...</div>
-            </div>
-          }>
+          <Suspense
+            fallback={
+              <div className="text-center py-4">
+                <div className="animate-pulse">加载中...</div>
+              </div>
+            }
+          >
             <LoginForm />
           </Suspense>
         </CardContent>

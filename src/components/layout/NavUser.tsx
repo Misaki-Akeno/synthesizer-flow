@@ -32,6 +32,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+// 导入 logger 系统
+import { createModuleLogger } from '@/lib/logger';
+
+// 创建 AuthUser 专用 logger
+const logger = createModuleLogger('AuthUser');
 
 export function NavUser() {
   const { isMobile } = useSidebar();
@@ -53,17 +58,27 @@ export function NavUser() {
     try {
       setIsActionLoading(true);
       setIsMenuOpen(false);
-      
-      // 使用 sonner 的 toast
-      toast.loading("正在准备登录", {
-        description: "请稍候，正在跳转到登录页面...",
+
+      // 记录登录尝试
+      logger.info('用户尝试登录', { provider: 'github' });
+
+      // 使用 toast 提示用户
+      toast.loading('正在准备登录', {
+        description: '请稍候，正在跳转到登录页面...',
       });
-      
+
+      // 尝试登录
       await signIn('github');
-    } catch (_error) {
-      // 使用 sonner 的错误 toast
-      toast.error("登录失败", {
-        description: "无法连接到认证服务，请稍后再试。",
+
+      // 由于重定向，下面的代码通常不会执行
+      logger.info('登录重定向已发起');
+    } catch (error) {
+      // 记录错误
+      logger.error('登录过程中发生错误', error);
+
+      // 使用 toast 提示用户
+      toast.error('登录失败', {
+        description: '无法连接到认证服务，请稍后再试。',
       });
     } finally {
       setIsActionLoading(false);
@@ -75,24 +90,36 @@ export function NavUser() {
     try {
       setIsActionLoading(true);
       setIsMenuOpen(false);
-      
-      // 使用 sonner 的 toast 显示加载中
-      const toastId = toast.loading("正在退出", {
-        description: "正在处理退出登录...",
+
+      // 记录登出尝试
+      logger.info('用户尝试登出');
+
+      // 使用 toast 显示加载状态
+      const toastId = toast.loading('正在退出', {
+        description: '正在处理退出登录...',
       });
-      
+
+      // 尝试登出
       await signOut({ redirect: false });
+
+      // 记录登出成功
+      logger.success('用户已成功登出');
+
+      // 重定向到首页
       router.push('/');
-      
+
       // 成功后更新 toast
-      toast.success("已退出登录", {
+      toast.success('已退出登录', {
         id: toastId,
-        description: "您已成功退出登录。",
+        description: '您已成功退出登录。',
       });
-    } catch (_error) {
+    } catch (error) {
+      // 记录错误
+      logger.error('登出过程中发生错误', error);
+
       // 错误 toast
-      toast.error("退出失败", {
-        description: "退出登录时发生错误，请重试。",
+      toast.error('退出失败', {
+        description: '退出登录时发生错误，请重试。',
       });
     } finally {
       setIsActionLoading(false);
@@ -170,11 +197,11 @@ export function NavUser() {
             </DropdownMenuTrigger>
           </TooltipTrigger>
           <TooltipContent side="bottom" align="end">
-            {status === 'authenticated' 
+            {status === 'authenticated'
               ? `已登录为 ${getUserDisplayName()}`
-              : status === 'loading' 
-                ? "加载中..." 
-                : "点击登录"}
+              : status === 'loading'
+                ? '加载中...'
+                : '点击登录'}
           </TooltipContent>
         </Tooltip>
 
@@ -237,7 +264,7 @@ export function NavUser() {
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={handleLogout}
                 disabled={isActionLoading}
                 className="text-red-500 focus:text-red-500"
@@ -261,7 +288,7 @@ export function NavUser() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={handleLogin}
                 disabled={isActionLoading}
               >

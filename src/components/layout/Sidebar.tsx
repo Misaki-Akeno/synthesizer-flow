@@ -61,7 +61,7 @@ export function Sidebar({ className }: SidebarProps) {
             {/* 底部图标 - 下拉菜单选项 */}
             <div className="mt-auto flex flex-col border-t">
               <NavUser />
-              
+
               <MenuBarButton
                 icon={<Settings size={20} />}
                 tooltip="设置"

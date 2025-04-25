@@ -188,7 +188,6 @@ const presets: ProjectConfig[] = [
               label: 'MIDI控制器输入',
               parameters: {
                 channel: 0,
-                inputDevice: '',
                 transpose: 0,
                 velocitySensitivity: 1,
               },

@@ -8,16 +8,18 @@ import {
 } from './ParameterControls';
 import { InputPort, OutputPort } from './ModulePorts';
 import { ModuleEnableToggle } from './ModuleEnableToggle';
+import ModuleButton from './ModuleButton';
 
 // 导出所有自定义UI组件
 export const CustomUIComponents = {
   XYPad,
+  RefreshButton: ModuleButton, // 添加按钮组件作为可渲染的自定义UI组件
 };
 
 // 确保类型能被正确导出
 export type CustomUIComponentType = keyof typeof CustomUIComponents;
 
-// 导出参数控制组件
+// 导出组件
 export {
   ParameterControl,
   NumberParameterControl,
@@ -27,6 +29,7 @@ export {
   InputPort,
   OutputPort,
   ModuleEnableToggle,
+  ModuleButton,
 };
 
 // 设置默认导出

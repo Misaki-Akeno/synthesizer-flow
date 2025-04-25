@@ -7,6 +7,10 @@ import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { useFlowStore } from '@/store/store';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { createModuleLogger } from '@/lib/logger';
+
+// 创建序列化测试器专用日志记录器
+const logger = createModuleLogger('SerializationTester');
 
 export default function SerializationTester() {
   const [projectName, setProjectName] = useState('测试项目');
@@ -135,18 +139,18 @@ export default function SerializationTester() {
             variant="outline"
             onClick={() => {
               const jsonData = useFlowStore.getState().exportCanvasToJson();
-              console.log('画布数据 (JSON):', jsonData);
+              logger.info('画布数据 (JSON):', jsonData);
               try {
                 // 尝试复制到剪贴板
                 navigator.clipboard
                   .writeText(jsonData)
                   .then(() => alert('JSON 数据已复制到剪贴板!'))
                   .catch((err) => {
-                    console.error('剪贴板复制失败:', err);
+                    logger.error('剪贴板复制失败:', err);
                     alert('无法复制到剪贴板，请查看控制台获取数据');
                   });
               } catch (error) {
-                console.error('剪贴板操作错误:', error);
+                logger.error('剪贴板操作错误:', error);
                 alert('无法访问剪贴板API，数据已输出到控制台');
               }
             }}
@@ -171,7 +175,7 @@ export default function SerializationTester() {
                   alert('导入失败，格式可能不正确');
                 }
               } catch (error) {
-                console.error('导入错误:', error);
+                logger.error('导入错误:', error);
                 alert('导入出错，查看控制台获取详情');
               }
             }}

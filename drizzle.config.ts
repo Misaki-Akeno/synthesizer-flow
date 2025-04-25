@@ -5,7 +5,6 @@ import type { Config } from 'drizzle-kit';
 const projectDir = process.cwd();
 loadEnvConfig(projectDir);
 
-
 const config: Config = {
   schema: 'src/db/schema.ts',
   out: 'src/db/migrations',

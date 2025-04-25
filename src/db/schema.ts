@@ -1,6 +1,13 @@
 // src/db/schema.ts
 
-import { pgTable, serial, varchar, text, timestamp, primaryKey } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  serial,
+  varchar,
+  text,
+  timestamp,
+  primaryKey,
+} from 'drizzle-orm/pg-core';
 import { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
 // 定义 users 表，符合 NextAuth 需求
@@ -21,7 +28,9 @@ export const accounts = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     type: varchar('type', { length: 255 }).notNull(),
     provider: varchar('provider', { length: 255 }).notNull(),
-    providerAccountId: varchar('provider_account_id', { length: 255 }).notNull(),
+    providerAccountId: varchar('provider_account_id', {
+      length: 255,
+    }).notNull(),
     refresh_token: text('refresh_token'),
     access_token: text('access_token'),
     expires_at: serial('expires_at'),
@@ -37,7 +46,9 @@ export const accounts = pgTable(
 
 // 定义 sessions 表 (会话管理需要)
 export const sessions = pgTable('sessions', {
-  sessionToken: varchar('session_token', { length: 255 }).notNull().primaryKey(),
+  sessionToken: varchar('session_token', { length: 255 })
+    .notNull()
+    .primaryKey(),
   userId: varchar('user_id', { length: 255 })
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),

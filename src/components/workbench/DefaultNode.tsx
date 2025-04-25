@@ -109,6 +109,10 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     return (
       <div className="custom-ui-container">
         <CustomComponent
+          label={''}
+          onClick={function (): void {
+            throw new Error('Function not implemented.');
+          }}
           xParam={{
             paramKey: 'x',
             label: 'X',

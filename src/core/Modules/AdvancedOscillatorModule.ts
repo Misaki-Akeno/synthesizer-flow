@@ -107,7 +107,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       },
       waveform: {
         type: ParameterType.LIST,
-        value: 'sine',
+        value: 'triangle',
         options: ['sine', 'square', 'sawtooth', 'triangle'],
         uiOptions: {
           label: '波形',

@@ -12,6 +12,10 @@ import { moduleManager, FlowNode } from '../core/ModuleManager';
 import { moduleInitManager } from '../core/ModuleInitManager';
 import { serializationManager } from '../core/SerializationManager';
 import { SerializedModule } from '@/core/types/SerializationTypes';
+import { createModuleLogger } from '@/lib/logger';
+
+// 创建Store专用日志记录器
+const logger = createModuleLogger('FlowStore');
 
 // --------------------------------
 //        Reactflow管理部分
@@ -201,7 +205,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
         return true;
       } catch (error) {
-        console.error('导入画布数据失败:', error);
+        logger.error('导入画布数据失败:', error);
         return false;
       }
     },
@@ -259,7 +263,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
         return nodeId;
       } catch (error) {
-        console.error('从数据导入模块失败:', error);
+        logger.error('从数据导入模块失败:', error);
         return null;
       }
     },
