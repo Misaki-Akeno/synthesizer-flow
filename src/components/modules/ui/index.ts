@@ -1,4 +1,5 @@
 import XYPad from './XYPad';
+import PianoKeyboard from './PianoKeyboard';
 import {
   ParameterControl,
   NumberParameterControl,
@@ -13,6 +14,7 @@ import ModuleButton from './ModuleButton';
 // 导出所有自定义UI组件
 export const CustomUIComponents = {
   XYPad,
+  PianoKeyboard,
   RefreshButton: ModuleButton, // 添加按钮组件作为可渲染的自定义UI组件
 };
 
@@ -30,6 +32,7 @@ export {
   OutputPort,
   ModuleEnableToggle,
   ModuleButton,
+  PianoKeyboard,
 };
 
 // 设置默认导出

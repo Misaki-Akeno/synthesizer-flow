@@ -24,7 +24,7 @@ interface SidebarProps {
 type PanelType = 'project-manager' | 'module-browser' | 'dev-tools' | null;
 
 export function Sidebar({ className }: SidebarProps) {
-  const [activePanel, setActivePanel] = useState<PanelType>('dev-tools');
+  const [activePanel, setActivePanel] = useState<PanelType>('module-browser');
 
   const togglePanel = (panel: PanelType) => {
     setActivePanel(activePanel === panel ? null : panel);

@@ -3,7 +3,6 @@
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 
-
 // 检查环境变量
 if (!process.env.DATABASE_URL) {
   console.error('警告: 未设置 DATABASE_URL 环境变量');
@@ -18,7 +17,10 @@ const pool = new Pool({
   max: 20, // 最大连接数
   idleTimeoutMillis: 30000, // 空闲连接超时
   // 添加重试策略
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl:
+    process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
 });
 
 // 添加连接错误处理
@@ -48,16 +50,19 @@ async function establishConnection() {
       const connected = await testConnection();
       if (connected) return;
     } catch (err) {
-      console.error(`连接尝试 ${connectionAttempts + 1}/${maxRetries} 失败:`, err);
+      console.error(
+        `连接尝试 ${connectionAttempts + 1}/${maxRetries} 失败:`,
+        err
+      );
     }
-    
+
     connectionAttempts++;
     if (connectionAttempts < maxRetries) {
       console.info(`将在5秒后重试连接...`);
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
-  
+
   if (connectionAttempts >= maxRetries) {
     console.error(`在 ${maxRetries} 次尝试后无法连接到数据库`);
   }
