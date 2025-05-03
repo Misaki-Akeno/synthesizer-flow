@@ -15,7 +15,7 @@ import ModuleButton from './ModuleButton';
 export const CustomUIComponents = {
   XYPad,
   PianoKeyboard,
-  RefreshButton: ModuleButton, // 添加按钮组件作为可渲染的自定义UI组件
+  CommonButton: ModuleButton, // 添加按钮组件作为可渲染的自定义UI组件
 };
 
 // 确保类型能被正确导出

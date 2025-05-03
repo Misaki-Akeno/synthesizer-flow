@@ -533,7 +533,7 @@ export class MIDIInputModule extends AudioModuleBase {
    */
   public getCustomUI() {
     return {
-      type: 'RefreshButton',
+      type: 'CommonButton',
       props: {
         label: '刷新MIDI设备',
         onClick: () => this.refreshMIDIDevices(),

@@ -113,7 +113,13 @@ const presets: ProjectConfig[] = [
             source: 'reverbEffect',
             target: 'speaker',
             sourceHandle: 'output',
-            targetHandle: 'audioIn',
+            targetHandle: 'audioInLeft',
+          },
+          {
+            source: 'reverbEffect',
+            target: 'speaker',
+            sourceHandle: 'output',
+            targetHandle: 'audioInRight',
           },
           {
             source: 'node_1745825426684',
@@ -241,9 +247,15 @@ const presets: ProjectConfig[] = [
           },
           {
             source: 'reverbEffect',
-            target: 'mainSpeaker',
+            target: 'speaker',
             sourceHandle: 'output',
-            targetHandle: 'audioIn',
+            targetHandle: 'audioInLeft',
+          },
+          {
+            source: 'reverbEffect',
+            target: 'speaker',
+            sourceHandle: 'output',
+            targetHandle: 'audioInRight',
           },
           {
             source: 'modulationLFO',
