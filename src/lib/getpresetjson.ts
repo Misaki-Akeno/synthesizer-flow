@@ -10,6 +10,135 @@ function makeJsonUrlSafe(jsonStr: string): string {
 // 预设项目数据（直接使用ProjectConfig格式）
 const presets: ProjectConfig[] = [
   {
+    id: 'preset-midi', // 使用更简短的ID
+    name: 'MIDI控制复音合成器',
+    description: '使用MIDI输入控制复音振荡器，带有混响效果',
+    created: '2025-04-15T10:00:00.000Z',
+    lastModified: '2025-04-15T10:00:00.000Z',
+    data: makeJsonUrlSafe(
+      JSON.stringify({
+        version: '1.0',
+        timestamp: 1745825505607,
+        nodes: [
+          {
+            id: 'midiInput',
+            position: { x: 200, y: 200 },
+            data: {
+              type: 'midiinput',
+              label: 'MIDI控制器输入',
+              parameters: {
+                channel: 0,
+                inputDevice: '',
+                transpose: 0,
+                velocitySensitivity: 1,
+              },
+            },
+          },
+          {
+            id: 'polyOsc',
+            position: { x: 500, y: 200 },
+            data: {
+              type: 'advancedoscillator',
+              label: '复音振荡器',
+              parameters: {
+                detune: 0,
+                octave: 0,
+                semi: 0,
+                gainDb: 0,
+                waveform: 'triangle',
+                voiceCount: 8,
+                attackVelSens: 0.8,
+                attack: 0.2,
+                decay: 0.5,
+                sustain: 0.7,
+                sustainTime: 0,
+                release: 0.8,
+              },
+            },
+          },
+          {
+            id: 'reverbEffect',
+            position: { x: 700, y: 200 },
+            data: {
+              type: 'reverb',
+              label: '混响效果器',
+              parameters: { decay: 1.8, wet: 0.35, preDelay: 0.01 },
+            },
+          },
+          {
+            id: 'speaker',
+            position: { x: 950, y: 200 },
+            data: {
+              type: 'speaker',
+              label: '扬声器',
+              parameters: { level: -12 },
+            },
+          },
+          {
+            id: 'node_1745825426684',
+            position: { x: 72.9033784231475, y: 515.2614902237319 },
+            data: {
+              type: 'keyboardinput',
+              label: '键盘输入器',
+              parameters: {
+                transpose: 0,
+                velocitySensitivity: 1,
+                startNote: 60,
+                noteCount: 24,
+                keyboardEnabled: true,
+              },
+            },
+          },
+        ],
+        edges: [
+          {
+            source: 'midiInput',
+            target: 'polyOsc',
+            sourceHandle: 'activeNotes',
+            targetHandle: 'notes',
+          },
+          {
+            source: 'midiInput',
+            target: 'polyOsc',
+            sourceHandle: 'activeVelocities',
+            targetHandle: 'velocities',
+          },
+          {
+            source: 'polyOsc',
+            target: 'reverbEffect',
+            sourceHandle: 'audioout',
+            targetHandle: 'input',
+          },
+          {
+            source: 'reverbEffect',
+            target: 'speaker',
+            sourceHandle: 'output',
+            targetHandle: 'audioInLeft',
+          },
+          {
+            source: 'reverbEffect',
+            target: 'speaker',
+            sourceHandle: 'output',
+            targetHandle: 'audioInRight',
+          },
+          {
+            source: 'node_1745825426684',
+            target: 'polyOsc',
+            sourceHandle: 'activeNotes',
+            targetHandle: 'notes',
+          },
+          {
+            source: 'node_1745825426684',
+            target: 'polyOsc',
+            sourceHandle: 'activeVelocities',
+            targetHandle: 'velocities',
+          },
+        ],
+      })
+    ),
+    isBuiltIn: true,
+  },
+  {
     id: 'preset-chord', // 使用更简短的ID
     name: '多振荡器和声',
     description:
@@ -118,9 +247,15 @@ const presets: ProjectConfig[] = [
           },
           {
             source: 'reverbEffect',
-            target: 'mainSpeaker',
+            target: 'speaker',
             sourceHandle: 'output',
-            targetHandle: 'audioIn',
+            targetHandle: 'audioInLeft',
+          },
+          {
+            source: 'reverbEffect',
+            target: 'speaker',
+            sourceHandle: 'output',
+            targetHandle: 'audioInRight',
           },
           {
             source: 'modulationLFO',
@@ -163,101 +298,6 @@ const presets: ProjectConfig[] = [
             target: 'reverbEffect',
             sourceHandle: 'audioout',
             targetHandle: 'input',
-          },
-        ],
-      })
-    ),
-    isBuiltIn: true,
-  },
-  {
-    id: 'preset-midi', // 使用更简短的ID
-    name: 'MIDI控制复音合成器',
-    description: '使用MIDI输入控制复音振荡器，带有混响效果',
-    created: '2025-04-15T10:00:00.000Z',
-    lastModified: '2025-04-15T10:00:00.000Z',
-    data: makeJsonUrlSafe(
-      JSON.stringify({
-        version: '1.0',
-        timestamp: 1744964800320,
-        nodes: [
-          {
-            id: 'midiInput',
-            position: { x: 200, y: 200 },
-            data: {
-              type: 'midiinput',
-              label: 'MIDI控制器输入',
-              parameters: {
-                channel: 0,
-                transpose: 0,
-                velocitySensitivity: 1,
-              },
-            },
-          },
-          {
-            id: 'polyOsc',
-            position: { x: 500, y: 200 },
-            data: {
-              type: 'advancedoscillator',
-              label: '复音振荡器',
-              parameters: {
-                detune: 0,
-                octave: 0,
-                semi: 0,
-                gainDb: 0,
-                waveform: 'triangle',
-                voiceCount: 8,
-                attackVelSens: 0.8,
-                attack: 0.2,
-                decay: 0.5,
-                sustain: 0.7,
-                sustainTime: 0,
-                release: 0.8,
-              },
-            },
-          },
-          {
-            id: 'reverbEffect',
-            position: { x: 800, y: 200 },
-            data: {
-              type: 'reverb',
-              label: '混响效果器',
-              parameters: { decay: 1.8, wet: 0.35, preDelay: 0.01 },
-            },
-          },
-          {
-            id: 'speaker',
-            position: { x: 1100, y: 200 },
-            data: {
-              type: 'speaker',
-              label: '扬声器',
-              parameters: { level: -12 },
-            },
-          },
-        ],
-        edges: [
-          {
-            source: 'midiInput',
-            target: 'polyOsc',
-            sourceHandle: 'activeNotes',
-            targetHandle: 'notes',
-          },
-          {
-            source: 'midiInput',
-            target: 'polyOsc',
-            sourceHandle: 'activeVelocities',
-            targetHandle: 'velocities',
-          },
-          {
-            source: 'polyOsc',
-            target: 'reverbEffect',
-            sourceHandle: 'audioout',
-            targetHandle: 'input',
-          },
-          {
-            source: 'reverbEffect',
-            target: 'speaker',
-            sourceHandle: 'output',
-            targetHandle: 'audioIn',
           },
         ],
       })

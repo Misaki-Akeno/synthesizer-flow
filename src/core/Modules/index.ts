@@ -2,6 +2,7 @@ import { SimpleOscillatorModule } from './OscillatorModule';
 import { AdvancedOscillatorModule } from './AdvancedOscillatorModule';
 import { LFOModule } from './LFOModule';
 import { MIDIInputModule } from './MIDIInputModule';
+import { KeyboardInputModule } from './KeyboardInputModule';
 import { ReverbModule } from './ReverbModule';
 import { SpeakerModule } from './SpeakerModule';
 import { ModuleBase, ModuleMetadata } from '../ModuleBase';
@@ -12,6 +13,7 @@ export {
   AdvancedOscillatorModule,
   LFOModule,
   MIDIInputModule,
+  KeyboardInputModule,
   ReverbModule,
   SpeakerModule,
 };
@@ -25,6 +27,7 @@ export const moduleClassMap: Record<
   advancedoscillator: AdvancedOscillatorModule,
   lfo: LFOModule,
   midiinput: MIDIInputModule,
+  keyboardinput: KeyboardInputModule,
   reverb: ReverbModule,
   speaker: SpeakerModule,
 };

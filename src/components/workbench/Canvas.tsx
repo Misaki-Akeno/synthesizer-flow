@@ -7,6 +7,7 @@ import {
   Background,
   BackgroundVariant,
   IsValidConnection,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import DefaultNode from './DefaultNode';
@@ -26,7 +27,7 @@ interface CanvasProps {
 
 // 内部Canvas组件，包含实际的ReactFlow
 const CanvasInner = ({ projectId }: CanvasProps) => {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect } =
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
     useFlowStore();
 
   const { getProjectById, loadProject, builtInProjects, currentProject } =
@@ -40,6 +41,8 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
 
   const { onPaneContextMenu, onNodeContextMenu, onEdgeContextMenu } =
     useFlowContextMenu();
+
+  const reactFlowInstance = useReactFlow();
 
   // 在组件挂载时加载项目
   useEffect(() => {
@@ -105,6 +108,32 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
     return false;
   };
 
+  // 处理拖放事件
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+
+    const reactFlowBounds = event.currentTarget.getBoundingClientRect();
+    const data = event.dataTransfer.getData('application/reactflow');
+
+    if (!data) return;
+
+    const { type, label } = JSON.parse(data);
+
+    // 使用 transform 手动计算画布坐标
+    const transform = reactFlowInstance.getViewport();
+    const position = {
+      x: (event.clientX - reactFlowBounds.left - transform.x) / transform.zoom,
+      y: (event.clientY - reactFlowBounds.top - transform.y) / transform.zoom,
+    };
+
+    addNode(type, label, position);
+  };
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  };
+
   return (
     <ReactFlow
       nodes={nodes}
@@ -117,6 +146,8 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
       onNodeContextMenu={onNodeContextMenu}
       onEdgeContextMenu={onEdgeContextMenu}
       isValidConnection={isValidConnection}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
     >
       <Controls />
       <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
