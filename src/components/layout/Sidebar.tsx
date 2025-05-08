@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { ProjectManager } from './ProjectManager';
@@ -15,6 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface SidebarProps {
   className?: string;
@@ -24,10 +25,27 @@ interface SidebarProps {
 type PanelType = 'project-manager' | 'module-browser' | 'dev-tools' | null;
 
 export function Sidebar({ className }: SidebarProps) {
-  const [activePanel, setActivePanel] = useState<PanelType>('module-browser');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activePanelFromUrl = searchParams.get('panel') as PanelType;
+  const [activePanel, setActivePanel] = useState<PanelType>(activePanelFromUrl);
+
+  useEffect(() => {
+    // 当 URL 中的 panel 参数变化时，更新 activePanel
+    setActivePanel(activePanelFromUrl);
+  }, [activePanelFromUrl]);
 
   const togglePanel = (panel: PanelType) => {
-    setActivePanel(activePanel === panel ? null : panel);
+    const newPanel = activePanel === panel ? null : panel;
+    setActivePanel(newPanel);
+
+    const params = new URLSearchParams(searchParams);
+    if (newPanel) {
+      params.set('panel', newPanel);
+    } else {
+      params.delete('panel');
+    }
+    router.replace(`?${params.toString()}`);
   };
 
   return (
@@ -80,13 +98,13 @@ export function Sidebar({ className }: SidebarProps) {
             <div className="w-[320px] border-r bg-[#FAFAFA] dark:bg-gray-900 flex flex-col">
               <div className="flex-1 overflow-hidden">
                 {activePanel === 'project-manager' && (
-                  <ProjectManager onClose={() => setActivePanel(null)} />
+                  <ProjectManager onClose={() => togglePanel(null)} />
                 )}
                 {activePanel === 'module-browser' && (
-                  <ModuleBrowser onClose={() => setActivePanel(null)} />
+                  <ModuleBrowser onClose={() => togglePanel(null)} />
                 )}
                 {activePanel === 'dev-tools' && (
-                  <DevTools onClose={() => setActivePanel(null)} />
+                  <DevTools onClose={() => togglePanel(null)} />
                 )}
               </div>
             </div>

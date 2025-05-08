@@ -4,12 +4,10 @@ import { useCallback } from 'react';
 import { Node, Edge, useReactFlow } from '@xyflow/react';
 import { useContextMenu } from './useContextMenu';
 import { MenuItem } from '../types';
-import { useModuleSelectorContext } from '../ModuleSelectorContext';
 
 export const useFlowContextMenu = () => {
   const { handleContextMenu } = useContextMenu();
   const reactFlowInstance = useReactFlow();
-  const { showModuleSelector } = useModuleSelectorContext();
 
   // 处理事件类型的辅助函数
   const handleEvent = (
@@ -45,8 +43,10 @@ export const useFlowContextMenu = () => {
           id: 'add-node',
           label: '添加节点',
           onClick: () => {
-            // 将显示模块选择器替换原来的直接添加节点
-            showModuleSelector(clientX, clientY);
+            // 将显示模块选择器替换为引导到新的 Sidebar URL
+            const params = new URLSearchParams(window.location.search);
+            params.set('panel', 'module-browser');
+            window.history.pushState({}, '', `?${params.toString()}`);
           },
         },
         {
@@ -71,7 +71,7 @@ export const useFlowContextMenu = () => {
 
       handleContextMenu(handleEvent(event), paneMenuItems);
     },
-    [handleContextMenu, reactFlowInstance, showModuleSelector]
+    [handleContextMenu, reactFlowInstance]
   );
 
   // 节点右键菜单

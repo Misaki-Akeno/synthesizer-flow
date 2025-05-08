@@ -1,9 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {
-  ParameterType,
-  PortType,
-  ModuleMetadata,
-} from '../ModuleBase';
+import { ParameterType, PortType, ModuleMetadata } from '../ModuleBase';
 import { AudioModuleBase } from '../AudioModuleBase';
 import { AudioInputHandler } from '../AudioInputHandler';
 
@@ -74,7 +70,7 @@ export class SpeakerModule extends AudioModuleBase {
 
     // 默认禁用状态
     super(moduleType, id, name, parameters, inputPorts, outputPorts, false);
-    
+
     // 设置自定义UI组件 - 音频启动按钮
     this.setCustomUI('CommonButton', {
       label: '启动音频',
@@ -82,7 +78,7 @@ export class SpeakerModule extends AudioModuleBase {
       size: 'default',
       onClick: () => this.startAudioEngine(),
       className: '',
-      disabled: false
+      disabled: false,
     });
   }
 
@@ -111,20 +107,23 @@ export class SpeakerModule extends AudioModuleBase {
 
       // 创建音频输入处理器 - 用于左声道
       this.audioInputHandler = new AudioInputHandler(this.gainLeft, this.Tone);
-      
+
       // 设置初始状态
       const levelDB = this.getParameterValue('level') as number;
       const gainValue = this.dbToLinear(levelDB);
       const balance = this.getParameterValue('balance') as number;
-      
+
       // 应用初始平衡设置
       this.applyBalanceSetting(balance);
 
       // 检查音频上下文状态
       this.checkAudioContextState();
-      
+
       // 设置定期检查音频上下文状态
-      this.contextCheckInterval = setInterval(() => this.checkAudioContextState(), 1000);
+      this.contextCheckInterval = setInterval(
+        () => this.checkAudioContextState(),
+        1000
+      );
 
       // 设置启用状态
       if (this.isEnabled()) {
@@ -139,14 +138,16 @@ export class SpeakerModule extends AudioModuleBase {
   /**
    * 重写获取自定义UI方法，提供实时按钮状态更新
    */
-  public getCustomUI(): { type: string; props?: Record<string, unknown> } | undefined {
+  public getCustomUI():
+    | { type: string; props?: Record<string, unknown> }
+    | undefined {
     if (this.customUI && this.buttonVisible) {
       return {
         type: 'CommonButton',
         props: {
           ...this.customUI.props,
-          label: '启动音频'
-        }
+          label: '启动音频',
+        },
       };
     }
     return undefined;
@@ -157,10 +158,10 @@ export class SpeakerModule extends AudioModuleBase {
    */
   private checkAudioContextState(): void {
     if (!this.Tone) return;
-    
+
     const wasReady = this.contextReady;
     this.contextReady = this.Tone.context.state === 'running';
-    
+
     // 如果状态发生变化
     if (wasReady !== this.contextReady) {
       // 如果音频上下文已经运行，自动启用模块
@@ -197,7 +198,7 @@ export class SpeakerModule extends AudioModuleBase {
    */
   protected onEnabledStateChanged(enabled: boolean): void {
     if (!this.gainLeft || !this.gainRight) return;
-    
+
     // 启用时应用当前音量，禁用时设为0
     if (enabled) {
       // 尝试启动音频上下文
@@ -241,7 +242,10 @@ export class SpeakerModule extends AudioModuleBase {
       try {
         audioInput.connect(this.gainRight);
       } catch (error) {
-        console.warn(`[${this.moduleType}Module ${this.id}] 连接右声道失败:`, error);
+        console.warn(
+          `[${this.moduleType}Module ${this.id}] 连接右声道失败:`,
+          error
+        );
       }
     } else if (inputPortName === 'audioInLeft' && this.audioInputHandler) {
       // 左声道使用audioInputHandler来处理
@@ -272,7 +276,10 @@ export class SpeakerModule extends AudioModuleBase {
           source.disconnect(this.gainRight);
         }
       } catch (error) {
-        console.warn(`[${this.moduleType}Module ${this.id}] 断开右声道失败:`, error);
+        console.warn(
+          `[${this.moduleType}Module ${this.id}] 断开右声道失败:`,
+          error
+        );
       }
     } else if (inputPortName === 'audioInLeft' && this.audioInputHandler) {
       // 左声道使用audioInputHandler来处理
@@ -287,7 +294,12 @@ export class SpeakerModule extends AudioModuleBase {
     // 监听level参数变化
     const levelSubscription = this.parameters.level.subscribe(
       (levelValue: number | boolean | string) => {
-        if (typeof levelValue === 'number' && this.gainLeft && this.gainRight && this.isEnabled()) {
+        if (
+          typeof levelValue === 'number' &&
+          this.gainLeft &&
+          this.gainRight &&
+          this.isEnabled()
+        ) {
           const gainValue = this.dbToLinear(levelValue);
           this.applyParameterRamp(this.gainLeft.gain, gainValue);
           this.applyParameterRamp(this.gainRight.gain, gainValue);
@@ -316,7 +328,7 @@ export class SpeakerModule extends AudioModuleBase {
       clearInterval(this.contextCheckInterval);
       this.contextCheckInterval = null;
     }
-    
+
     this.disposeAudioNodes([this.merger, this.gainLeft, this.gainRight]);
     super.dispose();
   }
