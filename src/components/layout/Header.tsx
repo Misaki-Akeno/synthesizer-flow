@@ -84,13 +84,7 @@ export function Header({ className }: HeaderProps) {
 
       {/* 右侧区域：按钮 */}
       <div className="flex justify-end items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-xs whitespace-nowrap"
-        >
-          保存项目
-        </Button>
+        预留
       </div>
     </header>
   );

@@ -29,14 +29,14 @@ export default async function PlaygroundPage({
     <div className="h-screen flex flex-col">
       <Header />
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 relative">
-          <ReactFlowProvider>
+        <ReactFlowProvider>
+          <Sidebar />
+          <main className="flex-1 relative">
             <ContextMenuProvider>
               <Canvas projectId={projectId} />
             </ContextMenuProvider>
-          </ReactFlowProvider>
-        </main>
+          </main>
+        </ReactFlowProvider>
       </div>
     </div>
   );

@@ -247,13 +247,13 @@ const presets: ProjectConfig[] = [
           },
           {
             source: 'reverbEffect',
-            target: 'speaker',
+            target: 'mainSpeaker',
             sourceHandle: 'output',
             targetHandle: 'audioInLeft',
           },
           {
             source: 'reverbEffect',
-            target: 'speaker',
+            target: 'mainSpeaker',
             sourceHandle: 'output',
             targetHandle: 'audioInRight',
           },

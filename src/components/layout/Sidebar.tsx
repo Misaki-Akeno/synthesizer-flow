@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import { ProjectManager } from './ProjectManager';
-import { ModuleBrowser } from './ModuleBrowser';
+import { ProjectManager } from './sidePanels/ProjectManager';
+import { ModuleBrowser } from './sidePanels/ModuleBrowser';
 import DevTools from '@/components/workbench/devTools/DevTools';
 import { NavUser } from './NavUser';
 import { Button } from '@/components/ui/button';
