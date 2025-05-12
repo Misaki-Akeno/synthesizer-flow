@@ -21,7 +21,7 @@ import {
   PanelRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { moduleMetadataMap } from '@/core/modules';
+import { moduleMetadataMap } from '@/core/modules/index';
 
 // 模块类型定义
 export interface ModuleTypeInfo {

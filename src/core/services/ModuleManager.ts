@@ -1,6 +1,6 @@
 import { Node, Edge } from '@xyflow/react';
 import { ModuleBase } from '../base/ModuleBase';
-import { moduleClassMap } from '../modules';
+import { moduleClassMap } from '../modules/index';
 import { SerializedNode, SerializedEdge } from '../types/SerializationTypes';
 import { createModuleLogger } from '@/lib/logger';
 

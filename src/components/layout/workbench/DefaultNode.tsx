@@ -27,7 +27,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
 // 导入统一的模块元数据和辅助函数
-import { getModuleDescription } from '@/core/modules';
+import { getModuleDescription } from '@/core/modules/index';
 
 interface DefaultNodeProps {
   data: {
