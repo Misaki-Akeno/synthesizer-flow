@@ -1,11 +1,11 @@
-import { SimpleOscillatorModule } from './OscillatorModule';
-import { AdvancedOscillatorModule } from './AdvancedOscillatorModule';
-import { LFOModule } from './LFOModule';
-import { MIDIInputModule } from './MIDIInputModule';
-import { KeyboardInputModule } from './KeyboardInputModule';
-import { ReverbModule } from './ReverbModule';
-import { SpeakerModule } from './SpeakerModule';
-import { ModuleBase, ModuleMetadata } from '../ModuleBase';
+import { SimpleOscillatorModule } from './audio/OscillatorModule';
+import { AdvancedOscillatorModule } from './audio/AdvancedOscillatorModule';
+import { LFOModule } from './modulation/LFOModule';
+import { MIDIInputModule } from './input/MIDIInputModule';
+import { KeyboardInputModule } from './input/KeyboardInputModule';
+import { ReverbModule } from './audio/ReverbModule';
+import { SpeakerModule } from './audio/SpeakerModule';
+import { ModuleBase, ModuleMetadata } from '../base/ModuleBase';
 
 // 导出所有模块类
 export {

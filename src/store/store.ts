@@ -10,9 +10,9 @@ import {
   applyEdgeChanges,
   Edge,
 } from '@xyflow/react';
-import { moduleManager, FlowNode } from '../core/ModuleManager';
-import { moduleInitManager } from '../core/ModuleInitManager';
-import { serializationManager } from '../core/SerializationManager';
+import { moduleManager, FlowNode } from '../core/services/ModuleManager';
+import { moduleInitManager } from '../core/services/ModuleInitManager';
+import { serializationManager } from '../core/services/SerializationManager';
 import { SerializedModule } from '@/core/types/SerializationTypes';
 import { createModuleLogger } from '@/lib/logger';
 

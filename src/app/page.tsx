@@ -1,11 +1,11 @@
 import { Metadata } from 'next';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import Canvas from '@/components/workbench/Canvas';
-import { ContextMenuProvider } from '@/components/contextMenu/ContextMenuProvider';
-import { Header } from '@/components/layout/Header';
-import { Sidebar } from '@/components/layout/Sidebar';
-import { RightSidebar } from '@/components/layout/RightSidebar';
+import Canvas from '@/components/layout/workbench/Canvas';
+import { ContextMenuProvider } from '@/components/ui/contextMenu/ContextMenuProvider';
+import { Header } from '@/components/layout/navigation/Header';
+import { Sidebar } from '@/components/layout/Activitybar';
+import { RightSidebar } from '@/components/layout/AuxiliarySidebar';
 
 export const metadata: Metadata = {
   title: 'Synthsizer Playground',
@@ -29,7 +29,9 @@ export default async function PlaygroundPage({
   return (
     <div className="h-screen flex flex-col">
       <Header />
-      <div className="flex-1 flex overflow-hidden">        <ReactFlowProvider>
+      <div className="flex-1 flex overflow-hidden">
+        {' '}
+        <ReactFlowProvider>
           <Sidebar />
           <main className="flex-1 relative">
             <ContextMenuProvider>

@@ -1,49 +1,82 @@
 ---
 applyTo: '**'
 ---
-## 源代码目录 (`src/`)
-- `app/`：Next.js 应用程序目录，包含全局样式、布局和页面。
-  - `api/`：API 路由，主要是nextauth认证。
-  - `auth/`：认证相关页面。
-- `components/`：组件目录。
-  - `auth/`：认证相关组件。
-  - `contextMenu/`：上下文菜单组件及其钩子。
-  - `layout/`：布局相关组件，包括Header和侧边栏相关内容。
-  - `modules/`：模块化 UI 组件。
-  - `ui/`：shadcn组件。
-  - `workbench/`：工作台相关组件，包含核心模块。
-- `core/`：核心逻辑和模块管理。
-- `db/`：数据库相关文件，包括客户端、模式和迁移。
-- `hooks/`：自定义 React 钩子，主要是用于UI绑定的。
-- `lib/`：工具库和辅助函数。
-- `store/`：状态管理相关文件, store.ts是用于当前项目的zustard存储, persist-store.ts用于序列化和用户信息存储。
 
-## 核心目录 (`core/`)
-- `AudioInputHandler.ts`：处理音频输入的核心逻辑。
-- `AudioModuleBase.ts`：音频模块的基础类，提供通用功能。
-- `ModuleBase.ts`：模块的基础类，定义了模块的通用接口和行为。
-- `ModuleInitManager.ts`：模块初始化管理器，负责模块的动态加载和初始化。
-- `ModuleManager.ts`：模块管理器，负责模块的注册、管理和生命周期控制。
-- `SerializationManager.ts`：序列化管理器，用于模块和数据的序列化与反序列化。
-- `Modules/`：具体的模块实现目录。
-  - `index.ts`：模块的统一导出文件。
-  - 更多模块文件：具体的模块实现文件，包含不同的音频处理和分析模块。
-- `types/`：核心类型定义和验证工具。
-  - `SerializationTypes.ts`：序列化相关的类型定义。
-  - `SerializationValidator.ts`：序列化数据的验证工具。
+# SynthesizerFlow 项目结构与开发指南
 
-## 重要文件
-- `DefaultNode.tsx`：默认节点的实现，包含节点的基本属性和行为。
-- `Canvas.tsx`：画布组件，负责渲染和管理节点。
+## 项目架构概述
 
-## 实现逻辑
-项目使用Reactflow作为画布的基础，结合shadcn组件库实现UI。项目的状态管理使用Zustand。
-模块基于ModuleBase，通过ModuleManager进行动态加载和管理。每个模块都实现了自己的音频处理逻辑，并通过AudioInputHandler进行音频输入的处理和分析。序列化和反序列化使用SerializationManager进行管理，确保数据的持久化和一致性。
-连接上我们采用了rxjs的绑定系统，使得参数可以在不同的模块之间进行传递和更新。每个模块都可以通过ModuleManager进行注册和管理，确保模块之间的解耦和灵活性。
-渲染上我们使用DefaultNode统一渲染，并且支持自定义ui的操作，自定义ui都存储在`components/modules/ui/`目录下，通过index导出。
+本项目是一个基于Web的音频合成器应用，使用Next.js框架构建，结合React Flow实现模块化音频处理流程。应用核心是基于模块的音频处理系统，通过可视化连接不同音频模块实现声音合成。
 
-## 代码风格
-**这一部分非常重要**
-注意在编码时要保持简洁性，因为简洁性带来了可读性和可维护性。代码应该易于理解和修改，避免过度复杂的实现。使用清晰的命名和注释来解释代码的意图和功能。遵循一致的编码风格和最佳实践，以提高代码的可读性和可维护性。
-同时在兼容性方面，如果我提到了更改等级别的内容，可能会影响到其他模块的实现，请务必在更改前进行充分的思考。如果是小的bug修复或者小的功能改进，可以直接进行修改。并且不需要保持之前的旧代码。
-尽可能保持最佳实践。先构思，再编码，尤其是在重大重构前，请提前输出你的新架构。请在编码之前先思考一下你要实现的功能，是否有更好的实现方式。可以参考一些开源项目的实现方式，或者使用一些设计模式来帮助你更好地组织代码。
+## 目录结构
+
+### 前端应用层
+- **`app/`**: Next.js应用入口
+  - `api/auth/`: NextAuth认证API
+  - `auth/login/`: 登录页面
+  - `globals.css`, `layout.tsx`, `page.tsx`: 全局样式与布局
+
+### UI组件层
+- **`components/`**: 所有React组件
+  - **界面布局组件**:
+    - `layout/navigation/`: 导航组件 (Header, NavUser, SearchBar)
+    - `layout/sidebars/`: 侧边栏组件，含模块浏览器和项目管理器
+    - `layout/workbench/`: 核心工作区 (Canvas, DefaultNode)
+    - `layout/`: 活动栏和辅助侧边栏
+  - **功能UI组件**:
+    - `auth/`: 认证相关组件
+    - `ui/contextMenu/`: 上下文菜单系统
+    - `ui/reusableUI/`: 可复用模块UI组件 
+    - `ui/shadcn/`: 基础UI组件库
+
+### 核心功能层
+- **`core/`**: 应用核心逻辑
+  - **基础架构**:
+    - `base/`: 基础类和接口定义 (ModuleBase, AudioModuleBase)
+    - `audio/`: 音频处理核心 (AudioInputHandler)
+    - `services/`: 核心服务 (ModuleManager, SerializationManager)
+    - `types/`: 类型定义和验证
+  - **模块实现**:
+    - `modules/audio/`: 音频处理模块 (Oscillator, Reverb, Speaker)
+    - `modules/input/`: 输入模块 (Keyboard, MIDI)
+    - `modules/modulation/`: 调制模块 (LFO)
+
+### 数据与工具层
+- **`db/`**: 数据库交互
+- **`hooks/`**: React自定义钩子
+- **`lib/`**: 工具函数和辅助库
+- **`store/`**: 状态管理 (Zustand)
+
+## 核心文件与功能
+
+### 基础组件
+- `components/layout/workbench/Canvas.tsx`: 核心画布，处理模块渲染与交互
+- `components/layout/workbench/DefaultNode.tsx`: 默认节点实现
+
+### 核心逻辑
+- `core/base/ModuleBase.ts`: 所有模块的基础类，定义模块接口和行为
+- `core/services/ModuleManager.ts`: 模块生命周期管理
+- `core/services/SerializationManager.ts`: 数据序列化与持久化
+- `store/store.ts`: 应用全局状态管理
+
+## 技术实现
+
+- **基础技术**: React, Next.js, TypeScript, Zustand
+- **核心功能**: 
+  - 使用Reactflow实现模块可视化与连接
+  - 基于rxjs实现模块间参数绑定与数据流
+  - 使用AudioContext和Tone.js处理音频
+  - 模块化架构确保组件解耦和可扩展性
+
+## 代码风格指南
+
+- **核心原则**: 简洁、可读、可维护
+- **代码质量**:
+  - 使用清晰命名和适当注释
+  - 遵循一致的编码风格
+  - 避免过度复杂的实现
+- **开发流程**:
+  - 重大更改前先进行设计和构思
+  - 考虑兼容性和对其他模块的影响
+  - 小的bug修复可直接实施
+  - 参考开源项目的最佳实践
