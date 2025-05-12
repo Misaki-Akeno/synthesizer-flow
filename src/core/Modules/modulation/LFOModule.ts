@@ -1,8 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { AudioModuleBase } from "@/core/base/AudioModuleBase";
-import { ModuleMetadata, ParameterType, PortType } from "@/core/base/ModuleBase";
-
+import { AudioModuleBase } from '@/core/base/AudioModuleBase';
+import {
+  ModuleMetadata,
+  ParameterType,
+  PortType,
+} from '@/core/base/ModuleBase';
 
 /**
  * 低频振荡器(LFO)模块，产生低频调制信号

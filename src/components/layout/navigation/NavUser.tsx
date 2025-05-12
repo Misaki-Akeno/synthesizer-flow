@@ -200,7 +200,7 @@ export function NavUser() {
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent side="bottom" align="end">
+          <TooltipContent>
             {status === 'authenticated'
               ? `已登录为 ${getUserDisplayName()}`
               : status === 'loading'

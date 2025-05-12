@@ -11,12 +11,14 @@ applyTo: '**'
 ## 目录结构
 
 ### 前端应用层
+
 - **`app/`**: Next.js应用入口
   - `api/auth/`: NextAuth认证API
   - `auth/login/`: 登录页面
   - `globals.css`, `layout.tsx`, `page.tsx`: 全局样式与布局
 
 ### UI组件层
+
 - **`components/`**: 所有React组件
   - **界面布局组件**:
     - `layout/navigation/`: 导航组件 (Header, NavUser, SearchBar)
@@ -26,10 +28,11 @@ applyTo: '**'
   - **功能UI组件**:
     - `auth/`: 认证相关组件
     - `ui/contextMenu/`: 上下文菜单系统
-    - `ui/reusableUI/`: 可复用模块UI组件 
+    - `ui/reusableUI/`: 可复用模块UI组件
     - `ui/shadcn/`: 基础UI组件库
 
 ### 核心功能层
+
 - **`core/`**: 应用核心逻辑
   - **基础架构**:
     - `base/`: 基础类和接口定义 (ModuleBase, AudioModuleBase)
@@ -42,6 +45,7 @@ applyTo: '**'
     - `modules/modulation/`: 调制模块 (LFO)
 
 ### 数据与工具层
+
 - **`db/`**: 数据库交互
 - **`hooks/`**: React自定义钩子
 - **`lib/`**: 工具函数和辅助库
@@ -50,10 +54,12 @@ applyTo: '**'
 ## 核心文件与功能
 
 ### 基础组件
+
 - `components/layout/workbench/Canvas.tsx`: 核心画布，处理模块渲染与交互
 - `components/layout/workbench/DefaultNode.tsx`: 默认节点实现
 
 ### 核心逻辑
+
 - `core/base/ModuleBase.ts`: 所有模块的基础类，定义模块接口和行为
 - `core/services/ModuleManager.ts`: 模块生命周期管理
 - `core/services/SerializationManager.ts`: 数据序列化与持久化
@@ -62,7 +68,7 @@ applyTo: '**'
 ## 技术实现
 
 - **基础技术**: React, Next.js, TypeScript, Zustand
-- **核心功能**: 
+- **核心功能**:
   - 使用Reactflow实现模块可视化与连接
   - 基于rxjs实现模块间参数绑定与数据流
   - 使用AudioContext和Tone.js处理音频

@@ -57,7 +57,6 @@ export function SearchBar({ className }: SearchBarProps) {
       {isSearchActive ? (
         // 展开的搜索框
         <form onSubmit={handleSearch} className="w-full relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             id="search-input"
             value={searchQuery}
@@ -65,7 +64,7 @@ export function SearchBar({ className }: SearchBarProps) {
             onBlur={deactivateSearch}
             onKeyDown={handleKeyDown}
             placeholder="搜索模块..."
-            className="pl-9 h-8 w-full pr-10"
+            className="pl-4 h-8 w-full pr-10"
           />
           {searchQuery && (
             <Button
