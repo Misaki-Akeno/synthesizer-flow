@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { SearchBar } from './SearchBar';
-import { Menu } from 'lucide-react';
+import { Menu, LayoutPanelTop, Gauge } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,12 +12,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useSearchParams, useRouter } from 'next/navigation';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface HeaderProps {
   className?: string;
 }
 
 export function Header({ className }: HeaderProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const toggleRightPanel = (panel: string) => {
+    const currentPanel = searchParams.get('rightPanel');
+    const params = new URLSearchParams(searchParams);
+    
+    if (currentPanel === panel) {
+      params.delete('rightPanel');
+    } else {
+      params.set('rightPanel', panel);
+    }
+    router.replace(`?${params.toString()}`);
+  };
+  
   return (
     <header
       className={cn(
@@ -80,11 +102,45 @@ export function Header({ className }: HeaderProps) {
       {/* 中间区域：搜索栏 */}
       <div className="flex justify-center">
         <SearchBar className="w-full" />
-      </div>
-
-      {/* 右侧区域：按钮 */}
+      </div>      {/* 右侧区域：按钮 */}
       <div className="flex justify-end items-center gap-2">
-        预留
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={() => toggleRightPanel('properties')}
+              >
+                <LayoutPanelTop className="h-4 w-4" />
+                <span className="sr-only">属性</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>属性面板</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={() => toggleRightPanel('inspector')}
+              >
+                <Gauge className="h-4 w-4" />
+                <span className="sr-only">检查器</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>检查器</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     </header>
   );
