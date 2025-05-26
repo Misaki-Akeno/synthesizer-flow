@@ -8,29 +8,31 @@ import { Button } from '@/components/ui/shadcn/button';
 import { X } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-interface RightSidebarProps {
+interface AuxiliarySidebarProps {
   className?: string;
 }
 
 // 右侧栏面板类型
-type RightPanelType = 'properties' | 'inspector' | null;
+type RightPanelType = 'properties' | 'llm_chat' | null;
 
-export function RightSidebar({ className }: RightSidebarProps) {
+export function AuxiliarySidebar({ className }: AuxiliarySidebarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const rightPanelFromUrl = searchParams.get('rightPanel') as RightPanelType;
+  const auxiliarySidebarFromUrl = searchParams.get(
+    'auxPanel'
+  ) as RightPanelType;
   const [activePanel, setActivePanel] =
-    useState<RightPanelType>(rightPanelFromUrl);
+    useState<RightPanelType>(auxiliarySidebarFromUrl);
 
   useEffect(() => {
     // 当 URL 中的 rightPanel 参数变化时，更新 activePanel
-    setActivePanel(rightPanelFromUrl);
-  }, [rightPanelFromUrl]);
+    setActivePanel(auxiliarySidebarFromUrl);
+  }, [auxiliarySidebarFromUrl]);
 
   const closePanel = () => {
     setActivePanel(null);
     const params = new URLSearchParams(searchParams);
-    params.delete('rightPanel');
+    params.delete('auxPanel');
     router.replace(`?${params.toString()}`);
   };
 
@@ -46,7 +48,7 @@ export function RightSidebar({ className }: RightSidebarProps) {
             <div className="flex items-center justify-between p-3 border-b">
               <h3 className="text-sm font-medium">
                 {activePanel === 'properties' && '属性面板'}
-                {activePanel === 'inspector' && '检查器'}
+                {activePanel === 'llm_chat' && 'Chat'}
               </h3>
               <Button
                 variant="ghost"
@@ -61,7 +63,7 @@ export function RightSidebar({ className }: RightSidebarProps) {
             <div className="flex-1 overflow-auto p-4">
               {/* 根据活动面板类型显示不同内容 */}
               {activePanel === 'properties' && <div>属性面板内容</div>}
-              {activePanel === 'inspector' && <div>检查器内容</div>}
+              {activePanel === 'llm_chat' && <div>大模型面板</div>}
             </div>
           </div>
         </div>

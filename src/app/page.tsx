@@ -5,7 +5,7 @@ import Canvas from '@/components/layout/workbench/Canvas';
 import { ContextMenuProvider } from '@/components/ui/contextMenu/ContextMenuProvider';
 import { Header } from '@/components/layout/navigation/Header';
 import { Sidebar } from '@/components/layout/Activitybar';
-import { RightSidebar } from '@/components/layout/AuxiliarySidebar';
+import { AuxiliarySidebar } from '@/components/layout/AuxiliarySidebar';
 
 export const metadata: Metadata = {
   title: 'Synthsizer Playground',
@@ -38,7 +38,7 @@ export default async function PlaygroundPage({
               <Canvas projectId={projectId} />
             </ContextMenuProvider>
           </main>
-          <RightSidebar />
+          <AuxiliarySidebar />
         </ReactFlowProvider>
       </div>
     </div>

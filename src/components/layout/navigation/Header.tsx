@@ -6,7 +6,6 @@ import { SearchBar } from './SearchBar';
 import {
   Menu,
   LayoutPanelTop,
-  Gauge,
   Save,
   FolderOpen,
   Settings,
@@ -26,6 +25,7 @@ import {
   BookOpen,
   Keyboard,
   Github,
+  MessageCircle,
   Info,
 } from 'lucide-react';
 import {
@@ -73,13 +73,13 @@ export function Header({ className }: HeaderProps) {
   const [devNoticeDescription, setDevNoticeDescription] = useState('');
 
   const toggleRightPanel = (panel: string) => {
-    const currentPanel = searchParams.get('rightPanel');
+    const currentPanel = searchParams.get('auxPanel');
     const params = new URLSearchParams(searchParams);
 
     if (currentPanel === panel) {
-      params.delete('rightPanel');
+      params.delete('auxPanel');
     } else {
-      params.set('rightPanel', panel);
+      params.set('auxPanel', panel);
     }
     router.replace(`?${params.toString()}`);
   };
@@ -278,9 +278,9 @@ export function Header({ className }: HeaderProps) {
                 <LayoutPanelTop className="mr-2 h-4 w-4" />
                 <span>属性面板</span>
               </MenubarItem>
-              <MenubarItem onClick={() => toggleRightPanel('inspector')}>
-                <Gauge className="mr-2 h-4 w-4" />
-                <span>检查器面板</span>
+              <MenubarItem onClick={() => toggleRightPanel('llm_chat')}>
+                <MessageCircle className="mr-2 h-4 w-4" />
+                <span>大模型面板</span>
               </MenubarItem>
               <MenubarSeparator />
               <MenubarItem
@@ -387,9 +387,9 @@ export function Header({ className }: HeaderProps) {
                 <LayoutPanelTop className="mr-2 h-4 w-4" />
                 <span>属性面板</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => toggleRightPanel('inspector')}>
-                <Gauge className="mr-2 h-4 w-4" />
-                <span>检查器面板</span>
+              <DropdownMenuItem onClick={() => toggleRightPanel('llm_chat')}>
+                <MessageCircle className="mr-2 h-4 w-4" />
+                <span>大模型面板</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -447,10 +447,10 @@ export function Header({ className }: HeaderProps) {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => toggleRightPanel('inspector')}
+                onClick={() => toggleRightPanel('llm_chat')}
               >
-                <Gauge className="h-4 w-4" />
-                <span className="sr-only">检查器</span>
+                <MessageCircle className="h-4 w-4" />
+                <span className="sr-only">大模型面板</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
