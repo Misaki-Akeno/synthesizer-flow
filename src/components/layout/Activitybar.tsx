@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/shadcn/dialog';
+import { SettingsPanels } from './SettingPanels';
 
 interface SidebarProps {
   className?: string;
@@ -103,7 +104,6 @@ export function Sidebar({ className }: SidebarProps) {
               />
             </div>
           </div>
-
           {/* 右侧面板内容 - 保持 #FAFAFA 背景 */}
           {activePanel && (
             <div className="w-[320px] border-r bg-[#FAFAFA] dark:bg-gray-900 flex flex-col">
@@ -120,7 +120,6 @@ export function Sidebar({ className }: SidebarProps) {
               </div>
             </div>
           )}
-
           {/* 将Dialog移到组件结构外部，直接在Sidebar组件中渲染 */}
           <Dialog open={helpDialogOpen} onOpenChange={setHelpDialogOpen}>
             <DialogContent className="sm:max-w-[425px]">
@@ -167,36 +166,18 @@ export function Sidebar({ className }: SidebarProps) {
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
-
+          </Dialog>{' '}
           {/* 设置对话框 */}
           <Dialog
             open={settingsDialogOpen}
             onOpenChange={setSettingsDialogOpen}
           >
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[900px] sm:max-h-[90vh] overflow-auto">
               <DialogHeader>
                 <DialogTitle>设置</DialogTitle>
                 <DialogDescription>SynthesizerFlow 应用设置</DialogDescription>
               </DialogHeader>
-              <div className="py-4 flex flex-col items-center justify-center">
-                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-md border border-yellow-200 dark:border-yellow-700 text-center">
-                  <p className="text-yellow-800 dark:text-yellow-200 font-medium">
-                    功能开发中
-                  </p>
-                  <p className="text-yellow-700 dark:text-yellow-300 text-sm mt-1">
-                    设置功能正在开发中，敬请期待！
-                  </p>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setSettingsDialogOpen(false)}
-                >
-                  关闭
-                </Button>
-              </DialogFooter>
+              <SettingsPanels />
             </DialogContent>
           </Dialog>
         </div>

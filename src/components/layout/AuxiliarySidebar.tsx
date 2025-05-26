@@ -21,8 +21,9 @@ export function AuxiliarySidebar({ className }: AuxiliarySidebarProps) {
   const auxiliarySidebarFromUrl = searchParams.get(
     'auxPanel'
   ) as RightPanelType;
-  const [activePanel, setActivePanel] =
-    useState<RightPanelType>(auxiliarySidebarFromUrl);
+  const [activePanel, setActivePanel] = useState<RightPanelType>(
+    auxiliarySidebarFromUrl
+  );
 
   useEffect(() => {
     // 当 URL 中的 rightPanel 参数变化时，更新 activePanel

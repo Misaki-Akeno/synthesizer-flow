@@ -32,15 +32,32 @@ export interface ProjectConfig {
   isBuiltIn?: boolean; // 标记是否为内置预设
 }
 
-interface PersistState {
+export interface CanvsSettings {
+  darkMode: boolean;
+  autoSave: boolean;
+  snapToGrid: boolean;
+  gridSize: number;
+  controlPanelVisible: boolean;
+}
+
+export interface AIModelSettings {
+  modelName: string; // 如 'gpt-4', 'claude-3' 等
+  apiKey: string; // API 密钥
+  apiEndpoint: string; // 可选的 API 端点
+}
+
+export interface PersistState {
   // 用户偏好设置
   preferences: {
-    darkMode: boolean;
-    autoSave: boolean;
-    snapToGrid: boolean;
-    gridSize: number;
-    controlPanelVisible: boolean;
+    canvsSettings: CanvsSettings; // 画布相关的偏好设置
+    aiModelSettings: AIModelSettings; // AI 模型相关的偏好设置
+    // 新的偏好设置
   };
+
+  // 更新偏好设置方法
+  updatePreferences: (
+    newPreferences: Partial<PersistState['preferences']>
+  ) => void;
 
   // 用户最近保存的项目记录
   recentProjects: ProjectConfig[];
@@ -78,16 +95,82 @@ const jsonUtils = {
   },
 };
 
+// 确保 Zustand 的 getSnapshot 返回稳定的结果
 export const usePersistStore = create<PersistState>()(
   persist(
     (set, get) => ({
       // 默认偏好设置
       preferences: {
-        darkMode: false,
-        autoSave: true,
-        snapToGrid: true,
-        gridSize: 15,
-        controlPanelVisible: true,
+        canvsSettings: {
+          darkMode: false,
+          autoSave: true,
+          snapToGrid: true,
+          gridSize: 10, // 默认网格大小
+          controlPanelVisible: true, // 控制面板默认可见
+        },
+        aiModelSettings: {
+          modelName: 'Models', // 默认模型
+          apiKey: '1', // 初始为空，用户需要设置
+          apiEndpoint: '1', // 可选的API端点
+        },
+      },
+
+      // 更新偏好设置
+      updatePreferences: (newPreferencesPartial) => {
+        set((state) => {
+          let changed = false;
+          const nextPreferences = { ...state.preferences };
+
+          if (newPreferencesPartial.canvsSettings) {
+            const updatedCanvsSettings = {
+              ...state.preferences.canvsSettings,
+              ...newPreferencesPartial.canvsSettings,
+            };
+            if (
+              JSON.stringify(state.preferences.canvsSettings) !==
+              JSON.stringify(updatedCanvsSettings)
+            ) {
+              nextPreferences.canvsSettings = updatedCanvsSettings;
+              changed = true;
+            }
+          }
+
+          if (newPreferencesPartial.aiModelSettings) {
+            const updatedAiModelSettings = {
+              ...state.preferences.aiModelSettings,
+              ...newPreferencesPartial.aiModelSettings,
+            };
+            if (
+              JSON.stringify(state.preferences.aiModelSettings) !==
+              JSON.stringify(updatedAiModelSettings)
+            ) {
+              nextPreferences.aiModelSettings = updatedAiModelSettings;
+              changed = true;
+            }
+          }
+
+          // 如果还有其他偏好设置组，也类似处理
+          // if (newPreferencesPartial.someOtherSettings) { ... }
+
+          if (!changed) {
+            return state; // 没有实际变化，返回当前状态以避免不必要的更新
+          }
+
+          return { preferences: nextPreferences };
+        });
+        // 只有在实际发生更改时才记录日志可能更精确，但这需要在 set 回调之外或使用 get() 来检查。
+        // 当前的日志记录方式（即使没有实际更改也记录尝试更新的操作）也可以接受。
+        logger.info('用户偏好设置已更新');
+      },
+
+      // 添加 getSnapshot 方法，确保返回值稳定
+      getSnapshot: () => {
+        const state = get();
+        return {
+          preferences: state.preferences,
+          recentProjects: state.recentProjects,
+          currentProject: state.currentProject,
+        };
       },
 
       // 保存的项目列表
