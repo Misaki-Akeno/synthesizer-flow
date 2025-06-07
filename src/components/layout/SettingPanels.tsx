@@ -42,7 +42,7 @@ const CanvasSettingsPanel = memo(
       gridSize: canvsSettings.gridSize ?? 10,
       controlPanelVisible: canvsSettings.controlPanelVisible ?? true,
     };
-    
+
     const handleChange = useCallback(
       <T extends keyof CanvsSettings>(key: T, value: CanvsSettings[T]) => {
         handleCanvasSettingChange(key, value);
@@ -142,7 +142,7 @@ const AIModelSettingsPanel = memo(
       apiKey: aiModelSettings.apiKey || '',
       apiEndpoint: aiModelSettings.apiEndpoint || '',
     };
-    
+
     const handleChange = useCallback(
       <T extends keyof AIModelSettings>(key: T, value: AIModelSettings[T]) => {
         handleAIModelSettingChange(key, value);
@@ -195,9 +195,7 @@ const AIModelSettingsPanel = memo(
             className={settings.apiKey.trim() === '' ? 'border-red-300' : ''}
           />
           {settings.apiKey.trim() === '' && (
-            <p className="text-xs text-red-500">
-              API密钥不能为空
-            </p>
+            <p className="text-xs text-red-500">API密钥不能为空</p>
           )}
           <p className="text-xs text-muted-foreground">
             您的API密钥将安全地存储在本地
