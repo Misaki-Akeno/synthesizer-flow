@@ -454,7 +454,7 @@ export function Header({ className }: HeaderProps) {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>检查器</p>
+              <p>大模型面板</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

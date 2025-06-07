@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/shadcn/input';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Slider } from '@/components/ui/shadcn/slider';
 import { Separator } from '@/components/ui/shadcn/separator';
+import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import {
   CanvsSettings,
   AIModelSettings,
@@ -33,6 +34,15 @@ interface AIModelSettingsPanelProps {
 // 子组件：CanvasSettingsPanel
 const CanvasSettingsPanel = memo(
   ({ canvsSettings, handleCanvasSettingChange }: CanvasSettingsPanelProps) => {
+    // 确保所有字段都有默认值
+    const settings = {
+      darkMode: canvsSettings.darkMode ?? false,
+      autoSave: canvsSettings.autoSave ?? true,
+      snapToGrid: canvsSettings.snapToGrid ?? true,
+      gridSize: canvsSettings.gridSize ?? 10,
+      controlPanelVisible: canvsSettings.controlPanelVisible ?? true,
+    };
+    
     const handleChange = useCallback(
       <T extends keyof CanvsSettings>(key: T, value: CanvsSettings[T]) => {
         handleCanvasSettingChange(key, value);
@@ -41,7 +51,7 @@ const CanvasSettingsPanel = memo(
     );
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 pb-4">
         <div>
           <h2 className="text-lg font-medium flex items-center gap-2">
             <Paintbrush className="h-5 w-5" />
@@ -63,7 +73,7 @@ const CanvasSettingsPanel = memo(
             </p>
           </div>{' '}
           <Switch
-            checked={canvsSettings.darkMode}
+            checked={settings.darkMode}
             onCheckedChange={(checked) => handleChange('darkMode', checked)}
           />
         </div>
@@ -80,7 +90,7 @@ const CanvasSettingsPanel = memo(
             </p>
           </div>{' '}
           <Switch
-            checked={canvsSettings.autoSave}
+            checked={settings.autoSave}
             onCheckedChange={(checked) => handleChange('autoSave', checked)}
           />
         </div>
@@ -94,22 +104,22 @@ const CanvasSettingsPanel = memo(
             <p className="text-xs text-muted-foreground">将模块对齐到网格</p>
           </div>
           <Switch
-            checked={canvsSettings.snapToGrid}
+            checked={settings.snapToGrid}
             onCheckedChange={(checked) => handleChange('snapToGrid', checked)}
           />
         </div>
 
         {/* 网格大小滑块，当snapToGrid为true时可用 */}
-        {canvsSettings.snapToGrid && (
+        {settings.snapToGrid && (
           <div className="pt-2">
             <label className="text-sm font-medium mb-2 block">
-              网格大小: {canvsSettings.gridSize}px
+              网格大小: {settings.gridSize}px
             </label>
             <Slider
               min={5}
               max={50}
               step={1}
-              value={[canvsSettings.gridSize]}
+              value={[settings.gridSize]}
               onValueChange={(value) => handleChange('gridSize', value[0])}
             />
           </div>
@@ -126,6 +136,13 @@ const AIModelSettingsPanel = memo(
     aiModelSettings,
     handleAIModelSettingChange,
   }: AIModelSettingsPanelProps) => {
+    // 确保所有字段都有默认值，避免非受控到受控的转换
+    const settings = {
+      modelName: aiModelSettings.modelName || '',
+      apiKey: aiModelSettings.apiKey || '',
+      apiEndpoint: aiModelSettings.apiEndpoint || '',
+    };
+    
     const handleChange = useCallback(
       <T extends keyof AIModelSettings>(key: T, value: AIModelSettings[T]) => {
         handleAIModelSettingChange(key, value);
@@ -134,7 +151,7 @@ const AIModelSettingsPanel = memo(
     );
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 pb-4">
         <div>
           <h2 className="text-lg font-medium flex items-center gap-2">
             <Bot className="h-5 w-5" />
@@ -151,7 +168,7 @@ const AIModelSettingsPanel = memo(
           <label className="text-sm font-medium leading-none">模型名称</label>
           <Input
             placeholder="例如: gpt-4, claude-3"
-            value={aiModelSettings.modelName}
+            value={settings.modelName}
             onChange={(e) => handleChange('modelName', e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
@@ -163,7 +180,7 @@ const AIModelSettingsPanel = memo(
         <div className="space-y-2">
           <label className="text-sm font-medium leading-none flex items-center">
             <Lock className="h-4 w-4 mr-1" />
-            API密钥
+            API密钥 <span className="text-red-500 ml-1">*</span>
           </label>
           <Input
             placeholder="输入您的API密钥"
@@ -173,9 +190,15 @@ const AIModelSettingsPanel = memo(
             autoCorrect="off"
             data-lpignore="true"
             data-form-type="other"
-            value={aiModelSettings.apiKey}
+            value={settings.apiKey}
             onChange={(e) => handleChange('apiKey', e.target.value)}
+            className={settings.apiKey.trim() === '' ? 'border-red-300' : ''}
           />
+          {settings.apiKey.trim() === '' && (
+            <p className="text-xs text-red-500">
+              API密钥不能为空
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             您的API密钥将安全地存储在本地
           </p>
@@ -189,7 +212,7 @@ const AIModelSettingsPanel = memo(
           <Input
             autoComplete="off"
             placeholder="https://api.example.com/v1"
-            value={aiModelSettings.apiEndpoint}
+            value={settings.apiEndpoint}
             onChange={(e) => handleChange('apiEndpoint', e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
@@ -242,7 +265,7 @@ export function SettingsPanels() {
   );
 
   return (
-    <div className="flex flex-row h-full">
+    <div className="flex flex-row h-[40vh] max-h-[40vh] min-h-[40vh]">
       {/* 左侧选项卡菜单 */}
       <div className="w-48 border-r p-2 flex flex-col">
         <button
@@ -270,23 +293,27 @@ export function SettingsPanels() {
         </button>
       </div>
 
-      {/* 右侧内容面板 */}
-      <div className="flex-1 p-4 overflow-auto">
-        {/* 画布设置面板 */}
-        {activeTab === 'canvas' && (
-          <CanvasSettingsPanel
-            canvsSettings={canvsSettings}
-            handleCanvasSettingChange={handleCanvasSettingChange}
-          />
-        )}
+      {/* 右侧内容面板 - 使用 ScrollArea 组件确保内容可滚动 */}
+      <div className="flex-1">
+        <ScrollArea className="h-full">
+          <div className="p-4">
+            {/* 画布设置面板 */}
+            {activeTab === 'canvas' && (
+              <CanvasSettingsPanel
+                canvsSettings={canvsSettings}
+                handleCanvasSettingChange={handleCanvasSettingChange}
+              />
+            )}
 
-        {/* AI模型设置面板 */}
-        {activeTab === 'ai' && (
-          <AIModelSettingsPanel
-            aiModelSettings={aiModelSettings}
-            handleAIModelSettingChange={handleAIModelSettingChange}
-          />
-        )}
+            {/* AI模型设置面板 */}
+            {activeTab === 'ai' && (
+              <AIModelSettingsPanel
+                aiModelSettings={aiModelSettings}
+                handleAIModelSettingChange={handleAIModelSettingChange}
+              />
+            )}
+          </div>
+        </ScrollArea>
       </div>
     </div>
   );

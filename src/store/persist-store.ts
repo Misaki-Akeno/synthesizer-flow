@@ -109,9 +109,9 @@ export const usePersistStore = create<PersistState>()(
           controlPanelVisible: true, // 控制面板默认可见
         },
         aiModelSettings: {
-          modelName: 'Models', // 默认模型
-          apiKey: '1', // 初始为空，用户需要设置
-          apiEndpoint: '1', // 可选的API端点
+          modelName: 'qwen-turbo-2025-04-28', // 默认模型
+          apiKey: '', // 初始为空，用户需要设置
+          apiEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', // 默认API端点
         },
       },
 
