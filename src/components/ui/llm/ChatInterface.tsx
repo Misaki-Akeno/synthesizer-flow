@@ -7,34 +7,34 @@ import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Loader2, Send, Wrench } from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings';
-import { getSystemPrompt } from '@/lib/llm/systemPrompt';
-
-interface Message {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
+import { LocalAIClient, ChatMessage } from '@/lib/mcp/client';
+import { getSystemPrompt } from '@/lib/mcp/systemPrompt';
 
 export function ChatInterface() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 获取AI设置
+  const aiSettings = useAISettings();
+  const isAIConfigured = useIsAIConfigured();
+
+  // 是否启用工具功能
+  const [useTools, setUseTools] = useState(true);
+
+  // AI客户端实例
+  const aiClient = LocalAIClient.getInstance();
 
   // 当组件加载时，添加系统提示
   useEffect(() => {
     setMessages([
       {
         role: 'system',
-        content: getSystemPrompt(true),
+        content: getSystemPrompt(),
       },
     ]);
   }, []);
-  // 从新的设置系统获取AI设置
-  const aiSettings = useAISettings();
-  const isAIConfigured = useIsAIConfigured();
-
-  // 是否启用工具功能
-  const [useTools, setUseTools] = useState(true);
 
   // 消息添加后自动滚动到底部
   useEffect(() => {
@@ -42,9 +42,9 @@ export function ChatInterface() {
   }, [messages]);
 
   const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || !isAIConfigured) return;
 
-    const userMessage: Message = {
+    const userMessage: ChatMessage = {
       role: 'user',
       content: input,
     };
@@ -54,37 +54,20 @@ export function ChatInterface() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/llm/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],          // 传递AI模型设置
-          apiKey: aiSettings.apiKey,
-          apiEndpoint: aiSettings.apiEndpoint || undefined,
-          modelName: aiSettings.modelName || undefined,
-          // 传递是否启用工具
-          useTools,
-        }),
-      });
+      const response = await aiClient.sendMessage(
+        [...messages, userMessage],
+        aiSettings,
+        useTools
+      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '服务器响应错误');
+      // 添加AI的响应
+      setMessages((prev) => [...prev, response.message]);
+
+      // 如果有工具调用，可以显示额外信息
+      if (response.hasToolUse && response.toolCalls) {
+        console.log('AI使用了工具:', response.toolCalls);
       }
 
-      const data = await response.json();
-
-      // 检查响应是否包含工具调用
-      if (data.hasToolUse) {
-        // 添加带有工具调用的AI响应
-        setMessages((prev) => [...prev, data.message]);
-
-        // 也可以在这里添加代码，以可视化方式显示工具调用过程
-        // 例如：显示"AI使用了工具：get_all_modules"
-      } else {
-        // 普通响应，直接添加
-        setMessages((prev) => [...prev, data.message]);
-      }
     } catch (error) {
       console.error('聊天请求失败:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
@@ -106,7 +89,8 @@ export function ChatInterface() {
       sendMessage();
     }
   };
-  // 检查是否已设置API密钥（使用新的hook）
+
+  // 检查是否已设置API密钥
   const hasApiKey = isAIConfigured;
 
   // 获取可显示的消息（过滤掉系统消息）
@@ -121,7 +105,7 @@ export function ChatInterface() {
             {displayMessages.length === 0 ? (
               <div className="text-center text-gray-500 dark:text-gray-400">
                 {hasApiKey ? (
-                  '开始与AI助手聊天吧'
+                  '开始与AI助手聊天吧！可以问问我画布上有什么模块。'
                 ) : (
                   <div>
                     <p>
@@ -166,7 +150,7 @@ export function ChatInterface() {
         <div className="flex justify-end items-center mb-2">
           <div className="flex items-center space-x-2">
             <Wrench className="h-4 w-4" />
-            <span className="text-sm">启用工具</span>
+            <span className="text-sm">启用MCP工具</span>
             <Switch
               checked={useTools}
               onCheckedChange={setUseTools}

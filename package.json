@@ -1,6 +1,6 @@
 {
   "name": "synthesizerflow",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.9.0",
+    "@modelcontextprotocol/sdk": "^1.12.2",
     "@next/env": "^15.3.1",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-avatar": "^1.1.6",
