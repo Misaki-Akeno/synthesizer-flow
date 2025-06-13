@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, memo, useCallback } from 'react';
+import { useState, memo, useCallback, useMemo } from 'react';
 import { Input } from '@/components/ui/shadcn/input';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Slider } from '@/components/ui/shadcn/slider';
@@ -33,14 +33,13 @@ interface AIModelSettingsPanelProps {
 
 // 子组件：CanvasSettingsPanel
 const CanvasSettingsPanel = memo(
-  ({ canvsSettings, handleCanvasSettingChange }: CanvasSettingsPanelProps) => {
-    // 确保所有字段都有默认值
+  ({ canvsSettings, handleCanvasSettingChange }: CanvasSettingsPanelProps) => {    // 确保所有字段都有默认值
     const settings = {
-      darkMode: canvsSettings.darkMode ?? false,
-      autoSave: canvsSettings.autoSave ?? true,
-      snapToGrid: canvsSettings.snapToGrid ?? true,
-      gridSize: canvsSettings.gridSize ?? 10,
-      controlPanelVisible: canvsSettings.controlPanelVisible ?? true,
+      darkMode: canvsSettings?.darkMode ?? false,
+      autoSave: canvsSettings?.autoSave ?? true,
+      snapToGrid: canvsSettings?.snapToGrid ?? true,
+      gridSize: canvsSettings?.gridSize ?? 10,
+      controlPanelVisible: canvsSettings?.controlPanelVisible ?? true,
     };
 
     const handleChange = useCallback(
@@ -135,12 +134,11 @@ const AIModelSettingsPanel = memo(
   ({
     aiModelSettings,
     handleAIModelSettingChange,
-  }: AIModelSettingsPanelProps) => {
-    // 确保所有字段都有默认值，避免非受控到受控的转换
+  }: AIModelSettingsPanelProps) => {    // 确保所有字段都有默认值，避免非受控到受控的转换
     const settings = {
-      modelName: aiModelSettings.modelName || '',
-      apiKey: aiModelSettings.apiKey || '',
-      apiEndpoint: aiModelSettings.apiEndpoint || '',
+      modelName: aiModelSettings?.modelName || '',
+      apiKey: aiModelSettings?.apiKey || '',
+      apiEndpoint: aiModelSettings?.apiEndpoint || '',
     };
 
     const handleChange = useCallback(
@@ -224,12 +222,27 @@ const AIModelSettingsPanel = memo(
 AIModelSettingsPanel.displayName = 'AIModelSettingsPanel';
 
 export function SettingsPanels() {
-  const canvsSettings = usePersistStore(
-    (state) => state.preferences.canvsSettings
+  const rawCanvsSettings = usePersistStore(
+    (state) => state.preferences?.canvsSettings
   );
-  const aiModelSettings = usePersistStore(
-    (state) => state.preferences.aiModelSettings
+  const rawAiModelSettings = usePersistStore(
+    (state) => state.preferences?.aiModelSettings
   );
+  
+  const canvsSettings = useMemo(() => rawCanvsSettings || {
+    darkMode: false,
+    autoSave: true,
+    snapToGrid: true,
+    gridSize: 10,
+    controlPanelVisible: true,
+  }, [rawCanvsSettings]);
+  
+  const aiModelSettings = useMemo(() => rawAiModelSettings || {
+    modelName: 'qwen-turbo-2025-04-28',
+    apiKey: '',
+    apiEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  }, [rawAiModelSettings]);
+  
   const updatePreferences = usePersistStore((state) => state.updatePreferences);
 
   const [activeTab, setActiveTab] = useState<'canvas' | 'ai'>('canvas');
