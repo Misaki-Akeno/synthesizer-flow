@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BehaviorSubject } from 'rxjs';
-import { ModuleBase, ModuleInterface, PortType } from '../core/ModuleBase';
+import { ModuleBase, ModuleInterface, PortType } from '../core/base/ModuleBase';
 
 /**
  * 自定义Hook，用于订阅模块数据并返回当前值，主要用于UI

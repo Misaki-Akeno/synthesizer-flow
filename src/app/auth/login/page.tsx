@@ -2,14 +2,14 @@
 
 import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/shadcn/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@/components/ui/shadcn/card';
 import { signIn } from 'next-auth/react';
 import { Github } from 'lucide-react';
 // 导入 logger 和 toast
