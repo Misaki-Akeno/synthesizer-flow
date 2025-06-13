@@ -1,6 +1,6 @@
 //这是一个临时方法，暂时存储预设项目
 
-import { ProjectConfig } from '../store/persist-store';
+import { ProjectConfig } from '../store/project-store';
 
 // 工具函数：将JSON字符串转换为URL安全格式
 function makeJsonUrlSafe(jsonStr: string): string {

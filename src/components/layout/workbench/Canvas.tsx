@@ -14,7 +14,7 @@ import DefaultNode from './DefaultNode';
 import { useFlowStore } from '../../../store/store';
 import { ContextMenu } from '../../ui/contextMenu/ContextMenu';
 import { useFlowContextMenu } from '../../ui/contextMenu/hooks/useFlowContextMenu';
-import { usePersistStore } from '@/store/persist-store';
+import { usePersistStore } from '@/store/project-store';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 
 const nodeTypes = {

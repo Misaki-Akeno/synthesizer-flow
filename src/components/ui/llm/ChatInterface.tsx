@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/shadcn/input';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Loader2, Send, Wrench } from 'lucide-react';
-import { usePersistStore } from '@/store/persist-store';
+import { useAISettings, useIsAIConfigured } from '@/store/settings';
 import { getSystemPrompt } from '@/lib/llm/systemPrompt';
 
 interface Message {
@@ -29,11 +29,9 @@ export function ChatInterface() {
       },
     ]);
   }, []);
-
-  // 从持久化存储中获取AI模型设置
-  const aiModelSettings = usePersistStore(
-    (state) => state.preferences.aiModelSettings
-  );
+  // 从新的设置系统获取AI设置
+  const aiSettings = useAISettings();
+  const isAIConfigured = useIsAIConfigured();
 
   // 是否启用工具功能
   const [useTools, setUseTools] = useState(true);
@@ -60,11 +58,10 @@ export function ChatInterface() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, userMessage],
-          // 传递AI模型设置
-          apiKey: aiModelSettings.apiKey,
-          apiEndpoint: aiModelSettings.apiEndpoint || undefined,
-          modelName: aiModelSettings.modelName || undefined,
+          messages: [...messages, userMessage],          // 传递AI模型设置
+          apiKey: aiSettings.apiKey,
+          apiEndpoint: aiSettings.apiEndpoint || undefined,
+          modelName: aiSettings.modelName || undefined,
           // 传递是否启用工具
           useTools,
         }),
@@ -109,10 +106,8 @@ export function ChatInterface() {
       sendMessage();
     }
   };
-
-  // 检查是否已设置API密钥（必须是非空字符串）
-  const hasApiKey =
-    !!aiModelSettings.apiKey && aiModelSettings.apiKey.trim() !== '';
+  // 检查是否已设置API密钥（使用新的hook）
+  const hasApiKey = isAIConfigured;
 
   // 获取可显示的消息（过滤掉系统消息）
   const displayMessages = messages.filter((msg) => msg.role !== 'system');

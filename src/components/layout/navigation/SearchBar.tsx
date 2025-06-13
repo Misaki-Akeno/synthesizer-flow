@@ -5,7 +5,7 @@ import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/shadcn/input';
 import { Button } from '@/components/ui/shadcn/button';
 import { cn } from '@/lib/utils';
-import { usePersistStore } from '@/store/persist-store';
+import { usePersistStore } from '@/store/project-store';
 
 interface SearchBarProps {
   className?: string;

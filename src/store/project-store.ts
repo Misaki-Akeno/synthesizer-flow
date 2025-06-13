@@ -20,45 +20,23 @@ function generateShortId(): string {
   return nanoid(10); // 生成10个字符的短ID
 }
 
+// ======== 项目配置接口 ========
+
 export interface ProjectConfig {
-  id: string; // 项目唯一标识符，现在是必填项
+  id: string; // 项目唯一标识符
   name: string; // 项目名称，用于显示
-  description?: string;
-  created: string;
-  lastModified: string;
+  description?: string; // 项目描述
+  created: string; // 创建时间
+  lastModified: string; // 最后修改时间
   data: string; // JSON 格式的画布数据
   thumbnail?: string; // Base64格式的画布缩略图
-  tags?: string[];
+  tags?: string[]; // 项目标签
   isBuiltIn?: boolean; // 标记是否为内置预设
 }
 
-export interface CanvsSettings {
-  darkMode: boolean;
-  autoSave: boolean;
-  snapToGrid: boolean;
-  gridSize: number;
-  controlPanelVisible: boolean;
-}
+// ======== 项目管理 Store 接口 ========
 
-export interface AIModelSettings {
-  modelName: string; // 如 'gpt-4', 'claude-3' 等
-  apiKey: string; // API 密钥
-  apiEndpoint: string; // 可选的 API 端点
-}
-
-export interface PersistState {
-  // 用户偏好设置
-  preferences: {
-    canvsSettings: CanvsSettings; // 画布相关的偏好设置
-    aiModelSettings: AIModelSettings; // AI 模型相关的偏好设置
-    // 新的偏好设置
-  };
-
-  // 更新偏好设置方法
-  updatePreferences: (
-    newPreferences: Partial<PersistState['preferences']>
-  ) => void;
-
+export interface ProjectPersistState {
   // 用户最近保存的项目记录
   recentProjects: ProjectConfig[];
 
@@ -82,6 +60,8 @@ export interface PersistState {
   importProjectFromJson: (jsonData: string) => Promise<boolean>;
 }
 
+// ======== 工具函数 ========
+
 // 创建用于处理JSON字符串的工具函数
 const jsonUtils = {
   // 将JSON字符串转换为URL安全格式（替换特殊字符）
@@ -95,84 +75,11 @@ const jsonUtils = {
   },
 };
 
-// 确保 Zustand 的 getSnapshot 返回稳定的结果
-export const usePersistStore = create<PersistState>()(
+// ======== 项目管理 Zustand Store ========
+
+export const useProjectStore = create<ProjectPersistState>()(
   persist(
     (set, get) => ({
-      // 默认偏好设置
-      preferences: {
-        canvsSettings: {
-          darkMode: false,
-          autoSave: true,
-          snapToGrid: true,
-          gridSize: 10, // 默认网格大小
-          controlPanelVisible: true, // 控制面板默认可见
-        },
-        aiModelSettings: {
-          modelName: 'qwen-turbo-2025-04-28', // 默认模型
-          apiKey: '', // 初始为空，用户需要设置
-          apiEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', // 默认API端点
-        },
-      },
-
-      // 更新偏好设置
-      updatePreferences: (newPreferencesPartial) => {
-        set((state) => {
-          let changed = false;
-          const nextPreferences = { ...state.preferences };
-
-          if (newPreferencesPartial.canvsSettings) {
-            const updatedCanvsSettings = {
-              ...state.preferences.canvsSettings,
-              ...newPreferencesPartial.canvsSettings,
-            };
-            if (
-              JSON.stringify(state.preferences.canvsSettings) !==
-              JSON.stringify(updatedCanvsSettings)
-            ) {
-              nextPreferences.canvsSettings = updatedCanvsSettings;
-              changed = true;
-            }
-          }
-
-          if (newPreferencesPartial.aiModelSettings) {
-            const updatedAiModelSettings = {
-              ...state.preferences.aiModelSettings,
-              ...newPreferencesPartial.aiModelSettings,
-            };
-            if (
-              JSON.stringify(state.preferences.aiModelSettings) !==
-              JSON.stringify(updatedAiModelSettings)
-            ) {
-              nextPreferences.aiModelSettings = updatedAiModelSettings;
-              changed = true;
-            }
-          }
-
-          // 如果还有其他偏好设置组，也类似处理
-          // if (newPreferencesPartial.someOtherSettings) { ... }
-
-          if (!changed) {
-            return state; // 没有实际变化，返回当前状态以避免不必要的更新
-          }
-
-          return { preferences: nextPreferences };
-        });
-        // 只有在实际发生更改时才记录日志可能更精确，但这需要在 set 回调之外或使用 get() 来检查。
-        // 当前的日志记录方式（即使没有实际更改也记录尝试更新的操作）也可以接受。
-        logger.info('用户偏好设置已更新');
-      },
-
-      // 添加 getSnapshot 方法，确保返回值稳定
-      getSnapshot: () => {
-        const state = get();
-        return {
-          preferences: state.preferences,
-          recentProjects: state.recentProjects,
-          currentProject: state.currentProject,
-        };
-      },
-
       // 保存的项目列表
       recentProjects: [],
 
@@ -515,7 +422,24 @@ export const usePersistStore = create<PersistState>()(
       },
     }),
     {
-      name: 'synthesizer-flow-storage', // 本地存储的键名
+      name: 'synthesizerflow-projects', // 更改存储键名，专门用于项目数据
+      onRehydrateStorage: () => {
+        return (state, error) => {
+          if (error) {
+            logger.error('项目数据恢复失败', error);
+            return;
+          }
+          
+          if (state) {
+            logger.info('项目数据已恢复');
+          }
+        };
+      },
     }
   )
 );
+
+// ======== 便捷的 Hook 函数 ========
+
+// 为了向后兼容，保留原来的导出名称
+export const usePersistStore = useProjectStore;
