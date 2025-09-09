@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Switch } from '@/components/ui/shadcn/switch';
-import { Loader2, Send, Wrench } from 'lucide-react';
+import { Loader2, Send, Wrench, Plus } from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings';
 import { LocalAIClient, ChatMessage } from '@/lib/mcp/client';
 import { getSystemPrompt } from '@/lib/mcp/systemPrompt';
@@ -26,15 +26,42 @@ export function ChatInterface() {
   // AI客户端实例
   const aiClient = LocalAIClient.getInstance();
 
-  // 当组件加载时，添加系统提示
+  // 当组件首次加载时，添加系统提示
   useEffect(() => {
     setMessages([
       {
         role: 'system',
-        content: getSystemPrompt(),
+        content: getSystemPrompt(useTools),
       },
     ]);
+    // 仅首次加载
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 当 useTools 切换时，仅更新系统提示内容，不清空历史
+  useEffect(() => {
+    setMessages((prev) => {
+      if (!prev || prev.length === 0) {
+        return [
+          {
+            role: 'system',
+            content: getSystemPrompt(useTools),
+          },
+        ];
+      }
+      // 若首条为 system，则更新其内容；否则在最前面插入一条 system
+      const first = prev[0];
+      if (first.role === 'system') {
+        const updated = [...prev];
+        updated[0] = { ...first, content: getSystemPrompt(useTools) };
+        return updated;
+      }
+      return [
+        { role: 'system', content: getSystemPrompt(useTools) },
+        ...prev,
+      ];
+    });
+  }, [useTools]);
 
   // 消息添加后自动滚动到底部
   useEffect(() => {
@@ -88,6 +115,18 @@ export function ChatInterface() {
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  // 新建对话：重置为仅包含当前 useTools 的系统提示
+  const resetConversation = () => {
+    setMessages([
+      {
+        role: 'system',
+        content: getSystemPrompt(useTools),
+      },
+    ]);
+    setInput('');
+    setIsLoading(false);
   };
 
   // 检查是否已设置API密钥
@@ -147,7 +186,10 @@ export function ChatInterface() {
       {/* 输入区域 - 固定在底部，不随滚动区域滚动 */}
       <div className="border-t p-4 flex flex-col gap-2">
         {/* 工具开关控制 */}
-        <div className="flex justify-end items-center mb-2">
+        <div className="flex justify-between items-center mb-2">
+          <Button variant="outline" size="sm" onClick={resetConversation}>
+            <Plus className="h-4 w-4 mr-1" /> 新建对话
+          </Button>
           <div className="flex items-center space-x-2">
             <Wrench className="h-4 w-4" />
             <span className="text-sm">启用MCP工具</span>

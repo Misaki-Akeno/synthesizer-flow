@@ -46,6 +46,8 @@ export class MCPToolExecutor {  /**
           return await this.getModuleDetails(args.moduleId as string);
         case 'get_canvas_connections':
           return await this.getCanvasConnections();
+        case 'rag_search':
+          return await this.ragSearch(args.query as string, (args.topK as number) || 5);
         default:
           throw new Error(`未知的工具: ${toolName}`);
       }
@@ -159,5 +161,29 @@ export class MCPToolExecutor {  /**
         timestamp: new Date().toISOString(),
       },
     };
+  }
+
+  /**
+   * RAG: 本地向量检索
+   */
+  private static async ragSearch(query: string, topK: number) {
+    if (!query || typeof query !== 'string') {
+      return { success: false, error: 'query is required' };
+    }
+    try {
+      const resp = await fetch('/api/rag/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, topK: Math.max(1, Math.min(topK || 5, 20)) }),
+      });
+      const json = await resp.json();
+      if (!resp.ok) {
+        return { success: false, error: json?.error || 'RAG 搜索失败' };
+      }
+      return { success: true, data: json };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'RAG 搜索失败';
+      return { success: false, error: msg };
+    }
   }
 }
