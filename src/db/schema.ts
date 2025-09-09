@@ -2,11 +2,12 @@
 
 import {
   pgTable,
-  serial,
+  integer,
   varchar,
   text,
   timestamp,
   primaryKey,
+  index,
 } from 'drizzle-orm/pg-core';
 import { InferSelectModel, InferInsertModel } from 'drizzle-orm';
 
@@ -33,7 +34,8 @@ export const accounts = pgTable(
     }).notNull(),
     refresh_token: text('refresh_token'),
     access_token: text('access_token'),
-    expires_at: serial('expires_at'),
+    // 注意：expires_at 应为时间戳（秒）或毫秒数，使用整数类型而非 serial 自增
+    expires_at: integer('expires_at'),
     token_type: varchar('token_type', { length: 255 }),
     scope: varchar('scope', { length: 255 }),
     id_token: text('id_token'),
@@ -41,19 +43,27 @@ export const accounts = pgTable(
   },
   (account) => ({
     compoundKey: primaryKey(account.provider, account.providerAccountId),
+    // 常用查询索引
+    userIdIdx: index('accounts_user_id_idx').on(account.userId),
   })
 );
 
 // 定义 sessions 表 (会话管理需要)
-export const sessions = pgTable('sessions', {
-  sessionToken: varchar('session_token', { length: 255 })
-    .notNull()
-    .primaryKey(),
-  userId: varchar('user_id', { length: 255 })
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  expires: timestamp('expires', { mode: 'date' }).notNull(),
-});
+export const sessions = pgTable(
+  'sessions',
+  {
+    sessionToken: varchar('session_token', { length: 255 })
+      .notNull()
+      .primaryKey(),
+    userId: varchar('user_id', { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expires: timestamp('expires', { mode: 'date' }).notNull(),
+  },
+  (session) => ({
+    userIdIdx: index('sessions_user_id_idx').on(session.userId),
+  })
+);
 
 // 定义 verification_tokens 表 (邮箱验证需要)
 export const verificationTokens = pgTable(
@@ -65,6 +75,9 @@ export const verificationTokens = pgTable(
   },
   (vt) => ({
     compoundKey: primaryKey(vt.identifier, vt.token),
+    identifierIdx: index('verification_tokens_identifier_idx').on(
+      vt.identifier
+    ),
   })
 );
 
