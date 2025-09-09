@@ -1,8 +1,19 @@
 // src/app/api/auth/[...nextauth]/route.ts
 import NextAuth from 'next-auth';
 import { authConfig } from '@/lib/auth/auth.config';
-import { DrizzleAdapter } from '@/lib/auth/drizzle-adapter';
+import { DrizzleAdapter } from '@auth/drizzle-adapter';
 import { db } from '@/db/client';
+import {
+  users,
+  accounts,
+  sessions,
+  verificationTokens,
+} from '@/db/schema';
+
+// 确保在 Node.js Runtime 下运行，避免 Edge 环境下超时/代理问题
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
 /**
  * 专用于 API 路由的 NextAuth 处理程序
@@ -10,7 +21,12 @@ import { db } from '@/db/client';
  */
 const handler = NextAuth({
   ...authConfig,
-  adapter: DrizzleAdapter(db),
+  adapter: DrizzleAdapter(db, {
+    usersTable: users,
+    accountsTable: accounts,
+    sessionsTable: sessions,
+    verificationTokensTable: verificationTokens,
+  }),
 });
 
 export { handler as GET, handler as POST };

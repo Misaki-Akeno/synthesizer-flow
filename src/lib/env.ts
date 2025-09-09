@@ -31,7 +31,10 @@ function parseEnv() {
     DATABASE_URL: process.env.DATABASE_URL || '',
     GITHUB_ID: process.env.GITHUB_ID || '',
     GITHUB_SECRET: process.env.GITHUB_SECRET || '',
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+    // 在开发环境没有设置时，推断为 http://localhost:3000
+    NEXTAUTH_URL:
+      process.env.NEXTAUTH_URL ||
+      (process.env.NODE_ENV !== 'production' ? 'http://localhost:3000' : undefined),
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET || '',
     
     RAG_EMBEDDINGS_MODEL: process.env.RAG_EMBEDDINGS_MODEL,

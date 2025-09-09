@@ -4,7 +4,7 @@ import GitHubProvider from 'next-auth/providers/github';
 import { env } from '@/lib/env';
 
 /**
- * NextAuth配置，在客户端和服务端共享
+ * NextAuth配置，服务端
  */
 export const authConfig: AuthOptions = {
   // 配置认证提供者
@@ -12,6 +12,10 @@ export const authConfig: AuthOptions = {
     GitHubProvider({
       clientId: env.GITHUB_ID,
       clientSecret: env.GITHUB_SECRET,
+      // 增加网络超时以避免公司网络/代理导致的 3.5s 超时
+      httpOptions: {
+        timeout: 10000,
+      },
     }),
   ],
 
