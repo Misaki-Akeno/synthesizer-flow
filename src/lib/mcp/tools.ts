@@ -39,4 +39,16 @@ export const mcpTools: Tool[] = [
       required: [],
     },
   },
+  {
+    name: 'rag_search',
+    description: '对本地知识库进行向量检索，返回最相关片段（RAG）',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '检索问题或文本' },
+        topK: { type: 'number', description: '返回条数，默认5，最大20' },
+      },
+      required: ['query'],
+    },
+  },
 ];

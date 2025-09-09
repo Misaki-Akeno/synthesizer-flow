@@ -15,9 +15,11 @@ const envSchema = z.object({
   // NextAuth配置
   NEXTAUTH_URL: z.string().url().optional(),
   NEXTAUTH_SECRET: z.string().min(1, { message: 'NEXTAUTH_SECRET必须设置' }),
-
-  // 阿里云灵积DashScope API配置
-  DASHSCOPE_API_KEY: z.string().optional(),
+  
+  // RAG Embeddings 配置（可选）
+  RAG_EMBEDDINGS_MODEL: z.string().optional(),
+  RAG_EMBEDDINGS_API_KEY: z.string().optional(),
+  RAG_EMBEDDINGS_BASE_URL: z.string().url().optional(),
 });
 
 /**
@@ -31,7 +33,10 @@ function parseEnv() {
     GITHUB_SECRET: process.env.GITHUB_SECRET || '',
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET || '',
-    DASHSCOPE_API_KEY: process.env.DASHSCOPE_API_KEY,
+    
+    RAG_EMBEDDINGS_MODEL: process.env.RAG_EMBEDDINGS_MODEL,
+    RAG_EMBEDDINGS_API_KEY: process.env.RAG_EMBEDDINGS_API_KEY,
+    RAG_EMBEDDINGS_BASE_URL: process.env.RAG_EMBEDDINGS_BASE_URL,
   };
 
   try {
