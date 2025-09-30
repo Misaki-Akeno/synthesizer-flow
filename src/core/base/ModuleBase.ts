@@ -61,7 +61,7 @@ export abstract class ModuleBase {
   // 模块类型标识
   public readonly moduleType: string;
   public readonly id: string;
-  public readonly name: string;
+  public name: string;
 
   // 模块参数，使用BehaviorSubject
   public parameters: {
@@ -265,6 +265,10 @@ export abstract class ModuleBase {
         `Parameter type ${paramType} not compatible with port type ${portType}`
       );
     }
+  }
+
+  public setName(newName: string): void {
+    this.name = newName;
   }
 
   /**

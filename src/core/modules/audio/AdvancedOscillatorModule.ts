@@ -45,6 +45,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       active: boolean; // 是否激活
       note: number; // 当前音符
       triggerTime: number; // 触发时间戳
+      velocity: number; // 最近一次触发的力度
     }
   > = new Map();
 
@@ -408,6 +409,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     ].subscribe((value: number | boolean | string) => {
       if (typeof value === 'number') {
         this.attackVelSens = value;
+        this.refreshActiveVoicesEnvelope();
       }
     });
 
@@ -415,6 +417,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       (value: number | boolean | string) => {
         if (typeof value === 'number') {
           this.attackTime = value;
+          this.refreshActiveVoicesEnvelope();
         }
       }
     );
@@ -423,6 +426,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       (value: number | boolean | string) => {
         if (typeof value === 'number') {
           this.decayTime = value;
+          this.refreshActiveVoicesEnvelope();
         }
       }
     );
@@ -431,6 +435,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       (value: number | boolean | string) => {
         if (typeof value === 'number') {
           this.sustainLevel = value;
+          this.refreshActiveVoicesEnvelope();
         }
       }
     );
@@ -447,6 +452,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       (value: number | boolean | string) => {
         if (typeof value === 'number') {
           this.releaseTime = value;
+          this.refreshActiveVoicesEnvelope();
         }
       }
     );
@@ -571,14 +577,8 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         0.01
       );
 
-      // 重置触发时间戳
-      voice.triggerTime = Date.now();
-
       // 触发包络
       this.triggerEnvelope(voice, velocity);
-
-      // 标记为激活
-      voice.active = true;
 
       this.debugInfo = `重用声部: note=${note}, 频率=${midiNoteToFrequency(note).toFixed(2)}Hz, 力度=${velocity.toFixed(2)}`;
     }
@@ -650,34 +650,22 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         // 启动振荡器
         osc.start();
 
-        // 触发包络
-        env.triggerAttack();
-
-        // 保存当前时间戳
         const now = Date.now();
 
-        // 如果设置了延音衰减时间，设置延音结束处理
-        if (this.sustainFade > 0) {
-          const fadeStartTime = now + (this.attackTime + this.decayTime) * 1000;
-          setTimeout(() => {
-            if (this.voices.has(note) && this.voices.get(note)!.active) {
-              velGain.gain.linearRampToValueAtTime(
-                0,
-                this.Tone.now() + this.sustainFade
-              );
-            }
-          }, fadeStartTime - now);
-        }
-
-        // 存储声部信息
-        this.voices.set(note, {
+        const voiceData = {
           oscillator: osc,
           velocityGain: velGain,
           envelope: env,
           active: true,
           note: note,
           triggerTime: now,
-        });
+          velocity,
+        };
+
+        this.voices.set(note, voiceData);
+        this.triggerEnvelope(voiceData, velocity);
+
+        this.debugInfo = `创建声部: note=${note}, 频率=${midiNoteToFrequency(note).toFixed(2)}Hz, 力度=${velocity.toFixed(2)}`;
       } catch (error) {
         console.error(
           `[${this.moduleType}Module ${this.id}] 创建声部失败:`,
@@ -708,7 +696,18 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * @param velocity 力度值（0-1）
    */
   private triggerEnvelope(voice: any, velocity: number): void {
-    if (!voice.envelope) return;
+    voice.velocity = velocity;
+    voice.triggerTime = Date.now();
+    voice.active = true;
+
+    if (!voice.envelope) {
+      this.applyParameterRamp(
+        voice.velocityGain?.gain,
+        velocity,
+        this.attackTime
+      );
+      return;
+    }
 
     // 更新包络参数
     voice.envelope.attack = this.getAttackTime(velocity);
@@ -722,7 +721,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     // 如果设置了延音衰减时间，设置延音结束处理
     if (this.sustainFade > 0) {
       const fadeStartTime =
-        Date.now() + (this.attackTime + this.decayTime) * 1000;
+        voice.triggerTime + (this.attackTime + this.decayTime) * 1000;
       setTimeout(() => {
         if (
           this.voices.has(voice.note) &&
@@ -733,8 +732,22 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
             this.Tone.now() + this.sustainFade
           );
         }
-      }, fadeStartTime - Date.now());
+      }, Math.max(0, fadeStartTime - Date.now()));
     }
+  }
+
+  private refreshActiveVoicesEnvelope(): void {
+    this.voices.forEach((voice) => {
+      if (!voice.envelope) {
+        return;
+      }
+
+      const velocity = voice.velocity ?? 0.7;
+      voice.envelope.attack = this.getAttackTime(velocity);
+      voice.envelope.decay = this.decayTime;
+      voice.envelope.sustain = this.sustainLevel;
+      voice.envelope.release = this.releaseTime;
+    });
   }
 
   /**

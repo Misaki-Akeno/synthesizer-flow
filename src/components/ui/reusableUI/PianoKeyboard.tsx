@@ -108,49 +108,65 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
 
   // 处理音符按下事件
   const handleNoteOn = useCallback(
-    (note: number) => {
-      if (!touchedKeys.has(note)) {
-        // 添加到已触摸的键集合中
-        setTouchedKeys((prev) => {
-          const newSet = new Set(prev);
-          newSet.add(note);
-          return newSet;
-        });
+    (note: number, velocity: number = 0.7) => {
+      setTouchedKeys((prev) => {
+        if (prev.has(note)) {
+          return prev;
+        }
 
-        // 调用外部回调
-        onNoteOn?.(note, 0.7); // 默认力度0.7
-      }
+        const newSet = new Set(prev);
+        newSet.add(note);
+
+        onNoteOn?.(note, velocity);
+        return newSet;
+      });
     },
-    [onNoteOn, touchedKeys]
+    [onNoteOn]
   );
 
   // 处理音符释放事件
   const handleNoteOff = useCallback(
     (note: number) => {
-      if (touchedKeys.has(note)) {
-        // 从触摸的键集合中移除
-        setTouchedKeys((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(note);
-          return newSet;
-        });
+      setTouchedKeys((prev) => {
+        if (!prev.has(note)) {
+          return prev;
+        }
 
-        // 调用外部回调
+        const newSet = new Set(prev);
+        newSet.delete(note);
+
         onNoteOff?.(note);
-      }
+        return newSet;
+      });
     },
-    [onNoteOff, touchedKeys]
+    [onNoteOff]
   );
+
+  const releaseOtherNotes = useCallback(() => {
+    setTouchedKeys((prev) => {
+      if (prev.size === 0) {
+        return prev;
+      }
+
+      prev.forEach((activeNote) => {
+        onNoteOff?.(activeNote);
+      });
+
+      return new Set<number>();
+    });
+  }, [onNoteOff]);
 
   // 鼠标/触摸事件处理
   const handlePointerDown = (note: number) => (e: React.PointerEvent) => {
     e.preventDefault();
     setIsPointerDown(true);
+    releaseOtherNotes();
     handleNoteOn(note);
   };
 
   const handlePointerEnter = (note: number) => (_e: React.PointerEvent) => {
     if (isPointerDown) {
+      releaseOtherNotes();
       handleNoteOn(note);
     }
   };
@@ -170,11 +186,17 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   useEffect(() => {
     const handleGlobalPointerUp = () => {
       setIsPointerDown(false);
-      // 释放所有被触摸的键
-      touchedKeys.forEach((note) => {
-        onNoteOff?.(note);
+      setTouchedKeys((prev) => {
+        if (prev.size === 0) {
+          return prev;
+        }
+
+        prev.forEach((note) => {
+          onNoteOff?.(note);
+        });
+
+        return new Set();
       });
-      setTouchedKeys(new Set());
     };
 
     window.addEventListener('pointerup', handleGlobalPointerUp);
@@ -182,7 +204,7 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
     return () => {
       window.removeEventListener('pointerup', handleGlobalPointerUp);
     };
-  }, [onNoteOff, touchedKeys]);
+  }, [onNoteOff]);
 
   // 更新UI以反映当前的活跃音符
   useEffect(() => {

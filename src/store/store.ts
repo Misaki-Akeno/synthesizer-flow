@@ -41,6 +41,7 @@ interface FlowState {
   ) => string;
   addEdge: (source: string, target: string) => void;
   deleteNode: (nodeId: string) => void;
+  renameNode: (nodeId: string, newLabel: string) => void;
 
   // 序列化相关方法
   exportCanvasToJson: () => string;
@@ -173,6 +174,34 @@ export const useFlowStore = create<FlowState>((set, get) => {
         edges: get().edges.filter(
           (e) => e.source !== nodeId && e.target !== nodeId
         ),
+      });
+    },
+
+    renameNode: (nodeId, newLabel) => {
+      const trimmedLabel = newLabel.trim();
+      if (!trimmedLabel) {
+        return;
+      }
+
+      set({
+        nodes: get().nodes.map((node) => {
+          if (node.id !== nodeId) {
+            return node;
+          }
+
+          const moduleInstance = node.data?.module;
+          if (moduleInstance && typeof moduleInstance.setName === 'function') {
+            moduleInstance.setName(trimmedLabel);
+          }
+
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              label: trimmedLabel,
+            },
+          };
+        }),
       });
     },
 
