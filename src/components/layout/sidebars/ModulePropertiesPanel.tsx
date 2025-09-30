@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
+import type { KeyboardEvent } from 'react';
 import { ParameterType, ModuleBase } from '@/core/base/ModuleBase';
 import { useModuleSubscription } from '@/hooks/useModuleSubscription';
 import { useFlowStore } from '@/store/store';
 import { ParameterControl } from '@/components/ui/reusableUI';
 import type { FlowNode } from '@/core/services/ModuleManager';
+import { Input } from '@/components/ui/shadcn/input';
 
 type ModulePropertiesPanelProps = {
   onRequestClose?: () => void;
@@ -26,12 +28,14 @@ type ParameterItem = {
 };
 
 export function ModulePropertiesPanel({
-  onRequestClose,
+  onRequestClose: _onRequestClose,
 }: ModulePropertiesPanelProps) {
+  void _onRequestClose;
   const nodes = useFlowStore((state) => state.nodes);
   const updateModuleParameter = useFlowStore(
     (state) => state.updateModuleParameter
   );
+  const renameNode = useFlowStore((state) => state.renameNode);
 
   const selectedNode = useMemo(() => {
     return nodes.find((node) => node.selected && node.data?.module);
@@ -41,11 +45,50 @@ export function ModulePropertiesPanel({
 
   const { paramValues } = useModuleSubscription(moduleInstance);
 
+  const [displayName, setDisplayName] = useState<string>(
+    selectedNode?.data?.label || moduleInstance?.name || ''
+  );
+
   useEffect(() => {
-    if (!selectedNode && onRequestClose) {
-      onRequestClose();
-    }
-  }, [onRequestClose, selectedNode]);
+    setDisplayName(selectedNode?.data?.label || moduleInstance?.name || '');
+  }, [moduleInstance, selectedNode]);
+
+  const commitRename = useCallback(
+    (value: string) => {
+      if (!selectedNode) return;
+
+      const trimmed = value.trim();
+      if (!trimmed) {
+        setDisplayName(selectedNode.data?.label || moduleInstance?.name || '');
+        return;
+      }
+
+      if (trimmed === selectedNode.data?.label) {
+        return;
+      }
+
+      renameNode(selectedNode.id, trimmed);
+      setDisplayName(trimmed);
+    },
+    [moduleInstance, renameNode, selectedNode]
+  );
+
+  const handleNameInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commitRename(event.currentTarget.value);
+        event.currentTarget.blur();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        setDisplayName(
+          selectedNode?.data?.label || moduleInstance?.name || ''
+        );
+        event.currentTarget.blur();
+      }
+    },
+    [commitRename, moduleInstance, selectedNode]
+  );
 
   if (!selectedNode || !moduleInstance) {
     return (
@@ -120,12 +163,21 @@ export function ModulePropertiesPanel({
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="text-xs text-muted-foreground uppercase tracking-wide">
-          模块
+      <div className="space-y-2">
+        <div className="space-y-1">
+          <div className="text-xs text-muted-foreground uppercase tracking-wide">
+            模块名称
+          </div>
+          <Input
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            onBlur={(event) => commitRename(event.target.value)}
+            onKeyDown={handleNameInputKeyDown}
+            placeholder="输入模块显示名"
+          />
         </div>
-        <div className="text-base font-semibold">
-          {moduleInstance.name || selectedNode.data?.label}
+        <div className="text-xs text-muted-foreground">
+          类型：{moduleInstance.moduleType}
         </div>
       </div>
 
