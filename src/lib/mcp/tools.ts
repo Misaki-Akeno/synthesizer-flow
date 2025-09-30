@@ -2,9 +2,17 @@
  * MCP工具定义 - 定义AI可以使用的工具
  */
 
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
-
-export type { Tool };
+// 为了避免在构建时依赖未安装的 @modelcontextprotocol/sdk 包，
+// 这里定义一个与我们所需字段兼容的轻量级 Tool 类型。
+export type Tool = {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: string;
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+};
 
 export const mcpTools: Tool[] = [
   {
