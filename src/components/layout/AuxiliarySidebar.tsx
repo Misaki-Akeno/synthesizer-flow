@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/shadcn/button';
 import { X } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ChatInterface } from '@/components/ui/llm/ChatInterface';
+import { ModulePropertiesPanel } from '@/components/layout/sidebars/ModulePropertiesPanel';
 
 interface AuxiliarySidebarProps {
   className?: string;
@@ -64,7 +65,9 @@ export function AuxiliarySidebar({ className }: AuxiliarySidebarProps) {
 
             <div className="flex-1 overflow-auto p-4">
               {/* 根据活动面板类型显示不同内容 */}
-              {activePanel === 'properties' && <div>属性面板内容</div>}
+              {activePanel === 'properties' && (
+                <ModulePropertiesPanel onRequestClose={closePanel} />
+              )}
               {activePanel === 'llm_chat' && <ChatInterface />}
             </div>
           </div>
