@@ -3,17 +3,17 @@ import {
   ModuleBase,
   ParameterType,
   PortType,
-} from '../../../core/base/ModuleBase';
-import { useFlowStore } from '../../../store/store';
-import { useModuleSubscription } from '../../../hooks/useModuleSubscription';
+} from '@/core/base/ModuleBase';
+import { useFlowStore } from '@/store/store';
+import { useModuleSubscription } from '@/core/hooks/useModuleSubscription';
 import React from 'react';
-import { AudioModuleBase } from '../../../core/base/AudioModuleBase';
+import { AudioModuleBase } from '@/core/base/AudioModuleBase';
 import CustomUIComponents, {
   ParameterControl,
   InputPort,
   OutputPort,
   ModuleEnableToggle,
-} from '../../ui/reusableUI';
+} from '@/components/ui/reusableUI';
 import {
   Accordion,
   AccordionContent,
