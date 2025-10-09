@@ -30,7 +30,7 @@ vi.mock('@/components/ui/reusableUI', () => ({
   },
 }));
 
-vi.mock('@/hooks/useModuleSubscription', () => ({
+vi.mock('@/core/hooks/useModuleSubscription', () => ({
   useModuleSubscription: () => ({
     paramValues: { toggle: false },
   }),
