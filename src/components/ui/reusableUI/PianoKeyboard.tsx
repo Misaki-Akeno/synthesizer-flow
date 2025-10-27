@@ -107,8 +107,18 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   };
 
   // 处理音符按下事件
+  const calculateVelocity = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const relativeY = event.clientY - rect.top;
+    const clamped = Math.max(0, Math.min(1, relativeY / rect.height));
+
+    // 点击越靠近底部力度越强，靠近顶部力度越弱
+    return clamped;
+  }, []);
+
   const handleNoteOn = useCallback(
-    (note: number) => {
+    (note: number, event: React.PointerEvent<HTMLElement>) => {
       if (!touchedKeys.has(note)) {
         // 添加到已触摸的键集合中
         setTouchedKeys((prev) => {
@@ -117,11 +127,13 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
           return newSet;
         });
 
+        const velocity = calculateVelocity(event);
+
         // 调用外部回调
-        onNoteOn?.(note, 0.7); // 默认力度0.7
+        onNoteOn?.(note, velocity);
       }
     },
-    [onNoteOn, touchedKeys]
+    [calculateVelocity, onNoteOn, touchedKeys]
   );
 
   // 处理音符释放事件
@@ -143,17 +155,18 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   );
 
   // 鼠标/触摸事件处理
-  const handlePointerDown = (note: number) => (e: React.PointerEvent) => {
+  const handlePointerDown = (note: number) => (e: React.PointerEvent<HTMLElement>) => {
     e.preventDefault();
     setIsPointerDown(true);
-    handleNoteOn(note);
+    handleNoteOn(note, e);
   };
 
-  const handlePointerEnter = (note: number) => (_e: React.PointerEvent) => {
-    if (isPointerDown) {
-      handleNoteOn(note);
-    }
-  };
+  const handlePointerEnter =
+    (note: number) => (e: React.PointerEvent<HTMLElement>) => {
+      if (isPointerDown) {
+        handleNoteOn(note, e);
+      }
+    };
 
   const handlePointerLeave = (note: number) => () => {
     if (isPointerDown) {
