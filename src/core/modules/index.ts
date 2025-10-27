@@ -5,6 +5,7 @@ import { MIDIInputModule } from './input/MIDIInputModule';
 import { KeyboardInputModule } from './input/KeyboardInputModule';
 import { ReverbModule } from './audio/ReverbModule';
 import { SpeakerModule } from './audio/SpeakerModule';
+import { TrumpetModule } from './audio/TrumpetModule';
 import { ModuleBase, ModuleMetadata } from '../base/ModuleBase';
 
 // 导出所有模块类
@@ -16,6 +17,7 @@ export {
   KeyboardInputModule,
   ReverbModule,
   SpeakerModule,
+  TrumpetModule,
 };
 
 // 定义一个映射表，将模块类型名与对应的模块类关联
@@ -30,6 +32,7 @@ export const moduleClassMap: Record<
   keyboardinput: KeyboardInputModule,
   reverb: ReverbModule,
   speaker: SpeakerModule,
+  trumpet: TrumpetModule,
 };
 
 // 获取所有模块类的元数据
