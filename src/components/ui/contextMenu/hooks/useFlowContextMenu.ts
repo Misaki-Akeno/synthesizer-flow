@@ -4,10 +4,12 @@ import { useCallback } from 'react';
 import { Node, Edge, useReactFlow } from '@xyflow/react';
 import { useContextMenu } from './useContextMenu';
 import { MenuItem } from '../types';
+import { useFlowStore } from '@/store/store';
 
 export const useFlowContextMenu = () => {
   const { handleContextMenu } = useContextMenu();
   const reactFlowInstance = useReactFlow();
+  const onEdgesChange = useFlowStore((state) => state.onEdgesChange);
 
   // 处理事件类型的辅助函数
   const handleEvent = (
@@ -120,13 +122,19 @@ export const useFlowContextMenu = () => {
           label: '删除连接',
           onClick: () => {
             console.info('删除连接', edge.id);
+            onEdgesChange([
+              {
+                id: edge.id,
+                type: 'remove',
+              },
+            ]);
           },
         },
       ];
 
       handleContextMenu(handleEvent(event), edgeMenuItems);
     },
-    [handleContextMenu]
+    [handleContextMenu, onEdgesChange]
   );
 
   return {
