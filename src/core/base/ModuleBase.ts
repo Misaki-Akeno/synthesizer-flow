@@ -539,9 +539,10 @@ export abstract class ModuleBase {
 
     // 如果是针对特定源模块的音频解绑
     if (isAudioPort && sourceModuleId) {
+      const audioPrefix = `input_${inputPortName}_`;
       const bindingKey = sourcePortName
-        ? `input_${inputPortName}_${sourceModuleId}_${sourcePortName}`
-        : `input_${inputPortName}_${sourceModuleId}`;
+        ? `${audioPrefix}${sourceModuleId}_${sourcePortName}`
+        : `${audioPrefix}${sourceModuleId}`;
 
       if (this.subscriptions[bindingKey]) {
         this.subscriptions[bindingKey].unsubscribe();
@@ -552,6 +553,12 @@ export abstract class ModuleBase {
           sourceModuleId,
           sourcePortName
         );
+        const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
+          key.startsWith(audioPrefix)
+        );
+        if (!hasRemainingBindings) {
+          this.inputPorts[inputPortName].next(null);
+        }
         return true;
       }
 
@@ -567,6 +574,12 @@ export abstract class ModuleBase {
         });
         if (found) {
           this.handleAudioDisconnect(inputPortName, sourceModuleId);
+          const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
+            key.startsWith(audioPrefix)
+          );
+          if (!hasRemainingBindings) {
+            this.inputPorts[inputPortName].next(null);
+          }
           return true;
         }
       }
