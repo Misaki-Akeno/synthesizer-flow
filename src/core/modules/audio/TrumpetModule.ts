@@ -160,10 +160,6 @@ export class TrumpetModule extends AudioModuleBase {
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
 
-    this.setCustomUI('ModuleCard', {
-      title: '小号合成器',
-      description: '提供具有铜管质感的虚拟小号音色',
-    });
   }
 
   protected async initializeAudio(): Promise<void> {
