@@ -36,7 +36,7 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   startNote = 60, // 中央C (MIDI音符60)
   noteCount = 12, // 默认1个八度
   activeNotes = [],
-  onNoteOn,
+  // onNoteOn,
   onNoteOff,
 }) => {
   // 创建音符布局
@@ -106,33 +106,33 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
     }
   };
 
-  // 处理音符按下事件
-  const calculateVelocity = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const target = event.currentTarget as HTMLElement;
-    const rect = target.getBoundingClientRect();
-    const relativeY = event.clientY - rect.top;
-    const clamped = Math.max(0, Math.min(1, relativeY / rect.height));
+  // // 处理音符按下事件
+  // const calculateVelocity = useCallback((event: React.PointerEvent<HTMLElement>) => {
+  //   const target = event.currentTarget as HTMLElement;
+  //   const rect = target.getBoundingClientRect();
+  //   const relativeY = event.clientY - rect.top;
+  //   const clamped = Math.max(0, Math.min(1, relativeY / rect.height));
 
-    // 点击越靠近底部力度越强，靠近顶部力度越弱
-    return clamped;
-  }, []);
+  //   // 点击越靠近底部力度越强，靠近顶部力度越弱
+  //   return clamped;
+  // }, []);
 
-  const handleNoteOn = useCallback(
-    (note: number, velocity: number = 0.7) => {
-      setTouchedKeys((prev) => {
-        if (prev.has(note)) {
-          return prev;
-        }
+  // const handleNoteOn = useCallback(
+  //   (note: number, velocity: number = 0.7) => {
+  //     setTouchedKeys((prev) => {
+  //       if (prev.has(note)) {
+  //         return prev;
+  //       }
 
-        const newSet = new Set(prev);
-        newSet.add(note);
+  //       const newSet = new Set(prev);
+  //       newSet.add(note);
 
-        onNoteOn?.(note, velocity);
-        return newSet;
-      });
-    },
-    [onNoteOn]
-  );
+  //       onNoteOn?.(note, velocity);
+  //       return newSet;
+  //     });
+  //   },
+  //   [onNoteOn]
+  // );
 
   // 处理音符释放事件
   const handleNoteOff = useCallback(
@@ -167,17 +167,17 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   }, [onNoteOff]);
 
   // 鼠标/触摸事件处理
-  const handlePointerDown = (note: number) => (e: React.PointerEvent<HTMLElement>) => {
+  const handlePointerDown = (_note: number) => (e: React.PointerEvent<HTMLElement>) => {
     e.preventDefault();
     setIsPointerDown(true);
     releaseOtherNotes();
-    handleNoteOn(note);
+    // handleNoteOn(note);
   };
 
-  const handlePointerEnter = (note: number) => (_e: React.PointerEvent) => {
+  const handlePointerEnter = (_note: number) => (_e: React.PointerEvent) => {
     if (isPointerDown) {
       releaseOtherNotes();
-      handleNoteOn(note);
+      // handleNoteOn(note);
     }
   };
 
