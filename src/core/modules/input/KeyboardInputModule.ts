@@ -347,6 +347,34 @@ export class KeyboardInputModule extends AudioModuleBase {
   }
 
   /**
+   * 更新音符的力度（触后）
+   * @param note 音符编号
+   * @param velocity 新的力度值 (0-1)
+   */
+  public updateVelocity(note: number, velocity: number): void {
+    if (!this.isEnabled()) return;
+
+    // 应用音高转置
+    const transpose = this.getParameterValue('transpose') as number;
+    const transposedNote = Math.max(0, Math.min(127, note + transpose));
+
+    // 只有在音符已激活的情况下才更新力度
+    if (this.activeNoteVelocities.has(transposedNote)) {
+      // 应用力度灵敏度
+      const sensitivity = this.getParameterValue(
+        'velocitySensitivity'
+      ) as number;
+      const scaledVelocity = Math.max(0, Math.min(1, velocity * sensitivity));
+
+      // 更新力度值
+      this.activeNoteVelocities.set(transposedNote, scaledVelocity);
+
+      // 更新输出端口
+      this.updateOutputPorts();
+    }
+  }
+
+  /**
    * 更新输出端口的值
    */
   private updateOutputPorts(): void {
@@ -386,6 +414,8 @@ export class KeyboardInputModule extends AudioModuleBase {
         onNoteOn: (note: number, velocity: number) =>
           this.handleNoteOn(note, velocity),
         onNoteOff: (note: number) => this.handleNoteOff(note),
+        onAftertouch: (note: number, velocity: number) =>
+          this.updateVelocity(note, velocity),
       },
     };
   }

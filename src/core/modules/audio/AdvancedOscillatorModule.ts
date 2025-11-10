@@ -41,6 +41,8 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       // 管理中的声部
       oscillator: any; // 振荡器
       velocityGain: any; // 力度控制增益
+      velocitySignal: any; // 力度信号节点
+      velocityMultiply: any; // 力度乘法器
       envelope: any; // 包络发生器
       active: boolean; // 是否激活
       note: number; // 当前音符
@@ -549,9 +551,15 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       // 获取对应的力度（如果提供）
       const velocity = index < velocities.length ? velocities[index] : 0.7;
 
-      // 如果这个音符已经有声部并且是活跃的，只需更新力度
-      if (this.voices.has(note) && this.voices.get(note)!.active) {
-        this.updateVoiceVelocity(note, velocity);
+      const existingVoice = this.voices.get(note);
+      
+      // 如果这个音符已经有声部并且是活跃的
+      if (existingVoice && existingVoice.active) {
+        // 检查力度是否变化（容差 0.05，约5%的变化）
+        if (Math.abs(existingVoice.velocity - velocity) > 0.05) {
+          // 实时更新力度（触后效果）
+          this.updateVoiceVelocityRealtime(note, velocity);
+        }
       } else {
         // 否则触发新的声部
         this.triggerVoice(note, velocity);
@@ -639,9 +647,19 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
         // 创建力度增益节点
         const velGain = new this.Tone.Gain(0);
+        
+        // 创建一个信号节点用于力度缩放
+        const velSignal = new this.Tone.Signal(velocity);
+        
+        // 创建乘法器，将包络输出乘以力度信号
+        const velMultiply = new this.Tone.Multiply();
 
-        // 连接包络到力度增益控制
-        env.connect(velGain.gain);
+        // 连接：包络 -> 乘法器输入1
+        env.connect(velMultiply);
+        // 连接：力度信号 -> 乘法器输入2
+        velSignal.connect(velMultiply.factor);
+        // 连接：乘法器 -> 增益控制
+        velMultiply.connect(velGain.gain);
 
         // 连接：振荡器 -> 力度增益 -> 混音器
         osc.connect(velGain);
@@ -655,6 +673,8 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         const voiceData = {
           oscillator: osc,
           velocityGain: velGain,
+          velocitySignal: velSignal,
+          velocityMultiply: velMultiply,
           envelope: env,
           active: true,
           note: note,
@@ -699,6 +719,11 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     voice.velocity = velocity;
     voice.triggerTime = Date.now();
     voice.active = true;
+
+    // 更新力度信号值
+    if (voice.velocitySignal) {
+      voice.velocitySignal.value = velocity;
+    }
 
     if (!voice.envelope) {
       this.applyParameterRamp(
@@ -785,6 +810,48 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
   }
 
   /**
+   * 实时更新声部的力度（不重新触发包络）
+   * @param note MIDI音符
+   * @param velocity 新的力度值 (0-1)
+   */
+  private updateVoiceVelocityRealtime(note: number, velocity: number): void {
+    if (!this.voices.has(note)) return;
+
+    const voice = this.voices.get(note)!;
+    
+    // 更新存储的力度值
+    voice.velocity = velocity;
+
+    // 实时更新 velocitySignal 的值，使用平滑渐变
+    if (voice.velocitySignal) {
+      const now = this.Tone.now();
+      const rampTime = 0.03; // 30ms 的平滑时间，更快响应但仍然平滑
+      
+      // 取消之前的自动化
+      voice.velocitySignal.cancelScheduledValues(now);
+      
+      // 获取当前实际值（考虑正在进行的渐变）
+      const currentValue = voice.velocitySignal.value;
+      
+      // 设置起始点
+      voice.velocitySignal.setValueAtTime(currentValue, now);
+      
+      // 平滑过渡到新值
+      // 对于接近0的值使用 linearRamp，其他情况使用 exponentialRamp（更自然）
+      if (velocity > 0.01 && currentValue > 0.01) {
+        voice.velocitySignal.exponentialRampToValueAtTime(
+          Math.max(0.01, velocity), 
+          now + rampTime
+        );
+      } else {
+        voice.velocitySignal.linearRampToValueAtTime(velocity, now + rampTime);
+      }
+      
+      this.debugInfo = `实时更新力度: note=${note}, velocity=${velocity.toFixed(2)}`;
+    }
+  }
+
+  /**
    * 销毁一个声部并释放资源
    * @param note MIDI音符
    */
@@ -804,6 +871,16 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       if (voice.envelope) {
         voice.envelope.disconnect();
         voice.envelope.dispose();
+      }
+
+      if (voice.velocityMultiply) {
+        voice.velocityMultiply.disconnect();
+        voice.velocityMultiply.dispose();
+      }
+
+      if (voice.velocitySignal) {
+        voice.velocitySignal.disconnect();
+        voice.velocitySignal.dispose();
       }
 
       if (voice.velocityGain) {
