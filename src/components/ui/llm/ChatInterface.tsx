@@ -7,7 +7,8 @@ import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Loader2, Send, Wrench, Plus } from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings';
-import { LocalAIClient, ChatMessage } from '@/lib/mcp/client';
+import { LangChainClient } from '@/lib/mcp/langchainClient';
+import { ChatMessage } from '@/lib/mcp/client';
 import { getSystemPrompt } from '@/lib/mcp/systemPrompt';
 
 export function ChatInterface() {
@@ -24,7 +25,7 @@ export function ChatInterface() {
   const [useTools, setUseTools] = useState(true);
 
   // AI客户端实例
-  const aiClient = LocalAIClient.getInstance();
+  const aiClient = LangChainClient.getInstance();
 
   // 当组件首次加载时，添加系统提示
   useEffect(() => {

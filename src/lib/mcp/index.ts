@@ -3,6 +3,7 @@
  */
 
 export { LocalAIClient } from './client';
+export { LangChainClient } from './langchainClient';
 export { MCPToolExecutor } from './executor';
 export { mcpTools } from './tools';
 export { getSystemPrompt } from './systemPrompt';

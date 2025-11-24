@@ -74,7 +74,7 @@ export class MCPToolExecutor {  /**
   /**
    * 获取画布上的所有模块
    */
-  private static async getCanvasModules() {
+  public static async getCanvasModules() {
     const store = await this.getStore();
     const modules = (store.nodes as FlowNode[]).map((node) => ({
       id: node.id,
@@ -98,7 +98,7 @@ export class MCPToolExecutor {  /**
   /**
    * 获取指定模块的详细信息
    */
-  private static async getModuleDetails(moduleId: string) {
+  public static async getModuleDetails(moduleId: string) {
     const store = await this.getStore();
     const node = (store.nodes as FlowNode[]).find((n) => n.id === moduleId);
 
@@ -143,7 +143,7 @@ export class MCPToolExecutor {  /**
   /**
    * 获取画布上的所有连接
    */
-  private static async getCanvasConnections() {
+  public static async getCanvasConnections() {
     const store = await this.getStore();
     const connections = (store.edges as FlowEdge[]).map((edge) => ({
       id: edge.id,
@@ -166,7 +166,7 @@ export class MCPToolExecutor {  /**
   /**
    * RAG: 本地向量检索
    */
-  private static async ragSearch(query: string, topK: number) {
+  public static async ragSearch(query: string, topK: number) {
     if (!query || typeof query !== 'string') {
       return { success: false, error: 'query is required' };
     }
