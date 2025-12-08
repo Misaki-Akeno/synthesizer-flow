@@ -1,1 +1,0 @@
-CREATE INDEX "rag_documents_embedding_idx" ON "rag_documents" USING hnsw ("embedding" vector_cosine_ops);

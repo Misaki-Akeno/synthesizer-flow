@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1745382480830,
-      "tag": "0000_big_sage",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1765160518534,
-      "tag": "0001_old_naoko",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1765161222252,
-      "tag": "0002_chief_ronan",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1765161958737,
-      "tag": "0003_medical_penance",
+      "when": 1765164391608,
+      "tag": "0000_first_enchantress",
       "breakpoints": true
     }
   ]
