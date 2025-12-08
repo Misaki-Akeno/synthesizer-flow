@@ -13,7 +13,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "drizzle:generate": "drizzle-kit generate --config drizzle.config.ts",
-    "drizzle:push": "drizzle-kit push --config drizzle.config.ts"
+    "drizzle:migrate": "drizzle-kit migrate --config drizzle.config.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.9.0",

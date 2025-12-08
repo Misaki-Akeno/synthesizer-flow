@@ -13,6 +13,7 @@ import ChangeLogger from './ChangeLogger';
 import ViewportLogger from './ViewportLogger';
 import EdgeModuleLogger from './EdgeModuleLogger';
 import SerializationTester from './SerializationTester';
+import RagDebugger from './RagDebugger';
 
 interface DevToolsProps {
   onClose: () => void;
@@ -21,7 +22,7 @@ interface DevToolsProps {
 export default function DevTools({ onClose }: DevToolsProps) {
   return (
     <div className="w-full h-full flex flex-col">
-      {/* 标题栏 */}
+      {/* Header */}
       <div className="flex items-center justify-between p-2 border-b">
         <h2 className="text-sm font-medium pl-1">开发工具</h2>
         <Button
@@ -34,15 +35,19 @@ export default function DevTools({ onClose }: DevToolsProps) {
         </Button>
       </div>
 
-      {/* 内容区域 */}
+      {/* Content */}
       <div className="flex-1 overflow-auto">
         <Accordion
           type="multiple"
-          defaultValue={['serialization-tester', 'edge-module-logger']}
+          defaultValue={['serialization-tester', 'rag-debugger', 'edge-module-logger']}
           className="w-full"
         >
           <DevToolSection id="serialization-tester" title="项目保存/加载">
             <SerializationTester />
+          </DevToolSection>
+
+          <DevToolSection id="rag-debugger" title="RAG 调试">
+            <RagDebugger />
           </DevToolSection>
 
           <DevToolSection id="edge-module-logger" title="边和模块信息">

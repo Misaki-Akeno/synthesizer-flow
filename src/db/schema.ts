@@ -8,8 +8,15 @@ import {
   timestamp,
   primaryKey,
   index,
+  jsonb,
+  vector,
 } from 'drizzle-orm/pg-core';
-import { InferSelectModel, InferInsertModel } from 'drizzle-orm';
+import { InferSelectModel, InferInsertModel, sql } from 'drizzle-orm';
+
+const RAG_VECTOR_DIM =
+  Number(process.env.RAG_EMBEDDINGS_DIM) && Number.isFinite(Number(process.env.RAG_EMBEDDINGS_DIM))
+    ? Number(process.env.RAG_EMBEDDINGS_DIM)
+    : 1536;
 
 // 定义 users 表，符合 NextAuth 需求
 export const users = pgTable('users', {
@@ -87,3 +94,30 @@ export type NewUser = InferInsertModel<typeof users>;
 export type Account = InferSelectModel<typeof accounts>;
 export type Session = InferSelectModel<typeof sessions>;
 export type VerificationToken = InferSelectModel<typeof verificationTokens>;
+
+// pgvector extension (Vercel Postgres already ships with it, but ensure enabled in migrations)
+export const vectorExtension = sql`create extension if not exists vector`;
+
+// RAG documents table with pgvector embedding column
+export const ragDocuments = pgTable(
+  'rag_documents',
+  {
+    id: varchar('id', { length: 255 }).notNull().primaryKey(),
+    textSnippet: text('text_snippet').notNull(),
+    embedding: vector('embedding', { dimensions: RAG_VECTOR_DIM }).notNull(),
+    meta: jsonb('meta'),
+    model: varchar('model', { length: 255 }).notNull(),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    // 'hnsw' 是算法，'vector_cosine_ops' 是用于余弦相似度的操作符
+    embeddingIndex: index('rag_documents_embedding_idx').using(
+      'hnsw',
+      table.embedding.op('vector_cosine_ops')
+    ),
+  })
+);
+
+export type RagDocument = InferSelectModel<typeof ragDocuments>;
+export type NewRagDocument = InferInsertModel<typeof ragDocuments>;

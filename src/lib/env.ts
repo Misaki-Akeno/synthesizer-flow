@@ -20,6 +20,7 @@ const envSchema = z.object({
   RAG_EMBEDDINGS_MODEL: z.string().optional(),
   RAG_EMBEDDINGS_API_KEY: z.string().optional(),
   RAG_EMBEDDINGS_BASE_URL: z.string().url().optional(),
+  RAG_EMBEDDINGS_DIM: z.coerce.number().int().positive().optional(),
 });
 
 /**
@@ -40,6 +41,7 @@ function parseEnv() {
     RAG_EMBEDDINGS_MODEL: process.env.RAG_EMBEDDINGS_MODEL,
     RAG_EMBEDDINGS_API_KEY: process.env.RAG_EMBEDDINGS_API_KEY,
     RAG_EMBEDDINGS_BASE_URL: process.env.RAG_EMBEDDINGS_BASE_URL,
+    RAG_EMBEDDINGS_DIM: process.env.RAG_EMBEDDINGS_DIM,
   };
 
   try {
