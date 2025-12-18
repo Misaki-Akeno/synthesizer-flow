@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server';
 import { upsertDocuments } from '@/lib/rag/vectorStore';
+import { auth } from '@/lib/auth/auth';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   try {
+    // 1. 鉴权检查
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
     // log body summary for debugging (avoid logging secrets)
     try {
