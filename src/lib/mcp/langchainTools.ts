@@ -13,6 +13,39 @@ const ragSearchSchema = z.object({
   topK: z.number().optional().default(5).describe('返回条数，默认5，最大20'),
 });
 
+const addModuleSchema = z.object({
+  type: z.string().describe('模块类型 (例如: oscillator, filter, gain, etc.)'),
+  label: z.string().describe('模块标签/名称'),
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+  }).optional().describe('模块位置 (可选)'),
+});
+
+const deleteModuleSchema = z.object({
+  moduleId: z.string().describe('要删除的模块ID'),
+});
+
+const updateModuleParameterSchema = z.object({
+  moduleId: z.string().describe('模块ID'),
+  paramKey: z.string().describe('参数名称'),
+  value: z.union([z.string(), z.number(), z.boolean()]).describe('参数值'),
+});
+
+const connectModulesSchema = z.object({
+  sourceId: z.string().describe('源模块ID'),
+  targetId: z.string().describe('目标模块ID'),
+  sourceHandle: z.string().optional().describe('源模块句柄 (可选)'),
+  targetHandle: z.string().optional().describe('目标模块句柄 (可选)'),
+});
+
+const disconnectModulesSchema = z.object({
+  sourceId: z.string().describe('源模块ID'),
+  targetId: z.string().describe('目标模块ID'),
+  sourceHandle: z.string().optional().describe('源模块句柄 (可选)'),
+  targetHandle: z.string().optional().describe('目标模块句柄 (可选)'),
+});
+
 // 强制类型转换以避免 TypeScript 深度推断导致的 OOM
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const DynamicStructuredToolAny = DynamicStructuredTool as any;
@@ -59,9 +92,69 @@ export const ragSearchTool = new DynamicStructuredToolAny({
   },
 });
 
+export const addModuleTool = new DynamicStructuredToolAny({
+  name: 'add_module',
+  description: '在画布上添加一个新的音频模块',
+  schema: addModuleSchema,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  func: async ({ type, label, position }: any) => {
+    const result = await MCPToolExecutor.addModule(type, label, position);
+    return JSON.stringify(result);
+  },
+});
+
+export const deleteModuleTool = new DynamicStructuredToolAny({
+  name: 'delete_module',
+  description: '从画布上删除指定的模块',
+  schema: deleteModuleSchema,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  func: async ({ moduleId }: any) => {
+    const result = await MCPToolExecutor.deleteModule(moduleId);
+    return JSON.stringify(result);
+  },
+});
+
+export const updateModuleParameterTool = new DynamicStructuredToolAny({
+  name: 'update_module_parameter',
+  description: '更新指定模块的参数值',
+  schema: updateModuleParameterSchema,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  func: async ({ moduleId, paramKey, value }: any) => {
+    const result = await MCPToolExecutor.updateModuleParameter(moduleId, paramKey, value);
+    return JSON.stringify(result);
+  },
+});
+
+export const connectModulesTool = new DynamicStructuredToolAny({
+  name: 'connect_modules',
+  description: '连接两个模块',
+  schema: connectModulesSchema,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  func: async ({ sourceId, targetId, sourceHandle, targetHandle }: any) => {
+    const result = await MCPToolExecutor.connectModules(sourceId, targetId, sourceHandle, targetHandle);
+    return JSON.stringify(result);
+  },
+});
+
+export const disconnectModulesTool = new DynamicStructuredToolAny({
+  name: 'disconnect_modules',
+  description: '断开两个模块之间的连接',
+  schema: disconnectModulesSchema,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  func: async ({ sourceId, targetId, sourceHandle, targetHandle }: any) => {
+    const result = await MCPToolExecutor.disconnectModules(sourceId, targetId, sourceHandle, targetHandle);
+    return JSON.stringify(result);
+  },
+});
+
 export const tools = [
   getCanvasModulesTool,
   getModuleDetailsTool,
   getCanvasConnectionsTool,
+  addModuleTool,
+  deleteModuleTool,
+  updateModuleParameterTool,
+  connectModulesTool,
+  disconnectModulesTool,
   ragSearchTool,
 ];

@@ -45,7 +45,7 @@ export class LangChainClient {
           baseURL: settings.apiEndpoint,
         },
         modelName: settings.modelName,
-        temperature: 0.7,
+        temperature: 0,
         streaming: false,
       });
 
