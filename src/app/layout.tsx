@@ -19,7 +19,7 @@ export default function RootLayout({
       <body className={`antialiased`}>
         <AuthProvider>{children}</AuthProvider>
         <Toaster />
-        <SpeedInsights />
+        {process.env.NODE_ENV === 'production' && <SpeedInsights />}
       </body>
     </html>
   );

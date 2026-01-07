@@ -86,3 +86,41 @@ applyTo: '**'
   - 考虑兼容性和对其他模块的影响
   - 小的bug修复可直接实施
   - 参考开源项目的最佳实践
+
+## Langchain Agent 系统
+
+本项目集成了基于 Langchain 的 AI Agent 系统，允许 LLM 与应用状态进行交互并执行操作。
+
+### 架构概述
+
+Agent 系统位于 `src/lib/mcp/` 目录下，实现了 Model Context Protocol (MCP) 的核心概念。
+
+- **核心逻辑**: `src/lib/mcp/`
+- **UI 组件**: `src/components/ui/llm/`
+
+### 关键文件
+
+- **`src/lib/mcp/langchainClient.ts`**: Langchain 客户端单例，负责管理与 LLM 的连接、消息历史和工具调用。
+- **`src/lib/mcp/executor.ts`**: `MCPToolExecutor` 类，包含工具的具体实现逻辑（如获取画布状态、搜索文档等）。
+- **`src/lib/mcp/langchainTools.ts`**: 定义 Langchain 工具（`DynamicStructuredTool`），将 Zod Schema 映射到 `MCPToolExecutor` 的方法。
+- **`src/lib/mcp/systemPrompt.ts`**: 生成系统提示词，定义 Agent 的角色和行为准则。
+
+### 开发指南
+
+#### 添加新工具 (Tool)
+
+1.  **实现逻辑**: 在 `src/lib/mcp/executor.ts` 的 `MCPToolExecutor` 类中添加静态方法实现业务逻辑。
+2.  **定义工具**: 在 `src/lib/mcp/langchainTools.ts` 中：
+    - 定义 Zod Schema 描述输入参数。
+    - 创建 `DynamicStructuredTool` 实例，绑定 Schema 和 Executor 方法。
+    - 将新工具添加到底部的 `tools` 数组导出。
+
+#### 调试与日志
+
+- 使用 `createModuleLogger('LangChainClient')` 或 `createModuleLogger('MCPExecutor')` 进行日志记录。
+- 在 `ChatInterface` 中可以查看交互过程。
+
+#### RAG 集成
+
+- RAG 功能已作为 `rag_search` 工具集成，Agent 可通过此工具检索本地知识库。
+
