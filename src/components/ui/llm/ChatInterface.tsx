@@ -7,9 +7,10 @@ import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Loader2, Send, Wrench, Plus } from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings';
-import { LangChainClient } from '@/lib/mcp/langchainClient';
-import { ChatMessage } from '@/lib/mcp/client';
-import { getSystemPrompt } from '@/lib/mcp/systemPrompt';
+import { useFlowStore } from '@/store/store';
+import { ChatMessage, ClientOperation } from '@/agent';
+import { getSystemPrompt } from '@/agent/prompts/system';
+import { chatWithAgent } from '@/agent/actions';
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -20,12 +21,19 @@ export function ChatInterface() {
   // 获取AI设置
   const aiSettings = useAISettings();
   const isAIConfigured = useIsAIConfigured();
+  
+  // 获取Store操作方法
+  const { 
+    addNode, 
+    deleteNode, 
+    updateModuleParameter, 
+    onConnect, 
+    onEdgesChange,
+    edges: currentEdges 
+  } = useFlowStore();
 
   // 是否启用工具功能
   const [useTools, setUseTools] = useState(true);
-
-  // AI客户端实例
-  const aiClient = LangChainClient.getInstance();
 
   // 当组件首次加载时，添加系统提示
   useEffect(() => {
@@ -39,6 +47,7 @@ export function ChatInterface() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ... (useTools effect remains same)
   // 当 useTools 切换时，仅更新系统提示内容，不清空历史
   useEffect(() => {
     setMessages((prev) => {
@@ -50,7 +59,6 @@ export function ChatInterface() {
           },
         ];
       }
-      // 若首条为 system，则更新其内容；否则在最前面插入一条 system
       const first = prev[0];
       if (first.role === 'system') {
         const updated = [...prev];
@@ -69,6 +77,44 @@ export function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const executeClientOperations = (operations: ClientOperation[]) => {
+    operations.forEach(op => {
+      console.log('执行操作:', op);
+      switch(op.type) {
+        case 'ADD_MODULE':
+          addNode(op.data.type, op.data.label, op.data.position);
+          break;
+        case 'DELETE_MODULE':
+          deleteNode(op.data.id);
+          break;
+        case 'UPDATE_MODULE_PARAM':
+          updateModuleParameter(op.data.id, op.data.key, op.data.value as string | number | boolean);
+          break;
+        case 'CONNECT_MODULES':
+          onConnect({
+            source: op.data.source,
+            target: op.data.target,
+            sourceHandle: op.data.sourceHandle || null,
+            targetHandle: op.data.targetHandle || null
+          });
+          break;
+        case 'DISCONNECT_MODULES': 
+        {
+          const edge = currentEdges.find(e => 
+            e.source === op.data.source && 
+            e.target === op.data.target &&
+            (!op.data.sourceHandle || e.sourceHandle === op.data.sourceHandle) &&
+            (!op.data.targetHandle || e.targetHandle === op.data.targetHandle)
+          );
+          if (edge) {
+            onEdgesChange([{ type: 'remove', id: edge.id }]);
+          }
+          break;
+        }
+      }
+    });
+  };
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading || !isAIConfigured) return;
 
@@ -82,9 +128,20 @@ export function ChatInterface() {
     setIsLoading(true);
 
     try {
-      const response = await aiClient.sendMessage(
+      // 捕获当前状态快照 (sanitize to remove non-serializable data)
+      const currentNodes = useFlowStore.getState().nodes.map(n => ({
+        ...n,
+        data: {
+          ...n.data,
+          module: undefined // 移除不可序列化的 module 实例
+        }
+      }));
+      const currentEdgesSnapshot = useFlowStore.getState().edges;
+
+      const response = await chatWithAgent(
         [...messages, userMessage],
         aiSettings,
+        { nodes: currentNodes, edges: currentEdgesSnapshot },
         useTools
       );
 
@@ -94,6 +151,11 @@ export function ChatInterface() {
       // 如果有工具调用，可以显示额外信息
       if (response.hasToolUse && response.toolCalls) {
         console.log('AI使用了工具:', response.toolCalls);
+      }
+
+      // 执行客户端操作
+      if (response.clientOperations && response.clientOperations.length > 0) {
+        executeClientOperations(response.clientOperations);
       }
 
     } catch (error) {

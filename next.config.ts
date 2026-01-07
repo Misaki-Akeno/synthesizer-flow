@@ -18,6 +18,26 @@ const nextConfig: NextConfig = {
       ...(config.resolve.alias || {}),
       '@': path.resolve(__dirname, 'src'),
     };
+    
+    // 解决 LangChain 在客户端使用的 Node.js 模块依赖问题
+    if (!config.resolve.fallback) {
+      config.resolve.fallback = {};
+    }
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      net: false,
+      tls: false,
+      crypto: false,
+      stream: false,
+      http: false,
+      https: false,
+      zlib: false,
+      path: false,
+      os: false,
+      'node:async_hooks': false,
+    };
+
     return config;
   },
   // Turbopack配置

@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.8.0 (2026-01-07)
+
+### Architecture
+
+- **Agent System Refactoring**: Completely refactored the AI Agent system to use a Server-Side State Simulation architecture.
+  - Replaced legacy LangChain loop with **LangGraph** state machine.
+  - Moved execution to **Server Actions** to resolve client-side build issues (`node:async_hooks`) and improve security.
+  - Implemented `ClientOperation` pattern to safely manipulate Canvas state from the server.
+  - Removed "langchain" from naming conventions for clarity.
+  - Updated namespace to `src/agent`.
+
+## 0.7.9 (2025-12-21)
+
+### Security
+
+- **React CVE Fix**: Fixed a major security vulnerability in the React dependency.
+
+## 0.7.8 (2025-11-24)
+
+### Features
+
+- **LangChain Support**: Added comprehensive LangChain integration.
+- **RAG Migration**: Migrated RAG storage to Neon Database vector store.
+
+### Architecture
+
+- **DrizzleORM**: Refactored database migration strategy.
+
+## 0.7.7 (2025-11-10)
+
+### Features
+
+- **Piano Input**: Added support for Aftertouch events.
+
+## 0.7.6 (2025-10-27)
+
+### Features
+
+- **New Synthesizer**: Added a new compact synthesizer module.
+
+### Bug Fixes
+
+- **Piano Input**: Fixed issue with fixed velocity values.
+- **Connections**: Fixed issue where connections could not be disconnected.
+
+## 0.7.6-alpha (2025-09-09)
+
+### Features
+
+- **MCP Integration**: Added basic MCP (Model Context Protocol) tool interfaces.
+- **RAG**: Prepared basic support for Retrieval-Augmented Generation.
+
 ## 0.7.5 (2025-06-13)
 
 添加了MCP功能。
@@ -11,11 +63,13 @@
 ### 🎨 设置系统重构与架构优化
 
 - **彻底重构设置系统**: 完全重写应用设置管理，提供更简洁安全的API
+
   - 创建专门的 `/src/store/settings.ts` 处理应用设置
   - 实现便捷的Hook函数：`useCanvasSettings()`, `useAISettings()`, `useIsAIConfigured()`
   - 内置多层安全保护，自动处理未初始化数据，解决生产环境报错问题
 
 - **分离关注点架构**: 实现项目管理与设置管理的完全分离
+
   - 重构 `/src/store/project-store.ts` 专门负责项目数据管理
   - 删除臃肿的混合文件 `persist-store.ts`，让代码更清晰专业
   - 更新所有相关组件的导入路径，保持向后兼容

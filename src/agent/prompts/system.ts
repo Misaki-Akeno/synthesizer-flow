@@ -2,7 +2,6 @@
  * 系统提示 - 为AI定义角色和能力
  */
 
-// TODO: 修复第二次对话不调用工具的问题
 export function getSystemPrompt(useTools: boolean = true): string {
   const toolStatus = useTools ? '已启用' : '已禁用';
   const toolPolicy = useTools
