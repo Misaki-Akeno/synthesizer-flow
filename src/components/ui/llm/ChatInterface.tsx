@@ -5,10 +5,18 @@ import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Switch } from '@/components/ui/shadcn/switch';
-import { Loader2, Send, Wrench, Plus } from 'lucide-react';
+import {
+  Loader2,
+  Send,
+  Wrench,
+  Plus,
+  ChevronDown,
+  ChevronRight,
+  Terminal,
+} from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings';
 import { useFlowStore } from '@/store/store';
-import { ChatMessage, ClientOperation } from '@/agent';
+import { ChatMessage, ClientOperation, ToolCall } from '@/agent';
 import { getSystemPrompt } from '@/agent/prompts/system';
 import { chatWithAgent } from '@/agent/actions';
 import ReactMarkdown from 'react-markdown';
@@ -150,7 +158,13 @@ export function ChatInterface() {
       );
 
       // 添加AI的响应
-      setMessages((prev) => [...prev, response.message]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          ...response.message,
+          toolCalls: response.hasToolUse ? response.toolCalls : undefined,
+        },
+      ]);
 
       // 如果有工具调用，可以显示额外信息
       if (response.hasToolUse && response.toolCalls) {
@@ -225,26 +239,29 @@ export function ChatInterface() {
               displayMessages.map((msg, index) => (
                 <div
                   key={index}
-                  className={`p-3 rounded-lg ${msg.role === 'user'
+                  className={`p-3 rounded-lg max-w-full ${msg.role === 'user'
                     ? 'bg-blue-100 dark:bg-blue-900 ml-8'
                     : 'bg-gray-100 dark:bg-gray-800 mr-8'
                     }`}
                 >
-                  <div className="prose dark:prose-invert prose-sm max-w-none">
+                  <div className="prose dark:prose-invert prose-sm max-w-none break-words overflow-x-hidden">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
                         code({ inline, className, children, ...props }: React.ComponentPropsWithoutRef<'code'> & { inline?: boolean }) {
                           const match = /language-(\w+)/.exec(className || '');
                           return !inline && match ? (
-                            <SyntaxHighlighter
-                              {...props}
-                              style={oneDark}
-                              language={match[1]}
-                              PreTag="div"
-                            >
-                              {String(children).replace(/\n$/, '')}
-                            </SyntaxHighlighter>
+                            <div className="w-full overflow-x-auto rounded-md">
+                              <SyntaxHighlighter
+                                {...props}
+                                style={oneDark}
+                                language={match[1]}
+                                PreTag="div"
+                                customStyle={{ margin: 0, borderRadius: 0 }}
+                              >
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            </div>
                           ) : (
                             <code {...props} className={className}>
                               {children}
@@ -255,6 +272,9 @@ export function ChatInterface() {
                     >
                       {msg.content}
                     </ReactMarkdown>
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <ToolCallsDisplay toolCalls={msg.toolCalls} />
+                    )}
                   </div>
                 </div>
               ))
@@ -310,6 +330,61 @@ export function ChatInterface() {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ToolCallsDisplay({ toolCalls }: { toolCalls: ToolCall[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (!toolCalls || toolCalls.length === 0) return null;
+
+  const formatJson = (str: string) => {
+    try {
+      const parsed = JSON.parse(str);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return str;
+    }
+  };
+
+  return (
+    <div className="mt-2 rounded-md border bg-muted/50 text-sm w-full block">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center gap-2 p-2 hover:bg-muted/60 transition-colors text-muted-foreground"
+      >
+        {isOpen ? (
+          <ChevronDown className="h-4 w-4" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
+        <Terminal className="h-4 w-4" />
+        <span className="font-medium">工具调用 ({toolCalls.length})</span>
+      </button>
+
+      {isOpen && (
+        <div className="border-t p-2 space-y-2 w-full grid grid-cols-1">
+          {toolCalls.map((call) => (
+            <div key={call.id} className="text-xs space-y-1 w-full min-w-0">
+              <div className="font-semibold text-primary">
+                {call.function.name}
+              </div>
+              <div className="w-full p-2 rounded border bg-background font-mono text-muted-foreground whitespace-pre overflow-auto max-h-60 text-[10px] leading-tight">
+                {formatJson(call.function.arguments)}
+              </div>
+              {call.result && (
+                <div className="mt-1 w-full min-w-0">
+                  <div className="font-semibold text-primary/80 text-[10px] uppercase">Result</div>
+                  <div className="w-full p-2 rounded border bg-muted font-mono text-muted-foreground whitespace-pre overflow-auto max-h-60 text-[10px] leading-tight">
+                    {formatJson(call.result)}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

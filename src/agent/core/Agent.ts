@@ -1,5 +1,5 @@
 import { ChatOpenAI } from '@langchain/openai';
-import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage, SystemMessage, BaseMessage, ToolMessage } from '@langchain/core/messages';
 import { AISettings } from '@/store/settings';
 import { createModuleLogger } from '@/lib/logger';
 import { ChatMessage, ChatResponse, GraphStateSnapshot } from './types';
@@ -30,9 +30,9 @@ export class Agent {
     }
 
     try {
-      logger.info('Initializing Agent Request', { 
-        model: settings.modelName, 
-        useTools 
+      logger.info('Initializing Agent Request', {
+        model: settings.modelName,
+        useTools
       });
 
       // Initialize Model
@@ -50,7 +50,7 @@ export class Agent {
       // Even if useTools is false, we might want to initialize executor to ensure consistent behavior,
       // but if useTools is false, we pass empty tools?
       // Logic for useTools: if false, we don't bind tools.
-      
+
       let graph;
       let executor;
 
@@ -86,26 +86,33 @@ export class Agent {
       const result = await graph.invoke({ messages: inputs }, config);
       const finalMessages = result.messages;
       const lastMessage = finalMessages[finalMessages.length - 1];
-      
+
       if (!lastMessage) {
         throw new Error('No response from agent');
       }
-      
-      const responseContent = typeof lastMessage.content === 'string' 
-        ? lastMessage.content 
+
+      const responseContent = typeof lastMessage.content === 'string'
+        ? lastMessage.content
         : JSON.stringify(lastMessage.content);
 
       // Find tool calls in the conversation history of this turn
       const allToolCalls = finalMessages
         .filter((m: BaseMessage) => m._getType() === 'ai' && (m as AIMessage).tool_calls && (m as AIMessage).tool_calls!.length > 0)
-        .flatMap((m: BaseMessage) => ((m as AIMessage).tool_calls || []).map(tc => ({
-          id: tc.id || 'unknown',
-          type: 'function' as const,
-          function: {
-            name: tc.name,
-            arguments: JSON.stringify(tc.args),
-          },
-        })));
+        .flatMap((m: BaseMessage) => ((m as AIMessage).tool_calls || []).map(tc => {
+          const toolMessage = finalMessages.find((msg: BaseMessage) =>
+            msg._getType() === 'tool' && (msg as ToolMessage).tool_call_id === tc.id
+          ) as ToolMessage | undefined;
+
+          return {
+            id: tc.id || 'unknown',
+            type: 'function' as const,
+            function: {
+              name: tc.name,
+              arguments: JSON.stringify(tc.args),
+            },
+            result: toolMessage ? (typeof toolMessage.content === 'string' ? toolMessage.content : JSON.stringify(toolMessage.content)) : undefined
+          };
+        }));
 
       return {
         message: {

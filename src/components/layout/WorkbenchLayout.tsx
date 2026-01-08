@@ -20,13 +20,13 @@ export function WorkbenchLayout({ children }: WorkbenchLayoutProps) {
 
     return (
         <ResizablePanelGroup direction="horizontal" className="flex-1 w-full h-full">
-            <ResizablePanel defaultSize={isAuxPanelOpen ? 75 : 100} minSize={30}>
+            <ResizablePanel>
                 <div className="h-full w-full relative">{children}</div>
             </ResizablePanel>
             {isAuxPanelOpen && (
                 <>
                     <ResizableHandle withHandle />
-                    <ResizablePanel defaultSize={400} minSize={300} maxSize={600}>
+                    <ResizablePanel defaultSize={400} minSize={350} maxSize={1000}>
                         <AuxiliarySidebar className="h-full w-full" />
                     </ResizablePanel>
                 </>
