@@ -11,6 +11,10 @@ import { useFlowStore } from '@/store/store';
 import { ChatMessage, ClientOperation } from '@/agent';
 import { getSystemPrompt } from '@/agent/prompts/system';
 import { chatWithAgent } from '@/agent/actions';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -21,15 +25,15 @@ export function ChatInterface() {
   // 获取AI设置
   const aiSettings = useAISettings();
   const isAIConfigured = useIsAIConfigured();
-  
+
   // 获取Store操作方法
-  const { 
-    addNode, 
-    deleteNode, 
-    updateModuleParameter, 
-    onConnect, 
+  const {
+    addNode,
+    deleteNode,
+    updateModuleParameter,
+    onConnect,
     onEdgesChange,
-    edges: currentEdges 
+    edges: currentEdges
   } = useFlowStore();
 
   // 是否启用工具功能
@@ -80,7 +84,7 @@ export function ChatInterface() {
   const executeClientOperations = (operations: ClientOperation[]) => {
     operations.forEach(op => {
       console.log('执行操作:', op);
-      switch(op.type) {
+      switch (op.type) {
         case 'ADD_MODULE':
           addNode(op.data.type, op.data.label, op.data.position);
           break;
@@ -98,19 +102,19 @@ export function ChatInterface() {
             targetHandle: op.data.targetHandle || null
           });
           break;
-        case 'DISCONNECT_MODULES': 
-        {
-          const edge = currentEdges.find(e => 
-            e.source === op.data.source && 
-            e.target === op.data.target &&
-            (!op.data.sourceHandle || e.sourceHandle === op.data.sourceHandle) &&
-            (!op.data.targetHandle || e.targetHandle === op.data.targetHandle)
-          );
-          if (edge) {
-            onEdgesChange([{ type: 'remove', id: edge.id }]);
+        case 'DISCONNECT_MODULES':
+          {
+            const edge = currentEdges.find(e =>
+              e.source === op.data.source &&
+              e.target === op.data.target &&
+              (!op.data.sourceHandle || e.sourceHandle === op.data.sourceHandle) &&
+              (!op.data.targetHandle || e.targetHandle === op.data.targetHandle)
+            );
+            if (edge) {
+              onEdgesChange([{ type: 'remove', id: edge.id }]);
+            }
+            break;
           }
-          break;
-        }
       }
     });
   };
@@ -221,16 +225,37 @@ export function ChatInterface() {
               displayMessages.map((msg, index) => (
                 <div
                   key={index}
-                  className={`p-3 rounded-lg ${
-                    msg.role === 'user'
-                      ? 'bg-blue-100 dark:bg-blue-900 ml-8'
-                      : 'bg-gray-100 dark:bg-gray-800 mr-8'
-                  }`}
+                  className={`p-3 rounded-lg ${msg.role === 'user'
+                    ? 'bg-blue-100 dark:bg-blue-900 ml-8'
+                    : 'bg-gray-100 dark:bg-gray-800 mr-8'
+                    }`}
                 >
-                  <div className="text-sm">
-                    {msg.role === 'user' ? '你' : 'AI助手'}:
+                  <div className="prose dark:prose-invert prose-sm max-w-none">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({ inline, className, children, ...props }: React.ComponentPropsWithoutRef<'code'> & { inline?: boolean }) {
+                          const match = /language-(\w+)/.exec(className || '');
+                          return !inline && match ? (
+                            <SyntaxHighlighter
+                              {...props}
+                              style={oneDark}
+                              language={match[1]}
+                              PreTag="div"
+                            >
+                              {String(children).replace(/\n$/, '')}
+                            </SyntaxHighlighter>
+                          ) : (
+                            <code {...props} className={className}>
+                              {children}
+                            </code>
+                          );
+                        },
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
                   </div>
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
                 </div>
               ))
             )}
