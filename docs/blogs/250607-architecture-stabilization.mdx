@@ -1,0 +1,58 @@
+---
+title: '代码大扫除：设置系统的重构与架构稳定化'
+date: '2025-06-07'
+tags: ['Refactoring', 'State Management', 'TypeScript', 'Zustand', 'Architecture']
+draft: false
+summary: '在功能快速迭代之后，我们需要停下来偿还技术债务。本文深入探讨了配置管理系统的重构，以及如何通过分离关注点来提升应用的稳定性。'
+---
+
+# 代码大扫除：设置系统的重构与架构稳定化
+
+在0.7.5版本之前，SynthesizerFlow经历了一段疯狂的功能增长期。虽然功能多了，但代码库中开始出现了一些"坏味道"。最明显的问题就是**项目数据**与**应用设置**的耦合。
+
+## 问题：状态的混杂
+
+在早期的`persist-store.ts`中，我们将所有的持久化数据都塞进了一个巨大的Zustand store里：
+- 用户的当前项目（节点、连线）
+- 用户的偏好设置（深色模式、自动保存开关）
+- 临时的UI状态（侧边栏是否展开）
+
+这导致了严重的问题：当你想要导出一个项目文件时，不得不小心翼翼地剔除掉那些属于用户个人偏好的设置数据。而且，简单的设置修改可能会意外触发整个项目数据的重渲染。
+
+## 解决方案：关注点分离
+
+在0.7.5版本中，我们进行了大刀阔斧的重构，核心原则就是**关注点分离（Separation of Concerns）**。
+
+### 1. 独立的设置仓库
+
+我们创建了专门的`/src/store/settings.ts`，只负责管理应用级别的配置。
+
+```typescript
+interface AppSettings {
+  theme: 'dark' | 'light' | 'system';
+  autoSave: boolean;
+  performanceMode: boolean;
+  // ...
+}
+```
+
+原有的`project-store.ts`被净化，现在它只专注于音频图（Audio Graph）的状态管理。这种拆分让"导出项目"变得异常简单——直接序列化整个Project Store即可，无需任何过滤。
+
+### 2. 安全的Hook封装
+
+为了防止组件直接操作Store带来的风险，我们封装了一系列类型安全的Hooks：
+
+- `useCanvasSettings()`: 仅订阅画布相关的显示设置。
+- `useAISettings()`: 专门处理后续AI功能的API Key配置。
+
+这些Hook内部实现了自动的数据验证和默认值填充。即使本地存储的数据损坏，应用也能优雅地回退到安全默认值，通过了`Cannot read properties of undefined`的生产环境崩溃问题。
+
+## 重构设置面板
+
+配合后端的改动，前端的`SettingPanels.tsx`也被完全重写。我们将原来冗长的单一文件拆分成了多个小的配置子组件（AudioSettings, GeneralSettings, AISettings）。
+
+这次重构减少了约60%的重复代码，不仅提高了可维护性，也让新增配置项变得举手之劳。
+
+## 结语
+
+虽然这次更新用户感知到的新功能不多，但对于开发者来说，这是至关重要的一步。通过清理地基，我们消除了潜在的稳定性隐患，为即将来临的AI功能集成做好了充足的架构准备。
