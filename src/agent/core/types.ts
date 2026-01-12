@@ -1,6 +1,7 @@
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  toolCalls?: ToolCall[];
 }
 
 export interface ToolCall {
@@ -10,9 +11,10 @@ export interface ToolCall {
     name: string;
     arguments: string;
   };
+  result?: string;
 }
 
-export type ClientOperation = 
+export type ClientOperation =
   | { type: 'ADD_MODULE'; data: { id: string; type: string; label: string; position: { x: number; y: number } } }
   | { type: 'DELETE_MODULE'; data: { id: string } }
   | { type: 'UPDATE_MODULE_PARAM'; data: { id: string; key: string; value: unknown } }

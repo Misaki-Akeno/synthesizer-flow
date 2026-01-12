@@ -1,0 +1,48 @@
+---
+title: 'SynthesizerFlow 项目介绍'
+date: '2025-04-05'
+tags: ['SynthesizerFlow', '音频', 'React', 'Next.js', '模块化']
+draft: false
+summary: 'SynthesizerFlow 是一个基于流程图交互的模块化音频合成器。简单来说，它让你像搭积木一样组合各类音频模块，而不再需要复杂的代码或繁琐的参数配置。想象一下，当你拖动一个振荡器，立即看到它与其他模块产生互动，这正是 SynthesizerFlow 想要呈现的未来音频合成体验。'
+---
+
+# SynthesizerFlow：模块化音频合成的全新实践
+
+[项目源码](https://github.com/Misaki-Akeno/synthesizer-flow) | [在线演示](https://synthesizer-flow.misakif.uk)
+
+## 想法
+
+我一直在构思一种全新的音频创作方式——一个可以直观拖拽、连接各类音频模块的合成器。SynthesizerFlow 正是我对这个想法的实现，它将传统的音频合成体验彻底翻转，用现代的 Web 技术给你带来耳目一新的感受。
+
+## 到底什么是 SynthesizerFlow？
+
+SynthesizerFlow 是一个基于流程图交互的模块化音频合成器。简单来说，它让你像搭积木一样组合各类音频模块，而不再需要复杂的代码或繁琐的参数配置。想象一下，当你拖动一个振荡器，立即看到它与其他模块产生互动，这正是 SynthesizerFlow 想要呈现的未来音频合成体验。
+![SynthesizerFlow Project](/static/images/SynthesizerFlow/QQ20250406-162010.png)
+
+## 探索与实践
+
+项目的灵感来源于我对于音乐和技术无限的热爱。过去的音频工具总给人一种笨重感，因此我决定利用 React、Next.js、TailwindCSS 等现代技术，重构音频合成流程，让创作过程变得更直观、更有趣。
+
+## 技术架构与实现
+
+整个项目采用模块化设计，每个音频处理单元都继承自统一的基类（ModuleBase），并通过 RxJS 实现模块间的数据实时流动。Zustand 管理全局状态，各个模块之间的连接就如同乐高一样简单高效。这种设计使得整个系统极具灵活性，方便扩展新的功能模块。
+
+此外，本项目基于 Next.js 和 React 构建前端，利用 TailwindCSS 和 shadcn/ui 完成高效响应式的用户界面；使用 Tone.js 处理音频数据，并通过 RxJS 保证模块间数据流的实时响应。整个技术栈协同工作，确保了系统的高效与稳定。
+
+技术栈详细说明：
+
+- Next.js：支持服务端渲染与静态生成，提高页面加载速度。
+- React：构建高效的组件化 UI，便于管理复杂交互。
+- TailwindCSS：快速构建响应式、现代化界面，定制高效开发。
+- shadcn/ui：预建的 UI 组件库，提升开发效率与一致性。
+- Tone.js：封装 Web Audio API，实现复杂实时音频处理。
+- RxJS：实现响应式编程，处理异步数据流和模块间通信。
+- Zustand：轻量级状态管理框架，优化全局状态更新和性能。
+
+## 未来展望
+
+目前 SynthesizerFlow 已实现基础的输入和输出模块，未来计划添加更多高级模块，比如滤波器、包络控制、MIDI 支持以及多人实时协作功能。目标是打造成一个开放、灵活、易用的音频合成平台，为音乐创作带来全新体验。
+
+## 结语
+
+SynthesizerFlow 不仅是一个技术项目，更代表了我对未来音频创作方式的全新设想。如果你对音乐与技术充满热情，欢迎加入讨论，共同探索这一激动人心的新世界！

@@ -1,0 +1,184 @@
+---
+title: 'SynthesizerFlow v0.6.0: 为模块化合成器添加MIDI控制器支持'
+date: '2025-04-15'
+tags: ['SynthesizerFlow', 'WebMIDI', '模块化合成', 'MIDI控制器', '音频编程']
+draft: false
+summary: '我们在SynthesizerFlow v0.6.0中集成了WebMIDI API，让用户可以直接连接物理MIDI键盘和控制器，为音乐创作提供更自然的表达方式。'
+---
+
+# SynthesizerFlow v0.6.0: 为模块化合成器添加MIDI控制器支持
+
+## 引言
+
+很高兴宣布SynthesizerFlow v0.6.0版本的发布！这次更新带来了一项令人兴奋的新功能：WebMIDI支持。这意味着用户现在可以将物理MIDI键盘、控制器等设备直接连接到我们的网页合成器，为音乐创作和表演提供更加直观自然的交互方式。
+
+## 主要更新内容
+
+### 1. WebMIDI集成
+
+本次更新的核心是集成了`webmidi`库（v3.1.12），它为我们提供了通过现代浏览器连接MIDI设备的标准化方法。这使得SynthesizerFlow能够：
+
+- 自动检测并连接MIDI输入设备
+- 处理MIDI消息（音符按下/释放、力度等）
+- 将MIDI信号映射到合成器参数
+
+### 2. 新增模块
+
+#### MIDI输入模块
+
+新的`MIDIInputModule`模块作为外部MIDI控制器与合成器之间的桥梁：
+
+- 自动检测可用的MIDI输入设备
+- MIDI通道过滤功能（可选择全部通道或特定通道）
+- 音符转置功能，支持八度和半音调整
+- 力度灵敏度调节
+- 多音符处理与正确的音符管理
+
+以下是MIDI输入模块处理MIDI消息的核心代码：
+
+```typescript
+private handleMIDIMessage(event: WebMidi.MIDIMessageEvent): void {
+  if (!this.isEnabled()) return;
+
+  const data = event.data;
+  const selectedChannel = this.getParameterValue('channel') as number;
+
+  // 解析MIDI消息
+  const status = data[0];
+  const statusType = status & 0xF0; // 获取消息类型
+  const channel = (status & 0x0F) + 1; // 获取通道(1-16)
+
+  // 通道过滤
+  if (selectedChannel !== 0 && channel !== selectedChannel) {
+    return;
+  }
+
+  // 处理不同类型的消息
+  switch (statusType) {
+    case 0x90: // 音符按下
+      if (data[2] > 0) {
+        this.handleNoteOn(data[1], data[2]);
+      } else {
+        this.handleNoteOff(data[1]);
+      }
+      break;
+    case 0x80: // 音符释放
+      this.handleNoteOff(data[1]);
+      break;
+  }
+}
+```
+
+#### 高级振荡器模块
+
+为配合MIDI输入功能，我们新增了更加强大的高级振荡器模块：
+
+- MIDI音符输入控制音高
+- 力度输入控制音量
+- 频率调制输入实现颤音效果
+- 多种波形选择（正弦波、方波、锯齿波、三角波）
+- 微调参数用于精细音高调整
+
+### 3. 预设系统增强
+
+我们优化了预设管理系统：
+
+- 新增默认预设选择功能
+- 提供专门的MIDI控制器测试预设
+- 改进预设加载机制，更好地处理模块间的依赖关系
+
+### 4. 界面优化
+
+多项UI改进：
+
+- 为模块添加高级参数控制
+- 通过`uiOptions`支持更好的参数组织
+- 更直观的MIDI信号连接方式
+
+## 技术实现
+
+WebMIDI实现采用模块化方法，与现有架构无缝集成：
+
+```typescript
+// MIDI输入模块中的WebMIDI初始化
+private async initWebMidi(): Promise<void> {
+  try {
+    if (typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator) {
+      const midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+      this.midiAccess = midiAccess as unknown as WebMidi.MIDIAccess;
+      this.updateMIDIInputDevices();
+
+      // 监听设备连接/断开
+      this.midiAccess.addEventListener('statechange', (event) => {
+        console.debug(`MIDI设备状态变化:`, event);
+        this.updateMIDIInputDevices();
+      });
+    } else {
+      console.warn(`浏览器不支持WebMIDI`);
+    }
+  } catch (error) {
+    console.error(`WebMIDI初始化失败:`, error);
+  }
+}
+```
+
+MIDI消息被处理并转换为内部信号，可以连接到其他模块：
+
+```typescript
+// 处理音符按下事件
+private handleNoteOn(note: number, velocity: number): void {
+  // 应用音高转置
+  const transpose = this.getParameterValue('transpose') as number;
+  const transposedNote = Math.max(0, Math.min(127, note + transpose));
+
+  // 应用力度灵敏度
+  const sensitivity = this.getParameterValue('velocitySensitivity') as number;
+  const scaledVelocity = Math.max(0, Math.min(1, (velocity / 127) * sensitivity));
+
+  // 添加到活跃音符集合
+  this.activeNotes.add(transposedNote);
+
+  // 更新当前音符和力度
+  this.currentNote = transposedNote;
+  this.currentVelocity = scaledVelocity;
+
+  // 更新输出端口
+  this.updateOutputPorts();
+}
+```
+
+## 浏览器兼容性
+
+WebMIDI支持的浏览器：
+
+- Chrome 43+
+- Edge 79+
+- Opera 30+
+- Firefox（需启用特定标志）
+
+Safari需要特定配置或扩展支持。
+
+## 使用MIDI控制器的入门指南
+
+要使用MIDI控制器与SynthesizerFlow连接：
+
+1. 将MIDI设备连接至电脑
+2. 使用兼容的浏览器打开SynthesizerFlow
+3. 选择"MIDI控制器输入测试"预设
+4. 在MIDI输入模块的下拉菜单中选择你的MIDI设备
+5. 演奏控制器即可产生声音
+
+## 未来计划
+
+这次WebMIDI集成只是一个开始。在未来的更新中，我们计划：
+
+- 添加MIDI输出功能，用于控制外部设备
+- 支持更多类型的MIDI消息（控制变化、弯音等）
+- MIDI时钟同步，用于基于节拍的模块
+- 多MIDI输入支持，适合复杂设置
+
+## 结语
+
+v0.6.0版本标志着SynthesizerFlow项目的重要里程碑，它打破了数字与物理乐器之间的界限。WebMIDI支持将应用从纯软件合成器转变为可由各种MIDI设备控制的多功能工具。
+
+我们诚邀大家尝试这些新的WebMIDI功能，并分享你们的使用体验！

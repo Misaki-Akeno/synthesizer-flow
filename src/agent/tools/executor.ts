@@ -159,7 +159,7 @@ export class ToolExecutor {
           position: node.position,
           parameters: node.data?.parameters || {},
           selected: node.selected || false,
-          ports, 
+          ports,
         },
         connections: {
           incoming: incomingConnections.map((edge) => ({
@@ -202,17 +202,53 @@ export class ToolExecutor {
   /**
    * 添加新模块
    */
+  /**
+   * 查找安全的不重叠位置
+   * 防止新创建的模块与现有模块完全重叠
+   */
+  private findSafePosition(initialPos: { x: number; y: number }): { x: number; y: number } {
+    let { x, y } = initialPos;
+    const offset = 30; // 每次偏移量
+    let attempts = 0;
+    const maxAttempts = 100; // 防止死循环
+
+    // 简单的碰撞检测，如果位置非常接近（视为重叠），则偏移
+    // 这里的 20px 是一个简单的阈值，用于检测完全重叠的情况
+    while (attempts < maxAttempts) {
+      const isOverlapping = this.nodes.some((node) =>
+        Math.abs(node.position.x - x) < 20 && Math.abs(node.position.y - y) < 20
+      );
+
+      if (!isOverlapping) {
+        break;
+      }
+
+      x += offset;
+      y += offset;
+      attempts++;
+    }
+
+    return { x, y };
+  }
+
+  /**
+   * 添加新模块
+   */
   public addModule(type: string, label: string, position?: { x: number; y: number }) {
-    const pos = position || { x: 100, y: 100 };
+    // 如果没有提供位置，默认从 (100, 100) 开始
+    // 使用 findSafePosition 确保不会与现有模块重叠
+    const basePos = position || { x: 100, y: 100 };
+    const pos = this.findSafePosition(basePos);
+
     const nodeId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`; // 生成临时ID
-    
+
     const newNode: FlowNode = {
       id: nodeId,
       type,
       data: { label, parameters: {} },
       position: pos
     };
-    
+
     this.nodes.push(newNode);
 
     this.operations.push({
@@ -224,7 +260,7 @@ export class ToolExecutor {
       success: true,
       data: {
         moduleId: nodeId,
-        message: `成功添加模块: ${label} (${type})`,
+        message: `成功添加模块: ${label} (${type}) 在位置 (${pos.x}, ${pos.y})`,
       },
     };
   }
@@ -292,7 +328,7 @@ export class ToolExecutor {
       sourceHandle,
       targetHandle
     };
-    
+
     this.edges.push(newEdge);
 
     this.operations.push({
@@ -360,7 +396,7 @@ export class ToolExecutor {
     }
     // TODO: Consider replacing with direct service call if feasible
     // For now, return a placeholder or try fetch (which might fail on server without absolute URL)
-    
+
     // Fallback: 如果无法直接 fetch，返回一个提示，让 Agent 知道该功能受限
     try {
       // 假设我们有一个环境变量 NEXT_PUBLIC_APP_URL 或类似

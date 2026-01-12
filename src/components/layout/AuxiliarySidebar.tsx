@@ -47,7 +47,7 @@ export function AuxiliarySidebar({ className }: AuxiliarySidebarProps) {
       <SidebarProvider>
         <div className={cn('flex h-full', className)}>
           {/* 右侧面板内容 - 保持 #FAFAFA 背景 */}
-          <div className="w-[320px] border-l bg-[#FAFAFA] dark:bg-gray-900 flex flex-col">
+          <div className="w-full h-full bg-[#FAFAFA] dark:bg-gray-900 flex flex-col">
             <div className="flex items-center justify-between p-3 border-b">
               <h3 className="text-sm font-medium">
                 {activePanel === 'properties' && '属性面板'}

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { upsertDocuments } from '@/lib/rag/vectorStore';
+import { splitMarkdown } from '@/lib/rag/markdownSplitter';
 import { auth } from '@/lib/auth/auth';
 
 export const runtime = 'nodejs';
@@ -33,7 +34,45 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `items[${invalid}].text must be a non-empty string` }, { status: 400 });
     }
 
-    const res = await upsertDocuments(items);
+    // Process items with Markdown semantic splitting
+    interface IngestItem {
+      id?: string;
+      text: string;
+      meta?: Record<string, unknown>;
+    }
+
+    const chunkedItems: IngestItem[] = [];
+
+    for (const item of (items as IngestItem[])) {
+      // Use splitMarkdown to split text into semantically meaningful chunks
+      const chunks = splitMarkdown(item.text);
+
+      chunks.forEach((chunkText, idx) => {
+        // Construct new ID: append suffix if multiple chunks
+        let newId = item.id;
+        if (chunks.length > 1 && item.id) {
+          newId = `${item.id}_part_${idx}`;
+        }
+
+        // Add chunking info to metadata
+        const newMeta = {
+          ...(item.meta || {}),
+          chunkIndex: idx,
+          totalChunks: chunks.length,
+          originalId: item.id,
+        };
+
+        chunkedItems.push({
+          id: newId,
+          text: chunkText,
+          meta: newMeta,
+        });
+      });
+    }
+
+    console.info(`[RAG][ingest] Split ${items.length} docs into ${chunkedItems.length} chunks.`);
+
+    const res = await upsertDocuments(chunkedItems);
     console.info('[RAG][ingest] result:', res);
     return NextResponse.json({ success: true, ...res });
   } catch (e) {

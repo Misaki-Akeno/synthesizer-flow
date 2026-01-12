@@ -5,12 +5,24 @@ import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Switch } from '@/components/ui/shadcn/switch';
-import { Loader2, Send, Wrench, Plus } from 'lucide-react';
+import {
+  Loader2,
+  Send,
+  Wrench,
+  Plus,
+  ChevronDown,
+  ChevronRight,
+  Terminal,
+} from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings';
 import { useFlowStore } from '@/store/store';
-import { ChatMessage, ClientOperation } from '@/agent';
+import { ChatMessage, ClientOperation, ToolCall } from '@/agent';
 import { getSystemPrompt } from '@/agent/prompts/system';
 import { chatWithAgent } from '@/agent/actions';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 export function ChatInterface() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -21,15 +33,15 @@ export function ChatInterface() {
   // 获取AI设置
   const aiSettings = useAISettings();
   const isAIConfigured = useIsAIConfigured();
-  
+
   // 获取Store操作方法
-  const { 
-    addNode, 
-    deleteNode, 
-    updateModuleParameter, 
-    onConnect, 
+  const {
+    addNode,
+    deleteNode,
+    updateModuleParameter,
+    onConnect,
     onEdgesChange,
-    edges: currentEdges 
+    edges: currentEdges
   } = useFlowStore();
 
   // 是否启用工具功能
@@ -80,7 +92,7 @@ export function ChatInterface() {
   const executeClientOperations = (operations: ClientOperation[]) => {
     operations.forEach(op => {
       console.log('执行操作:', op);
-      switch(op.type) {
+      switch (op.type) {
         case 'ADD_MODULE':
           addNode(op.data.type, op.data.label, op.data.position);
           break;
@@ -98,19 +110,19 @@ export function ChatInterface() {
             targetHandle: op.data.targetHandle || null
           });
           break;
-        case 'DISCONNECT_MODULES': 
-        {
-          const edge = currentEdges.find(e => 
-            e.source === op.data.source && 
-            e.target === op.data.target &&
-            (!op.data.sourceHandle || e.sourceHandle === op.data.sourceHandle) &&
-            (!op.data.targetHandle || e.targetHandle === op.data.targetHandle)
-          );
-          if (edge) {
-            onEdgesChange([{ type: 'remove', id: edge.id }]);
+        case 'DISCONNECT_MODULES':
+          {
+            const edge = currentEdges.find(e =>
+              e.source === op.data.source &&
+              e.target === op.data.target &&
+              (!op.data.sourceHandle || e.sourceHandle === op.data.sourceHandle) &&
+              (!op.data.targetHandle || e.targetHandle === op.data.targetHandle)
+            );
+            if (edge) {
+              onEdgesChange([{ type: 'remove', id: edge.id }]);
+            }
+            break;
           }
-          break;
-        }
       }
     });
   };
@@ -146,7 +158,13 @@ export function ChatInterface() {
       );
 
       // 添加AI的响应
-      setMessages((prev) => [...prev, response.message]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          ...response.message,
+          toolCalls: response.hasToolUse ? response.toolCalls : undefined,
+        },
+      ]);
 
       // 如果有工具调用，可以显示额外信息
       if (response.hasToolUse && response.toolCalls) {
@@ -221,16 +239,43 @@ export function ChatInterface() {
               displayMessages.map((msg, index) => (
                 <div
                   key={index}
-                  className={`p-3 rounded-lg ${
-                    msg.role === 'user'
-                      ? 'bg-blue-100 dark:bg-blue-900 ml-8'
-                      : 'bg-gray-100 dark:bg-gray-800 mr-8'
-                  }`}
+                  className={`p-3 rounded-lg max-w-full ${msg.role === 'user'
+                    ? 'bg-blue-100 dark:bg-blue-900 ml-8'
+                    : 'bg-gray-100 dark:bg-gray-800 mr-8'
+                    }`}
                 >
-                  <div className="text-sm">
-                    {msg.role === 'user' ? '你' : 'AI助手'}:
+                  <div className="prose dark:prose-invert prose-sm max-w-none break-words overflow-x-hidden">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({ inline, className, children, ...props }: React.ComponentPropsWithoutRef<'code'> & { inline?: boolean }) {
+                          const match = /language-(\w+)/.exec(className || '');
+                          return !inline && match ? (
+                            <div className="w-full overflow-x-auto rounded-md">
+                              <SyntaxHighlighter
+                                {...props}
+                                style={oneDark}
+                                language={match[1]}
+                                PreTag="div"
+                                customStyle={{ margin: 0, borderRadius: 0 }}
+                              >
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            </div>
+                          ) : (
+                            <code {...props} className={className}>
+                              {children}
+                            </code>
+                          );
+                        },
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <ToolCallsDisplay toolCalls={msg.toolCalls} />
+                    )}
                   </div>
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
                 </div>
               ))
             )}
@@ -285,6 +330,61 @@ export function ChatInterface() {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ToolCallsDisplay({ toolCalls }: { toolCalls: ToolCall[] }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (!toolCalls || toolCalls.length === 0) return null;
+
+  const formatJson = (str: string) => {
+    try {
+      const parsed = JSON.parse(str);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return str;
+    }
+  };
+
+  return (
+    <div className="mt-2 rounded-md border bg-muted/50 text-sm w-full block">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex w-full items-center gap-2 p-2 hover:bg-muted/60 transition-colors text-muted-foreground"
+      >
+        {isOpen ? (
+          <ChevronDown className="h-4 w-4" />
+        ) : (
+          <ChevronRight className="h-4 w-4" />
+        )}
+        <Terminal className="h-4 w-4" />
+        <span className="font-medium">工具调用 ({toolCalls.length})</span>
+      </button>
+
+      {isOpen && (
+        <div className="border-t p-2 space-y-2 w-full grid grid-cols-1">
+          {toolCalls.map((call) => (
+            <div key={call.id} className="text-xs space-y-1 w-full min-w-0">
+              <div className="font-semibold text-primary">
+                {call.function.name}
+              </div>
+              <div className="w-full p-2 rounded border bg-background font-mono text-muted-foreground whitespace-pre overflow-auto max-h-60 text-[10px] leading-tight">
+                {formatJson(call.function.arguments)}
+              </div>
+              {call.result && (
+                <div className="mt-1 w-full min-w-0">
+                  <div className="font-semibold text-primary/80 text-[10px] uppercase">Result</div>
+                  <div className="w-full p-2 rounded border bg-muted font-mono text-muted-foreground whitespace-pre overflow-auto max-h-60 text-[10px] leading-tight">
+                    {formatJson(call.result)}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

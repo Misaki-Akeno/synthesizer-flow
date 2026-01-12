@@ -1,14 +1,8 @@
 // src/app/api/auth/[...nextauth]/route.ts
 import NextAuth from 'next-auth';
 import { authConfig } from '@/lib/auth/auth.config';
-import { DrizzleAdapter } from '@auth/drizzle-adapter';
+import { DrizzleAdapter } from '@/lib/auth/drizzle-adapter';
 import { db } from '@/db/client';
-import {
-  users,
-  accounts,
-  sessions,
-  verificationTokens,
-} from '@/db/schema';
 
 // 确保在 Node.js Runtime 下运行，避免 Edge 环境下超时/代理问题
 export const runtime = 'nodejs';
@@ -21,12 +15,7 @@ export const fetchCache = 'force-no-store';
  */
 const handler = NextAuth({
   ...authConfig,
-  adapter: DrizzleAdapter(db, {
-    usersTable: users,
-    accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
-  }),
+  adapter: DrizzleAdapter(db),
 });
 
 export { handler as GET, handler as POST };

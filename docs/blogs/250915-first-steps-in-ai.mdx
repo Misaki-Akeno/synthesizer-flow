@@ -1,0 +1,64 @@
+---
+title: 'Hello, AI: 引入LLM对话与MCP协议'
+date: '2025-09-15'
+tags: ['LLM', 'AI', 'MCP', 'Chat Interface', 'Innovation']
+draft: false
+summary: 'SynthesizerFlow迎来了它的"大脑"。本文介绍了我们首次引入LLM聊天界面，以及如何通过Model Context Protocol (MCP)让AI理解并控制我们的音频引擎。'
+---
+
+# Hello, AI: 引入LLM对话与MCP协议
+
+2025年9月，SynthesizerFlow迎来了它诞生以来最激动人心的变化：它开始拥有"智能"了。在0.7.5和0.7.6-alpha版本中，我们迈出了AI集成的第一步。
+
+## 1. 嵌入式聊天界面
+
+我们不想让用户由于需要AI帮助而频繁切换窗口。因此，我们在右侧边栏集成了一个原生的**LLM聊天界面（Chat Interface）**。
+
+这不仅仅是一个简单的文本框。它支持：
+- **流式响应**：实时的打字机效果，让对话感觉流畅自然。
+- **Markdown渲染**：支持代码块高亮和格式化文本。
+- **上下文感知**：AI知道你当前打开的是哪个项目。
+
+## 2. 什么是 MCP？
+
+让AI"聊天"很容易，但让AI"干活"很难。我们希望用户能说："帮我把音量调大一点"，然后音量旋钮就真的转动了。
+
+为此，我们引入了**Model Context Protocol (MCP)** 的概念。
+
+MCP是一个标准化的接口层，它定义了AI如何：
+1. **读取上下文（Context）**：获取当前画布上有哪些模块，它们是如何连接的。
+2. **执行工具（Tools）**：调用函数来修改状态。
+
+### 实现第一个工具
+
+我们封装了第一批核心工具：
+- `add_module`: 添加新模块
+- `connect_nodes`: 连接两个模块
+- `update_parameter`: 修改参数
+
+```typescript
+// Tool定义示例
+export const AddModuleTool = {
+  name: "add_module",
+  description: "Add a new audio module to the canvas",
+  parameters: {
+    type: "object",
+    properties: {
+      type: { type: "string", enum: ["Oscillator", "Filter", "Reverb", ...] },
+    },
+    required: ["type"]
+  }
+};
+```
+
+## 3. 初探 RAG
+
+除了控制工具，我们还希望AI能回答关于音频合成的专业问题。在0.7.6-alpha中，我们开始实验**检索增强生成（RAG）**技术。
+
+我们将合成器的文档和教程进行了向量化。当用户问"什么是FM合成？"时，系统会先从知识库中检索相关段落，连同问题一起发送给LLM。这大大减少了AI的幻觉，提供了更准确的教学指导。
+
+## 结语
+
+这一阶段的探索是具有实验性质的。虽然当时的AI偶尔会犯傻，或者工具调用不够稳定，但它展示了一个令人兴奋的未来图景：**自然语言编程（Natural Language Programming）**。
+
+在SynthesizerFlow中，你不再仅仅是拖拽连线，你可以和它对话，共同创作音乐。

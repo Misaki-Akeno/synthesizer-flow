@@ -40,9 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-docs
-
-# MDX files
-*.mdx
 
 .vscode
