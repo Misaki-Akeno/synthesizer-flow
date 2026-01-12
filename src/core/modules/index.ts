@@ -6,6 +6,7 @@ import { KeyboardInputModule } from './input/KeyboardInputModule';
 import { ReverbModule } from './audio/ReverbModule';
 import { SpeakerModule } from './audio/SpeakerModule';
 import { TrumpetModule } from './audio/TrumpetModule';
+import { SequencerModule } from './input/SequencerModule';
 import { ModuleBase, ModuleMetadata } from '../base/ModuleBase';
 
 // 导出所有模块类
@@ -18,12 +19,13 @@ export {
   ReverbModule,
   SpeakerModule,
   TrumpetModule,
+  SequencerModule,
 };
 
 // 定义一个映射表，将模块类型名与对应的模块类关联
 export const moduleClassMap: Record<
   string,
-  { new (...args: string[]): ModuleBase } & { metadata: ModuleMetadata }
+  { new(...args: string[]): ModuleBase } & { metadata: ModuleMetadata }
 > = {
   simpleoscillator: SimpleOscillatorModule,
   advancedoscillator: AdvancedOscillatorModule,
@@ -33,6 +35,7 @@ export const moduleClassMap: Record<
   reverb: ReverbModule,
   speaker: SpeakerModule,
   trumpet: TrumpetModule,
+  sequencer: SequencerModule,
 };
 
 // 获取所有模块类的元数据

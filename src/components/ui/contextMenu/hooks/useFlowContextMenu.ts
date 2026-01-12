@@ -24,7 +24,7 @@ export const useFlowContextMenu = () => {
         nativeEvent: event,
         isDefaultPrevented: () => false,
         isPropagationStopped: () => false,
-        persist: () => {},
+        persist: () => { },
       } as unknown as React.MouseEvent<Element, MouseEvent>;
     }
   };
@@ -93,10 +93,10 @@ export const useFlowContextMenu = () => {
           id: 'delete-node',
           label: '删除节点',
           onClick: () => {
-            console.info('删除节点', node.id);
+            useFlowStore.getState().deleteNode(node.id);
           },
         },
-        { id: 'divider', divider: true, onClick: () => {} },
+        { id: 'divider', divider: true, onClick: () => { } },
         {
           id: 'duplicate-node',
           label: '复制节点',

@@ -13,6 +13,7 @@ export enum ParameterType {
   NUMBER = 'number',
   BOOLEAN = 'boolean',
   LIST = 'list',
+  STRING = 'string', // 新增：用于存储字符串数据（如JSON配置）
 }
 
 // 允许接口的数据类型是 number、audio 或数组
@@ -396,6 +397,9 @@ export abstract class ModuleBase {
       } else {
         console.warn(`Invalid option: ${value} for parameter ${paramKey}`);
       }
+    } else if (meta.type === ParameterType.STRING && typeof value === 'string') {
+      // 字符串类型，直接更新
+      this.parameters[paramKey].next(value);
     } else {
       console.warn(
         `Type mismatch: Cannot set ${typeof value} to parameter ${paramKey} of type ${meta.type}`
