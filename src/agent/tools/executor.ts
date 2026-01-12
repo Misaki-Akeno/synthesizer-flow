@@ -4,6 +4,7 @@
  */
 
 import { createModuleLogger } from '@/lib/logger';
+import { searchDocuments } from '@/lib/rag/vectorStore';
 import { ClientOperation, GraphStateSnapshot } from '../core/types';
 
 const logger = createModuleLogger('ToolExecutor');
@@ -386,31 +387,16 @@ export class ToolExecutor {
 
   /**   
    * RAG: 本地向量检索
-   * 注意：服务端 fetch 可能需要完整的 Base URL。
-   * 如果这里从 Server Action 调用，建议直接调用 RAG Service 逻辑，或者传入 Origin。
-   * 暂时保持 fetch，但需确保 URL 可访问。或者通过环境变量获取 BASE_URL。
+   * 直接调用 RAG Service 逻辑，避免 fetch 调用失败
    */
   public async ragSearch(query: string, topK: number) {
     if (!query || typeof query !== 'string') {
       return { success: false, error: 'query is required' };
     }
-    // TODO: Consider replacing with direct service call if feasible
-    // For now, return a placeholder or try fetch (which might fail on server without absolute URL)
 
-    // Fallback: 如果无法直接 fetch，返回一个提示，让 Agent 知道该功能受限
     try {
-      // 假设我们有一个环境变量 NEXT_PUBLIC_APP_URL 或类似
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-      const resp = await fetch(`${baseUrl}/api/rag/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, topK: Math.max(1, Math.min(topK || 5, 20)) }),
-      });
-      const json = await resp.json();
-      if (!resp.ok) {
-        return { success: false, error: json?.error || 'RAG 搜索失败' };
-      }
-      return { success: true, data: json };
+      const results = await searchDocuments(query, Math.max(1, Math.min(topK || 5, 20)));
+      return { success: true, data: results };
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'RAG 搜索失败';
       logger.error('RAG Search Failed', msg);
