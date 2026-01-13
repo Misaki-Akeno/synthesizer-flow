@@ -25,6 +25,7 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 256 }).notNull().unique(),
   emailVerified: timestamp('email_verified', { mode: 'date' }),
   image: text('image'),
+  settings: jsonb('settings'), // 用户设置
 });
 
 // 定义 accounts 表 (OAuth 认证需要)
@@ -121,3 +122,38 @@ export const ragDocuments = pgTable(
 
 export type RagDocument = InferSelectModel<typeof ragDocuments>;
 export type NewRagDocument = InferInsertModel<typeof ragDocuments>;
+
+// 定义 projects 表
+export const projects = pgTable('projects', {
+  id: varchar('id', { length: 255 }).notNull().primaryKey(),
+  name: text('name').notNull(),
+  data: jsonb('data').notNull(), // 存储 canvas JSON 数据
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+});
+
+// 定义 users_to_projects 表 (多对多关联)
+export const usersToProjects = pgTable(
+  'users_to_projects',
+  {
+    userId: varchar('user_id', { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    projectId: varchar('project_id', { length: 255 })
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // 可以添加角色字段，例如 'owner', 'editor', 'viewer'
+    role: varchar('role', { length: 50 }).default('owner').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey(t.userId, t.projectId),
+    userIdIdx: index('users_to_projects_user_id_idx').on(t.userId),
+    projectIdIdx: index('users_to_projects_project_id_idx').on(t.projectId),
+  })
+);
+
+// 导出新增的 TypeScript 类型
+export type Project = InferSelectModel<typeof projects>;
+export type NewProject = InferInsertModel<typeof projects>;
+export type UserToProject = InferSelectModel<typeof usersToProjects>;
+export type NewUserToProject = InferInsertModel<typeof usersToProjects>;
