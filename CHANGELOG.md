@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.2 (2026-01-13)
+
+### Features
+
+- **Agent System**: Implemented **Chat Checkpoints**.
+  - Integrated LangGraph checkpoints with the database, allowing users to save, view, and restore chat sessions from any point in history.
+  - Added UI for visualizing and navigating chat history checkpoints.
+- **Module Core**: Added support for **Input Stacking**.
+  - `Array` type ports now support multiple simultaneous connections, enabling more complex signal routing topologies.
+
+### Improvements
+
+- **Tool Execution**: Implemented `SequentialToolNode` to ensure strictly sequential execution of Agent tools, resolving race conditions in multi-step operations.
+- **RAG System**: Fixed logic in `executor.ts` to improve tool reliability.
+- **UI**: Fixed alignment and rendering issues in the `XYPad` component.
+
 ## 0.8.1 (2026-01-13)
 
 ### Features
