@@ -107,7 +107,7 @@ export function ChatInterface() {
       console.log('执行操作:', op);
       switch (op.type) {
         case 'ADD_MODULE':
-          addNode(op.data.type, op.data.label, op.data.position);
+          addNode(op.data.type, op.data.label, op.data.position, op.data.id);
           break;
         case 'DELETE_MODULE':
           deleteNode(op.data.id);
@@ -154,13 +154,36 @@ export function ChatInterface() {
 
     try {
       // 捕获当前状态快照 (sanitize to remove non-serializable data)
-      const currentNodes = useFlowStore.getState().nodes.map(n => ({
-        ...n,
-        data: {
-          ...n.data,
-          module: undefined // 移除不可序列化的 module 实例
+      // 捕获当前状态快照 (sanitize to remove non-serializable data)
+      const currentNodes = useFlowStore.getState().nodes.map(n => {
+        // 提取最新参数值
+        const parameters: Record<string, unknown> = { ...(n.data.parameters || {}) };
+        if (n.data.module && n.data.module.parameters) {
+          Object.entries(n.data.module.parameters).forEach(([key, param]) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            if (param && typeof (param as any).getValue === 'function') {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              parameters[key] = (param as any).getValue();
+            }
+          });
         }
-      }));
+
+        // 提取端口信息
+        const ports = {
+          inputs: n.data.module?.inputPortTypes || {},
+          outputs: n.data.module?.outputPortTypes || {}
+        };
+
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            parameters,
+            ports, // 添加端口信息
+            module: undefined // 移除不可序列化的 module 实例
+          }
+        };
+      });
       const currentEdgesSnapshot = useFlowStore.getState().edges;
 
       const response = await chatWithAgent(
@@ -187,6 +210,159 @@ export function ChatInterface() {
       // 执行客户端操作
       if (response.clientOperations && response.clientOperations.length > 0) {
         executeClientOperations(response.clientOperations);
+
+        // 立即从 store 获取真实节点数据并更新工具调用结果
+        if (response.toolCalls && response.toolCalls.length > 0) {
+          response.toolCalls.forEach((toolCall: ToolCall) => {
+            if (toolCall.function.name === 'add_module') {
+              try {
+                // 解析工具调用的结果
+                const resultObj = JSON.parse(toolCall.result || '{}');
+                const moduleId = resultObj.data?.moduleId;
+
+                if (moduleId) {
+                  // 从 store 获取真实节点
+                  const nodes = useFlowStore.getState().nodes;
+                  const node = nodes.find(n => n.id === moduleId);
+
+                  if (node?.data?.module) {
+                    // 提取完整的参数信息
+                    const parameters: Record<string, unknown> = {};
+                    if (node.data.module.parameters) {
+                      Object.entries(node.data.module.parameters).forEach(([key, param]) => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        if (param && typeof (param as any).getValue === 'function') {
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          parameters[key] = (param as any).getValue();
+                        }
+                      });
+                    }
+
+                    // 提取端口信息
+                    const ports = {
+                      inputs: node.data.module.inputPortTypes || {},
+                      outputs: node.data.module.outputPortTypes || {}
+                    };
+
+                    // 提取连接信息
+                    const currentEdges = useFlowStore.getState().edges;
+                    const incomingConnections = currentEdges.filter((edge) => edge.target === moduleId);
+                    const outgoingConnections = currentEdges.filter((edge) => edge.source === moduleId);
+
+                    // 更新工具调用结果中的 moduleDetails
+                    resultObj.data.moduleDetails = {
+                      module: {
+                        id: moduleId,
+                        type: node.data.type,
+                        label: node.data.label,
+                        position: node.position,
+                        parameters,
+                        selected: node.selected || false,
+                        ports
+                      },
+                      connections: {
+                        incoming: incomingConnections.map((edge) => ({
+                          fromModule: edge.source,
+                          fromHandle: edge.sourceHandle,
+                          toHandle: edge.targetHandle,
+                        })),
+                        outgoing: outgoingConnections.map((edge) => ({
+                          toModule: edge.target,
+                          fromHandle: edge.sourceHandle,
+                          toHandle: edge.targetHandle,
+                        })),
+                      }
+                    };
+
+                    // 更新工具调用的结果
+                    toolCall.result = JSON.stringify(resultObj);
+                  }
+                }
+              } catch (e) {
+                console.error('Failed to enhance add_module tool result:', e);
+              }
+            }
+
+            // 为 update_module_parameter 增强结果
+            if (toolCall.function.name === 'update_module_parameter') {
+              try {
+                const resultObj = JSON.parse(toolCall.result || '{}');
+                const moduleId = resultObj.data?.moduleDetails?.module?.id;
+
+                if (moduleId) {
+                  const nodes = useFlowStore.getState().nodes;
+                  const node = nodes.find(n => n.id === moduleId);
+
+                  if (node?.data?.module) {
+                    // 更新参数信息
+                    const parameters: Record<string, unknown> = {};
+                    if (node.data.module.parameters) {
+                      Object.entries(node.data.module.parameters).forEach(([key, param]) => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        if (param && typeof (param as any).getValue === 'function') {
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          parameters[key] = (param as any).getValue();
+                        }
+                      });
+                    }
+
+                    // 更新 moduleDetails 中的参数
+                    if (resultObj.data.moduleDetails?.module) {
+                      resultObj.data.moduleDetails.module.parameters = parameters;
+                    }
+
+                    toolCall.result = JSON.stringify(resultObj);
+                  }
+                }
+              } catch (e) {
+                console.error('Failed to enhance update_module_parameter tool result:', e);
+              }
+            }
+
+            // 为 connect_modules 增强结果
+            if (toolCall.function.name === 'connect_modules') {
+              try {
+                const resultObj = JSON.parse(toolCall.result || '{}');
+                const sourceId = resultObj.data?.sourceModuleDetails?.module?.id;
+                const targetId = resultObj.data?.targetModuleDetails?.module?.id;
+
+                if (sourceId || targetId) {
+                  const currentEdges = useFlowStore.getState().edges;
+
+                  // 更新源模块的连接信息
+                  if (sourceId && resultObj.data.sourceModuleDetails) {
+                    const outgoingConnections = currentEdges.filter((edge) => edge.source === sourceId);
+                    resultObj.data.sourceModuleDetails.connections = {
+                      ...resultObj.data.sourceModuleDetails.connections,
+                      outgoing: outgoingConnections.map((edge) => ({
+                        toModule: edge.target,
+                        fromHandle: edge.sourceHandle,
+                        toHandle: edge.targetHandle,
+                      })),
+                    };
+                  }
+
+                  // 更新目标模块的连接信息
+                  if (targetId && resultObj.data.targetModuleDetails) {
+                    const incomingConnections = currentEdges.filter((edge) => edge.target === targetId);
+                    resultObj.data.targetModuleDetails.connections = {
+                      ...resultObj.data.targetModuleDetails.connections,
+                      incoming: incomingConnections.map((edge) => ({
+                        fromModule: edge.source,
+                        fromHandle: edge.sourceHandle,
+                        toHandle: edge.targetHandle,
+                      })),
+                    };
+                  }
+
+                  toolCall.result = JSON.stringify(resultObj);
+                }
+              } catch (e) {
+                console.error('Failed to enhance connect_modules tool result:', e);
+              }
+            }
+          });
+        }
       }
 
     } catch (error) {

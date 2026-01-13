@@ -15,6 +15,7 @@ interface FlowNode {
   type?: string;
   data: {
     label?: string;
+    type?: string;
     parameters?: Record<string, unknown>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     module?: any; // 模拟时可能不包含完整模块实例
@@ -40,7 +41,17 @@ export class ToolExecutor {
   private operations: ClientOperation[] = [];
 
   constructor(initialState: GraphStateSnapshot) {
-    this.nodes = JSON.parse(JSON.stringify(initialState.nodes));
+    // 使用浅拷贝但保留 module 实例引用，同时复制 parameters 防止修改污染原始数据
+    this.nodes = initialState.nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        parameters: { ...(node.data.parameters || {}) },
+        // 保留 module 实例引用以便调用方法 (如 getValue)
+        module: node.data.module
+      },
+      position: { ...node.position }
+    }));
     this.edges = JSON.parse(JSON.stringify(initialState.edges));
   }
 
@@ -59,12 +70,10 @@ export class ToolExecutor {
 
     try {
       switch (toolName) {
-        case 'get_canvas_modules':
-          return this.getCanvasModules();
+        case 'get_canvas':
+          return this.getCanvas();
         case 'get_module_details':
           return this.getModuleDetails(args.moduleId as string);
-        case 'get_canvas_connections':
-          return this.getCanvasConnections();
         case 'add_module':
           return this.addModule(
             args.type as string,
@@ -106,15 +115,48 @@ export class ToolExecutor {
   }
 
   /**
-   * 获取画布上的所有模块
+   * 获取画布上的所有模块和连接 (合并视图)
+   */
+  public getCanvas() {
+    const modules = this.nodes.map((node) => ({
+      id: node.id,
+      type: node.data?.type || node.type,
+      label: node.data?.label,
+      position: node.position,
+      // parameters: node.data?.parameters || {},
+      selected: node.selected || false,
+    }));
+
+    const connections = this.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+    }));
+
+    return {
+      success: true,
+      data: {
+        totalModules: modules.length,
+        totalConnections: connections.length,
+        modules,
+        connections,
+        timestamp: new Date().toISOString(),
+      },
+    };
+  }
+
+  /**
+   * 获取画布上的所有模块 (Legacy: retained for internal use/tests if needed, but get_canvas is preferred)
    */
   public getCanvasModules() {
     const modules = this.nodes.map((node) => ({
       id: node.id,
-      type: node.type,
+      type: node.data?.type || node.type,
       label: node.data?.label,
       position: node.position,
-      parameters: node.data?.parameters || {},
+      // parameters: node.data?.parameters || {},
       selected: node.selected || false,
     }));
 
@@ -126,6 +168,30 @@ export class ToolExecutor {
         timestamp: new Date().toISOString(),
       },
     };
+  }
+
+  /**
+   * Helper to resolve ports for a node
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private getNodePorts(node: FlowNode): { inputs: Record<string, any>; outputs: Record<string, any> } {
+    // 优先使用 snapshot 中传递过来的端口信息
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let ports = (node.data as any)?.ports;
+
+    if (!ports && node.data?.module) {
+      // 如果 snapshot 没有 ports 但有 module 实例 (e.g. 单元测试环境)，则从 module 获取
+      ports = {
+        inputs: node.data.module.inputPortTypes || {},
+        outputs: node.data.module.outputPortTypes || {}
+      };
+    }
+
+    if (!ports) {
+      ports = { inputs: {}, outputs: {} };
+    }
+
+    return ports;
   }
 
   /**
@@ -144,21 +210,34 @@ export class ToolExecutor {
     const incomingConnections = this.edges.filter((edge) => edge.target === moduleId);
     const outgoingConnections = this.edges.filter((edge) => edge.source === moduleId);
 
-    // 服务端无法获取完整 module 实例的端口定义，只能返回基本信息
-    // 如果需要详细端口信息，前端 snapshots 需要包含 module metadata，或者我们只能返回已知信息
-    // 暂时返回空端口信息，或者基于 type 的默认信息（如果有）
-    const ports = { inputs: {}, outputs: {} };
-    // 如果 snapshot 中 data.module 被序列化了，可能包含一些信息，但通常不会包含方法
+    // Extract parameters from the module instance if available (source of truth)
+    const parameters: Record<string, unknown> = {};
+    if (node.data?.module && node.data.module.parameters) {
+      Object.entries(node.data.module.parameters).forEach(([key, param]) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (param && typeof (param as any).getValue === 'function') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          parameters[key] = (param as any).getValue();
+        } else {
+          parameters[key] = param;
+        }
+      });
+    } else {
+      // Fallback to static data parameters
+      Object.assign(parameters, node.data?.parameters || {});
+    }
+
+    const ports = this.getNodePorts(node);
 
     return {
       success: true,
       data: {
         module: {
           id: node.id,
-          type: node.type,
+          type: node.data?.type || node.type,
           label: node.data?.label,
           position: node.position,
-          parameters: node.data?.parameters || {},
+          parameters,
           selected: node.selected || false,
           ports,
         },
@@ -245,8 +324,8 @@ export class ToolExecutor {
 
     const newNode: FlowNode = {
       id: nodeId,
-      type,
-      data: { label, parameters: {} },
+      type: 'default',
+      data: { label, type, parameters: {} },
       position: pos
     };
 
@@ -257,11 +336,14 @@ export class ToolExecutor {
       data: { id: nodeId, type, label, position: pos }
     });
 
+    const details = this.getModuleDetails(nodeId);
+
     return {
       success: true,
       data: {
         moduleId: nodeId,
         message: `成功添加模块: ${label} (${type}) 在位置 (${pos.x}, ${pos.y})`,
+        moduleDetails: details.data,
       },
     };
   }
@@ -304,10 +386,13 @@ export class ToolExecutor {
       data: { id: moduleId, key: paramKey, value }
     });
 
+    const details = this.getModuleDetails(moduleId);
+
     return {
       success: true,
       data: {
         message: `成功更新模块 ${moduleId} 的参数 ${paramKey} 为 ${value}`,
+        moduleDetails: details.data,
       },
     };
   }
@@ -321,26 +406,76 @@ export class ToolExecutor {
     sourceHandle?: string,
     targetHandle?: string
   ) {
+    const sourceNode = this.nodes.find(n => n.id === sourceId);
+    const targetNode = this.nodes.find(n => n.id === targetId);
+
+    if (!sourceNode || !targetNode) {
+      return {
+        success: false,
+        error: `找不到源模块 (${sourceId}) 或目标模块 (${targetId})`
+      };
+    }
+
+    // 自动端口发现逻辑
+    let finalSourceHandle = sourceHandle;
+    let finalTargetHandle = targetHandle;
+
+    if (!finalSourceHandle || !finalTargetHandle) {
+      const sourcePorts = this.getNodePorts(sourceNode);
+      const targetPorts = this.getNodePorts(targetNode);
+
+      // 如果未指定 sourceHandle，尝试自动选择
+      if (!finalSourceHandle) {
+        const outputs = Object.keys(sourcePorts.outputs || {});
+        // 优先找 "output" 或 "out"
+        const defaultOut = outputs.find(k => k.toLowerCase().includes('output') || k.toLowerCase().includes('out'));
+        // 如果没有明确的，且只有一个输出，就用那个
+        if (defaultOut) {
+          finalSourceHandle = defaultOut;
+        } else if (outputs.length === 1) {
+          finalSourceHandle = outputs[0];
+        }
+      }
+
+      // 如果未指定 targetHandle，尝试自动选择
+      if (!finalTargetHandle) {
+        const inputs = Object.keys(targetPorts.inputs || {});
+        // 优先找 "input" 或 "in"
+        const defaultIn = inputs.find(k => k.toLowerCase().includes('input') || k.toLowerCase().includes('in'));
+        // 如果没有明确的，且只有一个输入，就用那个
+        if (defaultIn) {
+          finalTargetHandle = defaultIn;
+        } else if (inputs.length === 1) {
+          finalTargetHandle = inputs[0];
+        }
+      }
+    }
+
     const edgeId = `edge_${sourceId}_${targetId}_${Date.now()}`;
     const newEdge: FlowEdge = {
       id: edgeId,
       source: sourceId,
       target: targetId,
-      sourceHandle,
-      targetHandle
+      sourceHandle: finalSourceHandle,
+      targetHandle: finalTargetHandle
     };
 
     this.edges.push(newEdge);
 
     this.operations.push({
       type: 'CONNECT_MODULES',
-      data: { source: sourceId, target: targetId, sourceHandle, targetHandle }
+      data: { source: sourceId, target: targetId, sourceHandle: finalSourceHandle, targetHandle: finalTargetHandle }
     });
+
+    const sourceDetails = this.getModuleDetails(sourceId);
+    const targetDetails = this.getModuleDetails(targetId);
 
     return {
       success: true,
       data: {
-        message: `成功连接模块 ${sourceId} 到 ${targetId}`,
+        message: `成功连接模块 ${sourceId} (${finalSourceHandle || 'default'}) 到 ${targetId} (${finalTargetHandle || 'default'})`,
+        sourceModuleDetails: sourceDetails.data,
+        targetModuleDetails: targetDetails.data,
       },
     };
   }
@@ -371,10 +506,15 @@ export class ToolExecutor {
         data: { source: sourceId, target: targetId, sourceHandle, targetHandle }
       });
 
+      const sourceDetails = this.getModuleDetails(sourceId);
+      const targetDetails = this.getModuleDetails(targetId);
+
       return {
         success: true,
         data: {
           message: `成功断开模块 ${sourceId} 和 ${targetId} 之间的连接`,
+          sourceModuleDetails: sourceDetails.data,
+          targetModuleDetails: targetDetails.data,
         },
       };
     }

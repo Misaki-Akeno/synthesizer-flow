@@ -37,7 +37,8 @@ interface FlowState {
   addNode: (
     type: string,
     label: string,
-    position: { x: number; y: number }
+    position: { x: number; y: number },
+    id?: string
   ) => string;
   addEdge: (source: string, target: string) => void;
   deleteNode: (nodeId: string) => void;
@@ -126,8 +127,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
 
     // 添加新节点
-    addNode: (type, label, position) => {
-      const nodeId = `node_${Date.now()}`;
+    addNode: (type: string, label: string, position: { x: number; y: number }, id?: string) => {
+      const nodeId = id || `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
       const newNode = moduleManager.createNode(nodeId, type, label, position);
 
       set({
@@ -275,7 +276,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
         }
 
         // 创建节点
-        const nodeId = `node_${Date.now()}`;
+        const nodeId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
         const node: FlowNode = {
           id: nodeId,
           type: 'default',
