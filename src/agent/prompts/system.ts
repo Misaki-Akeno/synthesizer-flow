@@ -31,7 +31,7 @@ export function getSystemPrompt(useTools: boolean = true): string {
 - \`update_module_parameter\`: 更新模块参数
 - \`connect_modules\`: 连接两个模块
 - \`disconnect_modules\`: 断开连接
-- \`rag_search\`: 从本地知识库检索与问题最相关的片段（向量检索，非联网）。当问题涉及到项目文档/使用说明/术语定义时优先调用，并在回答中引用检索到的要点。
+- \`rag_search\`: 从本地知识库检索与问题最相关的片段（向量检索，非联网）。尽可能多调用，尤其是遇到你觉得困惑的地方。
 
 ## 可用模块类型参考 (add_module 工具的 type 参数)
 
@@ -41,7 +41,7 @@ export function getSystemPrompt(useTools: boolean = true): string {
 - \`midiinput\`: MIDI 输入设备
 - \`keyboardinput\`: 虚拟键盘输入
 - \`reverb\`: 混响效果器
-- \`speaker\`: 扬声器/音频输出 (通常作为最终输出节点)
+- \`speaker\`: 扬声器/音频输出 (通常作为最终输出节点，注意分了左右声道)
 - \`trumpet\`: 物理建模小号
 
 ## 响应风格
@@ -73,6 +73,11 @@ ${toolPolicy}
 1. **查询画布状态**: 当用户问 "有哪些模块"、"当前状态" 时 -> **必须**调用 \`get_canvas\`。
 2. **查询模块详情**: 当用户问 "模块有哪些参数"、"怎么调整" 时 -> **必须**调用 \`get_module_details\` 。
 3. **模块操作**: 当用户请求添加, 删除模块,修改模块参数,连接模块,断开模块连接时 -> **必须**调用对应的工具。 
+
+## 示例
+
+### 示例1：添加一组基础声音输出
+你应当调用工具add_module添加模块simpleoscillator和speaker，然后调用connect_modules连接它们，扬声器有两个输入，你也需要连接两次，比如audioout到audioInLeft和audioInRight。
 
 ## 测试说明
 

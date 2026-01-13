@@ -6,6 +6,8 @@
 import { createModuleLogger } from '@/lib/logger';
 import { searchDocuments } from '@/lib/rag/vectorStore';
 import { ClientOperation, GraphStateSnapshot } from '../core/types';
+import { moduleClassMap } from '../../core/modules/index';
+import { ModuleBase } from '../../core/base/ModuleBase';
 
 const logger = createModuleLogger('ToolExecutor');
 
@@ -322,10 +324,29 @@ export class ToolExecutor {
 
     const nodeId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`; // 生成临时ID
 
+    // 尝试实例化真实模块以获取准确的端口和参数信息
+    let moduleInstance: ModuleBase | undefined;
+    try {
+      const LowerType = type.toLowerCase();
+      const ModuleClass = moduleClassMap[LowerType] || moduleClassMap['default'];
+      if (ModuleClass) {
+        // 实例化模块 (仅用于获取元数据，不需要 AudioContext)
+        // 注意：在服务端/Agent环境，window undefined，AudioModuleBase 会跳过 Tone.js 初始化
+        moduleInstance = new ModuleClass(nodeId, label);
+      }
+    } catch (e) {
+      logger.warn(`Failed to instantiate module ${type} for metadata`, e);
+    }
+
     const newNode: FlowNode = {
       id: nodeId,
       type: 'default',
-      data: { label, type, parameters: {} },
+      data: {
+        label,
+        type,
+        parameters: {},
+        module: moduleInstance // 存储实例以便 getModuleDetails 使用
+      },
       position: pos
     };
 

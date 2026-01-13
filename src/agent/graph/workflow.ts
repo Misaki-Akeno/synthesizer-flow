@@ -1,6 +1,6 @@
 import { SystemMessage } from '@langchain/core/messages';
 import { StateGraph, START, END } from '@langchain/langgraph';
-import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { SequentialToolNode } from './sequentialToolNode';
 import { ChatOpenAI } from '@langchain/openai';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { AgentState } from './state';
@@ -9,7 +9,8 @@ import { getSystemPrompt } from '../prompts/system';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createGraph(tools: any[]) {
   // Define the tool node
-  const toolNode = new ToolNode(tools);
+  const toolNodeInstance = new SequentialToolNode(tools);
+  const toolNode = (state: typeof AgentState.State, config?: RunnableConfig) => toolNodeInstance.invoke(state, config);
 
   // Define the model node logic
   const callModel = async (state: typeof AgentState.State, config?: RunnableConfig) => {

@@ -26,7 +26,7 @@ async function generateTitle(messages: ChatMessage[], settings?: AISettings): Pr
 
         const conversation = messages.map(m => `${m.role}: ${m.content}`).join('\n').slice(-2000); // Limit context
         const response = await model.invoke([
-            new HumanMessage(`Summarize the following conversation into a short title (max 10 chars, no quotes). If it's empty, return "New Chat".\n\n${conversation}`)
+            new HumanMessage(`总结上下文，生成一个标题，长度小于12个字符。基于对话语言.\n\n${conversation}`)
         ]);
 
         const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
