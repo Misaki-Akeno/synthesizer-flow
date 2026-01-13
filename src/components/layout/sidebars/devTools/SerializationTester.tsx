@@ -23,7 +23,7 @@ export default function SerializationTester() {
   const [activeTab, setActiveTab] = useState('user-projects');
 
   const {
-    recentProjects,
+    userProjects,
     builtInProjects,
     currentProject,
     saveCurrentCanvas,
@@ -132,6 +132,35 @@ export default function SerializationTester() {
           >
             保存项目
           </Button>
+
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-2"
+            onClick={async () => {
+              // 这里的类型转换是为了安全起见，因为 saveAsPreset 是新加的
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const store = usePersistStore.getState() as any;
+
+              if (!store.saveAsPreset) {
+                alert('store 未更新，请刷新页面');
+                return;
+              }
+              if (!projectName.trim()) {
+                alert('请输入预设名称');
+                return;
+              }
+
+              const success = await store.saveAsPreset(projectName, projectDesc);
+              if (success) {
+                alert(`预设 "${projectName}" 已保存!`);
+              } else {
+                alert('保存预设失败');
+              }
+            }}
+          >
+            保存为预设 (Dev)
+          </Button>
         </div>
       </div>
 
@@ -235,7 +264,7 @@ export default function SerializationTester() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid grid-cols-2 mb-2">
             <TabsTrigger value="user-projects">
-              用户项目 ({recentProjects.length})
+              用户项目 ({userProjects.length})
             </TabsTrigger>
             <TabsTrigger value="built-in">
               内置预设 ({builtInProjects.length})
@@ -245,12 +274,12 @@ export default function SerializationTester() {
           <TabsContent value="user-projects">
             <ScrollArea className="h-52 border rounded">
               <div className="p-2 space-y-2">
-                {recentProjects.length === 0 ? (
+                {userProjects.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-4">
                     暂无保存的项目
                   </p>
                 ) : (
-                  recentProjects.map((project) => (
+                  userProjects.map((project) => (
                     <ProjectCard
                       key={project.name}
                       project={project}
@@ -258,7 +287,7 @@ export default function SerializationTester() {
                       onExport={() => exportProjectToFile(project.name)}
                       onDelete={() => {
                         if (confirm(`确定要删除项目"${project.name}"吗?`)) {
-                          deleteProject(project.name);
+                          deleteProject(project.id);
                         }
                       }}
                       isActive={currentProject?.name === project.name}
@@ -278,7 +307,7 @@ export default function SerializationTester() {
                     project={project}
                     onLoad={() => loadProject(project)}
                     onExport={() => exportProjectToFile(project.name)}
-                    onDelete={() => {}} // 内置预设不允许删除
+                    onDelete={() => { }} // 内置预设不允许删除
                     isActive={currentProject?.name === project.name}
                     isBuiltIn
                   />

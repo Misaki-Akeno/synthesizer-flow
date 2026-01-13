@@ -10,6 +10,7 @@ import {
   index,
   jsonb,
   vector,
+  boolean,
 } from 'drizzle-orm/pg-core';
 import { InferSelectModel, InferInsertModel, sql } from 'drizzle-orm';
 
@@ -128,6 +129,7 @@ export const projects = pgTable('projects', {
   id: varchar('id', { length: 255 }).notNull().primaryKey(),
   name: text('name').notNull(),
   data: jsonb('data').notNull(), // 存储 canvas JSON 数据
+  isPreset: boolean('is_preset').default(false).notNull(), // 是否为内置预设
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
 });

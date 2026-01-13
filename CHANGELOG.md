@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.1 (2026-01-13)
+
+### Features
+
+- **Project Management System**: Implemented a comprehensive project persistence and management system.
+  - **Database Schema**: Added `projects` and `users_to_projects` tables supporting many-to-many relationships and ownership.
+  - **Server Actions**: Implemented secure CRUD actions (`saveProject`, `getUserProjects`, `deleteProject`) for project data.
+  - **Dual-Layer State Management**: Introduced `useProjectStore` to handle project lists (remote) and active canvas state (local/hybrid).
+  - **Smart Hydration**: `Canvas` component now intelligently resolves conflicts between URL parameters, local cache, and server data.
+  - **DevTools**: Enhanced `SerializationTester` for robust testing of the save/load workflows.
+
+### Bug Fixes
+
+- **RAG System**: Fixed issues related to RAG document ingestion and vector storage (`1d29238`).
+- **UI**: Fixed project deletion bug in dev tools where name was used instead of ID.
+
 ## 0.8.0 (2026-01-07)
 
 ### Architecture

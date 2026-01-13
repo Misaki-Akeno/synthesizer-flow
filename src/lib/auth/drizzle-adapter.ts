@@ -12,7 +12,7 @@ import {
 import { accounts, sessions, users, verificationTokens } from '@/db/schema';
 import { nanoid } from 'nanoid';
 
-export function DrizzleAdapter(db: PgDatabase<any>): Adapter {
+export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
   return {
     // 创建用户
     async createUser(data: Omit<AdapterUser, 'id'>): Promise<AdapterUser> {
