@@ -13,12 +13,25 @@ import {
   ChevronDown,
   ChevronRight,
   Terminal,
+  History,
+  Save,
 } from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings';
 import { useFlowStore } from '@/store/store';
 import { ChatMessage, ClientOperation, ToolCall } from '@/agent';
 import { getSystemPrompt } from '@/agent/prompts/system';
 import { chatWithAgent } from '@/agent/actions';
+import { saveCheckpoint } from '@/agent/checkpoint-actions';
+import { useSession } from 'next-auth/react';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/shadcn/dialog';
+import { CheckpointList } from './CheckpointList';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -199,7 +212,31 @@ export function ChatInterface() {
   };
 
   // 新建对话：重置为仅包含当前 useTools 的系统提示
-  const resetConversation = () => {
+  const resetConversation = async () => {
+    // Auto-save if there are user/assistant messages
+    const hasHistory = messages.some(m => m.role !== 'system');
+    if (hasHistory && session?.user?.id) {
+      try {
+        toast.info('正在自动保存...');
+        const currentNodes = useFlowStore.getState().nodes.map(n => ({
+          ...n,
+          data: { ...n.data, module: undefined }
+        }));
+        const currentEdges = useFlowStore.getState().edges;
+        await saveCheckpoint(
+          session.user.id,
+          '',
+          messages,
+          { nodes: currentNodes, edges: currentEdges },
+          aiSettings
+        );
+        toast.success('已自动保存上一次对话');
+      } catch (e) {
+        console.error('Auto-save failed', e);
+        toast.error('自动保存失败');
+      }
+    }
+
     setMessages([
       {
         role: 'system',
@@ -215,6 +252,59 @@ export function ChatInterface() {
 
   // 获取可显示的消息（过滤掉系统消息）
   const displayMessages = messages.filter((msg) => msg.role !== 'system');
+
+  // Checkpoint related
+  const { data: session } = useSession();
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSaveCheckpoint = async () => {
+    if (!session?.user?.id) {
+      toast.error('请先登录');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const currentNodes = useFlowStore.getState().nodes.map(n => ({
+        ...n,
+        data: { ...n.data, module: undefined }
+      }));
+      const currentEdges = useFlowStore.getState().edges;
+
+      const res = await saveCheckpoint(
+        session.user.id,
+        '', // server will generate a default name
+        messages,
+        { nodes: currentNodes, edges: currentEdges },
+        aiSettings // Pass settings for auto-naming
+      );
+
+      if (res.success) {
+        toast.success('存档已保存');
+      } else {
+        toast.error('保存失败');
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('保存出错');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRestoreCheckpoint = (checkpoint: import('@/db/schema').Checkpoint) => {
+    try {
+      // Only Restore Chat
+      const restoredMessages = checkpoint.messages as ChatMessage[];
+      setMessages(restoredMessages);
+      toast.success('对话历史已加载');
+      setIsHistoryOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast.error('恢复出错');
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -295,12 +385,36 @@ export function ChatInterface() {
       <div className="border-t p-4 flex flex-col gap-2">
         {/* 工具开关控制 */}
         <div className="flex justify-between items-center mb-2">
-          <Button variant="outline" size="sm" onClick={resetConversation}>
-            <Plus className="h-4 w-4 mr-1" /> 新建对话
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={resetConversation}>
+              <Plus className="h-4 w-4 mr-1" /> 新建对话
+            </Button>
+            {session?.user && (
+              <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <History className="h-4 w-4 mr-1" /> 历史
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[350px]">
+                  <DialogHeader>
+                    <DialogTitle>对话存档</DialogTitle>
+                  </DialogHeader>
+                  <div className="flex flex-col gap-4">
+                    <Button onClick={handleSaveCheckpoint} disabled={isSaving} className="w-full">
+                      {isSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                      保存当前状态
+                    </Button>
+                    <div className="border-t my-2" />
+                    <CheckpointList userId={session.user.id} onRestore={handleRestoreCheckpoint} />
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
           <div className="flex items-center space-x-2">
             <Wrench className="h-4 w-4" />
-            <span className="text-sm">启用MCP工具</span>
+            <span className="text-sm">MCP</span>
             <Switch
               checked={useTools}
               onCheckedChange={setUseTools}

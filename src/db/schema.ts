@@ -159,3 +159,18 @@ export type Project = InferSelectModel<typeof projects>;
 export type NewProject = InferInsertModel<typeof projects>;
 export type UserToProject = InferSelectModel<typeof usersToProjects>;
 export type NewUserToProject = InferInsertModel<typeof usersToProjects>;
+
+// Define checkpoints table
+export const checkpoints = pgTable('checkpoints', {
+  id: varchar('id', { length: 255 }).notNull().primaryKey(),
+  userId: varchar('user_id', { length: 255 })
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  messages: jsonb('messages').notNull(), // Chat history
+  graphState: jsonb('graph_state').notNull(), // Nodes and edges snapshot
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+});
+
+export type Checkpoint = InferSelectModel<typeof checkpoints>;
+export type NewCheckpoint = InferInsertModel<typeof checkpoints>;
