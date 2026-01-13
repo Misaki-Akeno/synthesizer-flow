@@ -109,6 +109,11 @@ export abstract class ModuleBase {
 
   // 存储内部订阅关系
   private internalSubscriptions: Subscription[] = [];
+
+  // 存储数组类型的多个输入源的值
+  // Map<inputPortName, Map<bindingKey, any[]>>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private arrayInputValues: Map<string, Map<string, any[]>> = new Map();
   type: string | undefined;
 
   constructor(
@@ -467,18 +472,22 @@ export abstract class ModuleBase {
       );
     }
 
-    // 对于音频端口，不需要解除现有绑定，允许多个输入源
+    // 对于数组端口，也不需要解除现有绑定，允许多个输入源
+    const isArrayPort = inputType === PortType.ARRAY;
+
+    // 对于音频端口，也不需要解除现有绑定
     const isAudioPort = inputType === PortType.AUDIO;
 
-    // 对于非音频端口或者第一次连接音频端口，解除现有绑定
-    if (!isAudioPort) {
+    // 对于非音频且非数组端口，解除现有绑定
+    if (!isAudioPort && !isArrayPort) {
       this.unbindInput(inputPortName);
     }
 
-    // 创建新的订阅，对于音频端口使用唯一的绑定键
-    const bindingKey = isAudioPort
-      ? `input_${inputPortName}_${sourceModule.id}_${sourcePortName}`
-      : `input_${inputPortName}`;
+    // 创建新的订阅，对于音频和数组端口使用唯一的绑定键
+    const bindingKey =
+      isAudioPort || isArrayPort
+        ? `input_${inputPortName}_${sourceModule.id}_${sourcePortName}`
+        : `input_${inputPortName}`;
 
     // 检查是否已存在相同的绑定
     if (this.subscriptions[bindingKey]) {
@@ -497,8 +506,33 @@ export abstract class ModuleBase {
           sourceModule.id,
           sourcePortName
         );
+      } else if (isArrayPort) {
+        // 对于数组端口，合并多个输入源的值
+        if (Array.isArray(value)) {
+          if (!this.arrayInputValues.has(inputPortName)) {
+            this.arrayInputValues.set(inputPortName, new Map());
+          }
+          this.arrayInputValues.get(inputPortName)!.set(bindingKey, value);
+
+          // 聚合所有输入源的值
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const aggregated: any[] = [];
+          // 对key进行排序以确保确定性的顺序（这对于如notes和velocities这样成对出现的数组很重要）
+          const sortedKeys = Array.from(
+            this.arrayInputValues.get(inputPortName)!.keys()
+          ).sort();
+
+          sortedKeys.forEach((key) => {
+            const val = this.arrayInputValues.get(inputPortName)!.get(key);
+            if (Array.isArray(val)) {
+              aggregated.push(...val);
+            }
+          });
+
+          this.inputPorts[inputPortName].next(aggregated);
+        }
       } else {
-        // 对于非音频端口，直接更新BehaviorSubject
+        // 对于普通端口，直接更新BehaviorSubject
         this.inputPorts[inputPortName].next(value);
       }
     });
@@ -543,29 +577,59 @@ export abstract class ModuleBase {
     }
 
     const portType = this.inputPortTypes[inputPortName];
+    const isArrayPort = portType === PortType.ARRAY;
     const isAudioPort = portType === PortType.AUDIO;
 
-    // 如果是针对特定源模块的音频解绑
-    if (isAudioPort && sourceModuleId) {
-      const audioPrefix = `input_${inputPortName}_`;
+    // 如果是针对特定源模块的音频或数组端口解绑
+    if ((isAudioPort || isArrayPort) && sourceModuleId) {
+      const prefix = `input_${inputPortName}_`;
       const bindingKey = sourcePortName
-        ? `${audioPrefix}${sourceModuleId}_${sourcePortName}`
-        : `${audioPrefix}${sourceModuleId}`;
+        ? `${prefix}${sourceModuleId}_${sourcePortName}`
+        : `${prefix}${sourceModuleId}`;
+
+      // 辅助函数：清理数组缓存并更新
+      const cleanArrayCache = (key: string) => {
+        if (isArrayPort && this.arrayInputValues.has(inputPortName)) {
+          const map = this.arrayInputValues.get(inputPortName)!;
+          map.delete(key);
+
+          // 重新聚合
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const aggregated: any[] = [];
+          const sortedKeys = Array.from(map.keys()).sort();
+          sortedKeys.forEach((k) => {
+            const val = map.get(k);
+            if (Array.isArray(val)) {
+              aggregated.push(...val);
+            }
+          });
+          this.inputPorts[inputPortName].next(aggregated);
+
+          if (map.size === 0) {
+            this.arrayInputValues.delete(inputPortName);
+          }
+        }
+      };
 
       if (this.subscriptions[bindingKey]) {
         this.subscriptions[bindingKey].unsubscribe();
         delete this.subscriptions[bindingKey];
-        // 通知模块音频连接已移除
-        this.handleAudioDisconnect(
-          inputPortName,
-          sourceModuleId,
-          sourcePortName
-        );
-        const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
-          key.startsWith(audioPrefix)
-        );
-        if (!hasRemainingBindings) {
-          this.inputPorts[inputPortName].next(null);
+
+        if (isAudioPort) {
+          // 通知模块音频连接已移除
+          this.handleAudioDisconnect(
+            inputPortName,
+            sourceModuleId,
+            sourcePortName
+          );
+          const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
+            key.startsWith(prefix)
+          );
+          if (!hasRemainingBindings) {
+            this.inputPorts[inputPortName].next(null);
+          }
+        } else if (isArrayPort) {
+          cleanArrayCache(bindingKey);
         }
         return true;
       }
@@ -577,16 +641,21 @@ export abstract class ModuleBase {
           if (key.startsWith(`input_${inputPortName}_${sourceModuleId}_`)) {
             this.subscriptions[key].unsubscribe();
             delete this.subscriptions[key];
+            if (isArrayPort) {
+              cleanArrayCache(key);
+            }
             found = true;
           }
         });
         if (found) {
-          this.handleAudioDisconnect(inputPortName, sourceModuleId);
-          const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
-            key.startsWith(audioPrefix)
-          );
-          if (!hasRemainingBindings) {
-            this.inputPorts[inputPortName].next(null);
+          if (isAudioPort) {
+            this.handleAudioDisconnect(inputPortName, sourceModuleId);
+            const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
+              key.startsWith(prefix)
+            );
+            if (!hasRemainingBindings) {
+              this.inputPorts[inputPortName].next(null);
+            }
           }
           return true;
         }
@@ -595,11 +664,11 @@ export abstract class ModuleBase {
       return false;
     }
 
-    // 常规解绑（非音频或解绑所有连接）
+    // 常规解绑（非音频/非数组 或 解绑所有连接）
     let unbound = false;
 
-    if (isAudioPort) {
-      // 对于音频端口，解除所有相关订阅
+    if (isAudioPort || isArrayPort) {
+      // 对于音频或数组端口，解除所有相关订阅
       Object.keys(this.subscriptions).forEach((key) => {
         if (key.startsWith(`input_${inputPortName}_`)) {
           this.subscriptions[key].unsubscribe();
@@ -609,9 +678,15 @@ export abstract class ModuleBase {
       });
 
       if (unbound) {
-        // 重置音频输入端口
-        this.inputPorts[inputPortName].next(null);
-        this.handleAudioDisconnect(inputPortName);
+        if (isAudioPort) {
+          // 重置音频输入端口
+          this.inputPorts[inputPortName].next(null);
+          this.handleAudioDisconnect(inputPortName);
+        } else if (isArrayPort) {
+          // 清空数组缓存
+          this.arrayInputValues.delete(inputPortName);
+          this.inputPorts[inputPortName].next([]);
+        }
       }
     } else {
       // 对于非音频端口，解除单个订阅
