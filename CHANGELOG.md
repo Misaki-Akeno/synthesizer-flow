@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.3 (2026-01-14)
+
+### Features
+
+- **Human-in-the-Loop (HIL)**: Implemented a secure approval workflow for sensitive agent actions.
+  - **Sensitive Tool Protection**: Tools like `delete_module` and `disconnect_modules` now pause execution and require explicit user approval.
+  - **Interactive Chat UI**: Integrated approval requests directly into the chat stream with "Approve" and "Reject" actions.
+  - **Audit Trail**: User decisions are persisted in the chat history for future reference.
+
+### Infrastructure
+
+- **LangGraph Persistence**: Built a custom `DrizzleCheckpointer` to store full agent state in PostgreSQL.
+  - Enables reliable interruption and resumption of complex agent workflows.
+  - Solved complex object serialization issues for LangChain message types.
+- **Robust Error Handling**: Improved logger robustness to prevent server-side UI rendering errors (`toast` on server).
+
 ## 0.8.2 (2026-01-13)
 
 ### Features

@@ -174,3 +174,36 @@ export const checkpoints = pgTable('checkpoints', {
 
 export type Checkpoint = InferSelectModel<typeof checkpoints>;
 export type NewCheckpoint = InferInsertModel<typeof checkpoints>;
+
+// LangGraph Checkpoints Table
+export const langgraphCheckpoints = pgTable(
+  'langgraph_checkpoints',
+  {
+    thread_id: text('thread_id').notNull(),
+    checkpoint_id: text('checkpoint_id').notNull(),
+    parent_checkpoint_id: text('parent_checkpoint_id'),
+    checkpoint: jsonb('checkpoint').notNull(),
+    metadata: jsonb('metadata').notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.thread_id, table.checkpoint_id] }),
+  })
+);
+
+// LangGraph Writes Table
+export const langgraphWrites = pgTable(
+  'langgraph_writes',
+  {
+    thread_id: text('thread_id').notNull(),
+    checkpoint_id: text('checkpoint_id').notNull(),
+    task_id: text('task_id').notNull(),
+    idx: integer('idx').notNull(),
+    channel: text('channel').notNull(),
+    value: jsonb('value'),
+  },
+  (table) => ({
+    pk: primaryKey({
+      columns: [table.thread_id, table.checkpoint_id, table.task_id, table.idx],
+    }),
+  })
+);

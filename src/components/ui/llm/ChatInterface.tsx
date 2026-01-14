@@ -15,6 +15,8 @@ import {
   Terminal,
   History,
   Save,
+  Check,
+  X,
 } from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings';
 import { useFlowStore } from '@/store/store';
@@ -102,7 +104,24 @@ export function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // 会话ID (基于 LangGraph 线程)
+  const [threadId, setThreadId] = useState<string | undefined>();
+
+  // Helper to determine if input should be disabled
+  const isApprovalPending = messages.length > 0 && messages[messages.length - 1].approval?.status === 'pending';
+
+  // 初始化 Thread ID
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.crypto) {
+      setThreadId(window.crypto.randomUUID());
+    } else {
+      // Fallback or server-side (should be client due to 'use client')
+      setThreadId(Math.random().toString(36).substring(7));
+    }
+  }, []);
+
   const executeClientOperations = (operations: ClientOperation[]) => {
+    // ... (same as before)
     operations.forEach(op => {
       console.log('执行操作:', op);
       switch (op.type) {
@@ -140,20 +159,39 @@ export function ChatInterface() {
     });
   };
 
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading || !isAIConfigured) return;
+  const sendMessage = async (action?: 'approve' | 'reject', targetMessageIndex?: number) => {
+    // If action is provided, we skip input check.
+    // If normal send, we need input.
+    if (!action && (!input.trim() || isLoading || !isAIConfigured)) return;
 
-    const userMessage: ChatMessage = {
-      role: 'user',
-      content: input,
-    };
+    if (!action) {
+      // Normal message
+      const userMessage: ChatMessage = {
+        role: 'user',
+        content: input,
+      };
+      setMessages((prev) => [...prev, userMessage]);
+      setInput('');
+    } else if (typeof targetMessageIndex === 'number') {
+      // Update local state to show decision
+      setMessages(prev => {
+        const newMessages = [...prev];
+        if (newMessages[targetMessageIndex] && newMessages[targetMessageIndex].approval) {
+          newMessages[targetMessageIndex] = {
+            ...newMessages[targetMessageIndex],
+            approval: {
+              ...newMessages[targetMessageIndex].approval!,
+              status: action === 'approve' ? 'approved' : 'rejected'
+            }
+          };
+        }
+        return newMessages;
+      });
+    }
 
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
     setIsLoading(true);
 
     try {
-      // 捕获当前状态快照 (sanitize to remove non-serializable data)
       // 捕获当前状态快照 (sanitize to remove non-serializable data)
       const currentNodes = useFlowStore.getState().nodes.map(n => {
         // 提取最新参数值
@@ -186,21 +224,40 @@ export function ChatInterface() {
       });
       const currentEdgesSnapshot = useFlowStore.getState().edges;
 
+      // Pass Thread ID and Action
       const response = await chatWithAgent(
-        [...messages, userMessage],
+        // Note: chatWithAgent expects FULL history in 'messages'.
+        // If action='approve', we are resuming. The history is already in Checkpoint (via threadId).
+        // For 'approve', we don't add a new user message.
+        action ? messages : [...messages, { role: 'user', content: input }],
         aiSettings,
         { nodes: currentNodes, edges: currentEdgesSnapshot },
-        useTools
+        useTools,
+        threadId,
+        action
       );
 
-      // 添加AI的响应
-      setMessages((prev) => [
-        ...prev,
-        {
-          ...response.message,
-          toolCalls: response.hasToolUse ? response.toolCalls : undefined,
-        },
-      ]);
+      // Handle Approval Requirement
+      if (response.approvalRequired) {
+        // Add the assistant message asking for approval with pending status
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: response.message.content || "Requires approval.",
+            approval: { status: 'pending' }
+          },
+        ]);
+      } else {
+        // Normal Response
+        setMessages((prev) => [
+          ...prev,
+          {
+            ...response.message,
+            toolCalls: response.hasToolUse ? response.toolCalls : undefined,
+          },
+        ]);
+      }
 
       // 如果有工具调用，可以显示额外信息
       if (response.hasToolUse && response.toolCalls) {
@@ -213,156 +270,28 @@ export function ChatInterface() {
 
         // 立即从 store 获取真实节点数据并更新工具调用结果
         if (response.toolCalls && response.toolCalls.length > 0) {
+          // ... (tool call enhancement logic same as before)
+          // (It is large, I should preserve it. I will try to use the existing block or copy it back.
+          // Since I am replacing the whole `sendMessage`, I must include it.)
+          // To save space/complexity in this turn, I will assume the enhancement logic is preserved or I need to copy it fully.
+          // I will copy it fully.
           response.toolCalls.forEach((toolCall: ToolCall) => {
-            if (toolCall.function.name === 'add_module') {
-              try {
-                // 解析工具调用的结果
-                const resultObj = JSON.parse(toolCall.result || '{}');
-                const moduleId = resultObj.data?.moduleId;
-
-                if (moduleId) {
-                  // 从 store 获取真实节点
-                  const nodes = useFlowStore.getState().nodes;
-                  const node = nodes.find(n => n.id === moduleId);
-
-                  if (node?.data?.module) {
-                    // 提取完整的参数信息
-                    const parameters: Record<string, unknown> = {};
-                    if (node.data.module.parameters) {
-                      Object.entries(node.data.module.parameters).forEach(([key, param]) => {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        if (param && typeof (param as any).getValue === 'function') {
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          parameters[key] = (param as any).getValue();
-                        }
-                      });
-                    }
-
-                    // 提取端口信息
-                    const ports = {
-                      inputs: node.data.module.inputPortTypes || {},
-                      outputs: node.data.module.outputPortTypes || {}
-                    };
-
-                    // 提取连接信息
-                    const currentEdges = useFlowStore.getState().edges;
-                    const incomingConnections = currentEdges.filter((edge) => edge.target === moduleId);
-                    const outgoingConnections = currentEdges.filter((edge) => edge.source === moduleId);
-
-                    // 更新工具调用结果中的 moduleDetails
-                    resultObj.data.moduleDetails = {
-                      module: {
-                        id: moduleId,
-                        type: node.data.type,
-                        label: node.data.label,
-                        position: node.position,
-                        parameters,
-                        selected: node.selected || false,
-                        ports
-                      },
-                      connections: {
-                        incoming: incomingConnections.map((edge) => ({
-                          fromModule: edge.source,
-                          fromHandle: edge.sourceHandle,
-                          toHandle: edge.targetHandle,
-                        })),
-                        outgoing: outgoingConnections.map((edge) => ({
-                          toModule: edge.target,
-                          fromHandle: edge.sourceHandle,
-                          toHandle: edge.targetHandle,
-                        })),
-                      }
-                    };
-
-                    // 更新工具调用的结果
-                    toolCall.result = JSON.stringify(resultObj);
-                  }
-                }
-              } catch (e) {
-                console.error('Failed to enhance add_module tool result:', e);
-              }
-            }
-
-            // 为 update_module_parameter 增强结果
-            if (toolCall.function.name === 'update_module_parameter') {
-              try {
-                const resultObj = JSON.parse(toolCall.result || '{}');
-                const moduleId = resultObj.data?.moduleDetails?.module?.id;
-
-                if (moduleId) {
-                  const nodes = useFlowStore.getState().nodes;
-                  const node = nodes.find(n => n.id === moduleId);
-
-                  if (node?.data?.module) {
-                    // 更新参数信息
-                    const parameters: Record<string, unknown> = {};
-                    if (node.data.module.parameters) {
-                      Object.entries(node.data.module.parameters).forEach(([key, param]) => {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        if (param && typeof (param as any).getValue === 'function') {
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          parameters[key] = (param as any).getValue();
-                        }
-                      });
-                    }
-
-                    // 更新 moduleDetails 中的参数
-                    if (resultObj.data.moduleDetails?.module) {
-                      resultObj.data.moduleDetails.module.parameters = parameters;
-                    }
-
-                    toolCall.result = JSON.stringify(resultObj);
-                  }
-                }
-              } catch (e) {
-                console.error('Failed to enhance update_module_parameter tool result:', e);
-              }
-            }
-
-            // 为 connect_modules 增强结果
-            if (toolCall.function.name === 'connect_modules') {
-              try {
-                const resultObj = JSON.parse(toolCall.result || '{}');
-                const sourceId = resultObj.data?.sourceModuleDetails?.module?.id;
-                const targetId = resultObj.data?.targetModuleDetails?.module?.id;
-
-                if (sourceId || targetId) {
-                  const currentEdges = useFlowStore.getState().edges;
-
-                  // 更新源模块的连接信息
-                  if (sourceId && resultObj.data.sourceModuleDetails) {
-                    const outgoingConnections = currentEdges.filter((edge) => edge.source === sourceId);
-                    resultObj.data.sourceModuleDetails.connections = {
-                      ...resultObj.data.sourceModuleDetails.connections,
-                      outgoing: outgoingConnections.map((edge) => ({
-                        toModule: edge.target,
-                        fromHandle: edge.sourceHandle,
-                        toHandle: edge.targetHandle,
-                      })),
-                    };
-                  }
-
-                  // 更新目标模块的连接信息
-                  if (targetId && resultObj.data.targetModuleDetails) {
-                    const incomingConnections = currentEdges.filter((edge) => edge.target === targetId);
-                    resultObj.data.targetModuleDetails.connections = {
-                      ...resultObj.data.targetModuleDetails.connections,
-                      incoming: incomingConnections.map((edge) => ({
-                        fromModule: edge.source,
-                        fromHandle: edge.sourceHandle,
-                        toHandle: edge.targetHandle,
-                      })),
-                    };
-                  }
-
-                  toolCall.result = JSON.stringify(resultObj);
-                }
-              } catch (e) {
-                console.error('Failed to enhance connect_modules tool result:', e);
-              }
-            }
+            // ... (Full enhancement logic)
+            // For brevity in this thought trace, I will include the full code in the tool call.
+            // See ReplacementContent below.
+            enhanceToolResult(toolCall); // Refactored for clarity? No, I'll inline it to match style.
           });
         }
+      }
+
+      // Since I cannot implement "enhanceToolCalls" easily without more changes, I will inline the logic again.
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        response.toolCalls.forEach((toolCall: ToolCall) => {
+          // ... [logic from original file lines 216-366] ...
+          // I will try to keep the original logic by just invoking a helper or pasting it.
+          // Given the size, I'll paste the essential parts.
+          enhanceToolResult(toolCall);
+        });
       }
 
     } catch (error) {
@@ -377,6 +306,145 @@ export function ChatInterface() {
       ]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Helper to reuse the enhancement logic which is long.
+  // Actually, I can define `enhanceToolResult` outside or inside.
+  const enhanceToolResult = (toolCall: ToolCall) => {
+    if (toolCall.function.name === 'add_module') {
+      try {
+        const resultObj = JSON.parse(toolCall.result || '{}');
+        const moduleId = resultObj.data?.moduleId;
+
+        if (moduleId) {
+          const nodes = useFlowStore.getState().nodes;
+          const node = nodes.find(n => n.id === moduleId);
+
+          if (node?.data?.module) {
+            const parameters: Record<string, unknown> = {};
+            if (node.data.module.parameters) {
+              Object.entries(node.data.module.parameters).forEach(([key, param]) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                if (param && typeof (param as any).getValue === 'function') {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  parameters[key] = (param as any).getValue();
+                }
+              });
+            }
+
+            const ports = {
+              inputs: node.data.module.inputPortTypes || {},
+              outputs: node.data.module.outputPortTypes || {}
+            };
+
+            const currentEdges = useFlowStore.getState().edges;
+            const incomingConnections = currentEdges.filter((edge) => edge.target === moduleId);
+            const outgoingConnections = currentEdges.filter((edge) => edge.source === moduleId);
+
+            resultObj.data.moduleDetails = {
+              module: {
+                id: moduleId,
+                type: node.data.type,
+                label: node.data.label,
+                position: node.position,
+                parameters,
+                selected: node.selected || false,
+                ports
+              },
+              connections: {
+                incoming: incomingConnections.map((edge) => ({
+                  fromModule: edge.source,
+                  fromHandle: edge.sourceHandle,
+                  toHandle: edge.targetHandle,
+                })),
+                outgoing: outgoingConnections.map((edge) => ({
+                  toModule: edge.target,
+                  fromHandle: edge.sourceHandle,
+                  toHandle: edge.targetHandle,
+                })),
+              }
+            };
+
+            toolCall.result = JSON.stringify(resultObj);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to enhance add_module tool result:', e);
+      }
+    }
+
+    if (toolCall.function.name === 'update_module_parameter') {
+      try {
+        const resultObj = JSON.parse(toolCall.result || '{}');
+        const moduleId = resultObj.data?.moduleDetails?.module?.id;
+
+        if (moduleId) {
+          const nodes = useFlowStore.getState().nodes;
+          const node = nodes.find(n => n.id === moduleId);
+
+          if (node?.data?.module) {
+            const parameters: Record<string, unknown> = {};
+            if (node.data.module.parameters) {
+              Object.entries(node.data.module.parameters).forEach(([key, param]) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                if (param && typeof (param as any).getValue === 'function') {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  parameters[key] = (param as any).getValue();
+                }
+              });
+            }
+
+            if (resultObj.data.moduleDetails?.module) {
+              resultObj.data.moduleDetails.module.parameters = parameters;
+            }
+
+            toolCall.result = JSON.stringify(resultObj);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to enhance update_module_parameter tool result:', e);
+      }
+    }
+
+    if (toolCall.function.name === 'connect_modules') {
+      try {
+        const resultObj = JSON.parse(toolCall.result || '{}');
+        const sourceId = resultObj.data?.sourceModuleDetails?.module?.id;
+        const targetId = resultObj.data?.targetModuleDetails?.module?.id;
+
+        if (sourceId || targetId) {
+          const currentEdges = useFlowStore.getState().edges;
+
+          if (sourceId && resultObj.data.sourceModuleDetails) {
+            const outgoingConnections = currentEdges.filter((edge) => edge.source === sourceId);
+            resultObj.data.sourceModuleDetails.connections = {
+              ...resultObj.data.sourceModuleDetails.connections,
+              outgoing: outgoingConnections.map((edge) => ({
+                toModule: edge.target,
+                fromHandle: edge.sourceHandle,
+                toHandle: edge.targetHandle,
+              })),
+            };
+          }
+
+          if (targetId && resultObj.data.targetModuleDetails) {
+            const incomingConnections = currentEdges.filter((edge) => edge.target === targetId);
+            resultObj.data.targetModuleDetails.connections = {
+              ...resultObj.data.targetModuleDetails.connections,
+              incoming: incomingConnections.map((edge) => ({
+                fromModule: edge.source,
+                fromHandle: edge.sourceHandle,
+                toHandle: edge.targetHandle,
+              })),
+            };
+          }
+
+          toolCall.result = JSON.stringify(resultObj);
+        }
+      } catch (e) {
+        console.error('Failed to enhance connect_modules tool result:', e);
+      }
     }
   };
 
@@ -541,6 +609,50 @@ export function ChatInterface() {
                     {msg.toolCalls && msg.toolCalls.length > 0 && (
                       <ToolCallsDisplay toolCalls={msg.toolCalls} />
                     )}
+                    {/* Approval UI */}
+                    {msg.approval && (
+                      <div className="mt-2 p-3 border rounded-md bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+                        {msg.approval.status === 'pending' && (
+                          <div className="flex flex-col gap-2">
+                            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200 flex items-center">
+                              <Loader2 className="h-3 w-3 mr-2 animate-pulse" />
+                              Approval Required
+                            </p>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => sendMessage('reject', messages.indexOf(msg))}
+                                disabled={isLoading}
+                              >
+                                Reject
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                onClick={() => sendMessage('approve', messages.indexOf(msg))}
+                                disabled={isLoading}
+                              >
+                                Approve
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        {msg.approval.status === 'approved' && (
+                          <div className="flex items-center text-green-600 dark:text-green-400 font-medium text-sm">
+                            <Check className="w-4 h-4 mr-2" />
+                            <span>Action Approved</span>
+                          </div>
+                        )}
+                        {msg.approval.status === 'rejected' && (
+                          <div className="flex items-center text-red-600 dark:text-red-400 font-medium text-sm">
+                            <X className="w-4 h-4 mr-2" />
+                            <span>Action Rejected</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
@@ -598,18 +710,19 @@ export function ChatInterface() {
             />
           </div>
         </div>
+
         <div className="flex items-center space-x-2">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder={hasApiKey ? '输入消息...' : '请先在设置中配置API密钥'}
-            disabled={isLoading || !hasApiKey}
+            disabled={isLoading || !hasApiKey || isApprovalPending} // Disable input during approval?
             className="flex-1"
           />
           <Button
-            onClick={sendMessage}
-            disabled={isLoading || !input.trim() || !hasApiKey}
+            onClick={() => sendMessage()}
+            disabled={isLoading || !input.trim() || !hasApiKey || isApprovalPending}
             size="icon"
           >
             {isLoading ? (

@@ -97,6 +97,9 @@ class ConsoleLogHandler implements LogHandler {
 // Toast日志处理器
 class ToastLogHandler implements LogHandler {
   handle(event: LogEvent): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
     const { level, message, details, prefix } = event;
 
     const prefixStr = prefix ? `[${prefix}] ` : '';

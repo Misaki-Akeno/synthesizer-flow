@@ -8,10 +8,12 @@ export async function chatWithAgent(
   messages: ChatMessage[],
   settings: AISettings,
   initialState: GraphStateSnapshot,
-  useTools: boolean
+  useTools: boolean,
+  threadId?: string,
+  action?: 'approve' | 'reject'
 ) {
   const agent = Agent.getInstance();
   // Ensure the return value is serializable
-  const response = await agent.sendMessage(messages, settings, initialState, useTools);
+  const response = await agent.sendMessage(messages, settings, initialState, useTools, threadId, action);
   return JSON.parse(JSON.stringify(response));
 }
