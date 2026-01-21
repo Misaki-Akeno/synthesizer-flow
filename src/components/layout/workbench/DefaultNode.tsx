@@ -99,7 +99,8 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
 
     // 类型断言为字符串类型的键
     const componentType = type as keyof typeof CustomUIComponents;
-    const CustomComponent = CustomUIComponents[componentType];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const CustomComponent = CustomUIComponents[componentType] as any;
 
     // 处理参数更改的回调函数
     const handleParamChange = (
@@ -200,9 +201,8 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
 
   return (
     <div
-      className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${
-        !moduleEnabled ? 'opacity-50' : ''
-      }`}
+      className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${!moduleEnabled ? 'opacity-50' : ''
+        }`}
     >
       {/* 模块标题栏 */}
       <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center node-drag-handle cursor-move">

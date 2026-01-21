@@ -7,7 +7,7 @@ const getCanvasModulesSchema = z.object({});
 const getModuleDetailsSchema = z.object({
   moduleId: z.string().describe('模块ID'),
 });
-const getCanvasConnectionsSchema = z.object({});
+
 const ragSearchSchema = z.object({
   query: z.string().describe('检索问题或文本'),
   topK: z.number().optional().default(5).describe('返回条数，默认5，最大20'),
@@ -51,12 +51,12 @@ const disconnectModulesSchema = z.object({
 const DynamicStructuredToolAny = DynamicStructuredTool as any;
 
 export function createTools(executor: ToolExecutor) {
-  const getCanvasModulesTool = new DynamicStructuredToolAny({
-    name: 'get_canvas_modules',
-    description: '获取画布上的所有模块信息，包括模块类型、参数、位置和连接状态',
-    schema: getCanvasModulesSchema,
+  const getCanvasTool = new DynamicStructuredToolAny({
+    name: 'get_canvas',
+    description: '获取画布上的所有模块和连接信息的快照',
+    schema: getCanvasModulesSchema, // Schema is typically empty for "get all"
     func: async () => {
-      const result = executor.getCanvasModules();
+      const result = executor.getCanvas();
       return JSON.stringify(result);
     },
   });
@@ -68,16 +68,6 @@ export function createTools(executor: ToolExecutor) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     func: async ({ moduleId }: any) => {
       const result = executor.getModuleDetails(moduleId);
-      return JSON.stringify(result);
-    },
-  });
-
-  const getCanvasConnectionsTool = new DynamicStructuredToolAny({
-    name: 'get_canvas_connections',
-    description: '获取画布上所有模块间的连接信息',
-    schema: getCanvasConnectionsSchema,
-    func: async () => {
-      const result = executor.getCanvasConnections();
       return JSON.stringify(result);
     },
   });
@@ -95,7 +85,7 @@ export function createTools(executor: ToolExecutor) {
 
   const addModuleTool = new DynamicStructuredToolAny({
     name: 'add_module',
-    description: '在画布上添加一个新的音频模块',
+    description: '在画布上添加一个新的音频模块，返回新模块的详细信息',
     schema: addModuleSchema,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     func: async ({ type, label, position }: any) => {
@@ -117,7 +107,7 @@ export function createTools(executor: ToolExecutor) {
 
   const updateModuleParameterTool = new DynamicStructuredToolAny({
     name: 'update_module_parameter',
-    description: '更新指定模块的参数值',
+    description: '更新指定模块的参数值，返回更新后的模块详细信息',
     schema: updateModuleParameterSchema,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     func: async ({ moduleId, paramKey, value }: any) => {
@@ -128,7 +118,7 @@ export function createTools(executor: ToolExecutor) {
 
   const connectModulesTool = new DynamicStructuredToolAny({
     name: 'connect_modules',
-    description: '连接两个模块',
+    description: '连接两个模块，返回涉及模块的详细信息',
     schema: connectModulesSchema,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     func: async ({ sourceId, targetId, sourceHandle, targetHandle }: any) => {
@@ -139,7 +129,7 @@ export function createTools(executor: ToolExecutor) {
 
   const disconnectModulesTool = new DynamicStructuredToolAny({
     name: 'disconnect_modules',
-    description: '断开两个模块之间的连接',
+    description: '断开两个模块之间的连接，返回涉及模块的详细信息',
     schema: disconnectModulesSchema,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     func: async ({ sourceId, targetId, sourceHandle, targetHandle }: any) => {
@@ -149,9 +139,8 @@ export function createTools(executor: ToolExecutor) {
   });
 
   return [
-    getCanvasModulesTool,
+    getCanvasTool,
     getModuleDetailsTool,
-    getCanvasConnectionsTool,
     addModuleTool,
     deleteModuleTool,
     updateModuleParameterTool,

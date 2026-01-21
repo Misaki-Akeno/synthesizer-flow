@@ -93,8 +93,22 @@ const XYPad: React.FC<XYPadProps> = ({
       if (!padRef.current) return;
 
       const rect = padRef.current.getBoundingClientRect();
-      const x = Math.max(0, Math.min(width, clientX - rect.left));
-      const y = Math.max(0, Math.min(height, clientY - rect.top));
+
+      // 计算缩放比例带来的实际渲染尺寸与内部尺寸的差异
+      // rect.width 是屏幕上的实际像素宽度（受缩放影响）
+      // width 是组件内部的逻辑宽度
+      // 我们需要将屏幕坐标映射回组件的逻辑坐标
+
+      // 防止除以0
+      const safeRectWidth = rect.width || width;
+      const safeRectHeight = rect.height || height;
+
+      const relativeX = clientX - rect.left;
+      const relativeY = clientY - rect.top;
+
+      // 使用比例计算出在 width/height 坐标系下的位置
+      const x = Math.max(0, Math.min(width, (relativeX / safeRectWidth) * width));
+      const y = Math.max(0, Math.min(height, (relativeY / safeRectHeight) * height));
 
       setPosition({ x, y });
 

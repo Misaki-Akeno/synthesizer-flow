@@ -1,15 +1,25 @@
+
 import { SystemMessage } from '@langchain/core/messages';
 import { StateGraph, START, END } from '@langchain/langgraph';
-import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { SequentialToolNode } from './sequentialToolNode';
 import { ChatOpenAI } from '@langchain/openai';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { AgentState } from './state';
 import { getSystemPrompt } from '../prompts/system';
+import { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
+
+const UNSAFE_TOOL_NAMES = ['delete_module', 'disconnect_modules'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createGraph(tools: any[]) {
-  // Define the tool node
-  const toolNode = new ToolNode(tools);
+export function createGraph(tools: any[], checkpointer?: BaseCheckpointSaver) {
+  const safeTools = tools.filter(t => !UNSAFE_TOOL_NAMES.includes(t.name));
+  const unsafeTools = tools.filter(t => UNSAFE_TOOL_NAMES.includes(t.name));
+
+  const safeToolNodeInstance = new SequentialToolNode(safeTools);
+  const unsafeToolNodeInstance = new SequentialToolNode(unsafeTools);
+
+  const safeToolNode = (state: typeof AgentState.State, config?: RunnableConfig) => safeToolNodeInstance.invoke(state, config);
+  const unsafeToolNode = (state: typeof AgentState.State, config?: RunnableConfig) => unsafeToolNodeInstance.invoke(state, config);
 
   // Define the model node logic
   const callModel = async (state: typeof AgentState.State, config?: RunnableConfig) => {
@@ -25,7 +35,6 @@ export function createGraph(tools: any[]) {
     const modelWithTools = model.bindTools(tools);
 
     // Get system prompt
-    // Check if there is already a system message at the beginning
     const systemPrompt = getSystemPrompt(true);
     const systemMessage = new SystemMessage(systemPrompt);
 
@@ -51,7 +60,12 @@ export function createGraph(tools: any[]) {
       Array.isArray(lastMessage.tool_calls) &&
       lastMessage.tool_calls.length > 0
     ) {
-      return 'tools';
+      // Check if any tool call is unsafe
+      const hasUnsafe = lastMessage.tool_calls.some((tc) => UNSAFE_TOOL_NAMES.includes(tc.name));
+      if (hasUnsafe) {
+        return 'unsafe_tools';
+      }
+      return 'safe_tools';
     }
     return END;
   };
@@ -59,10 +73,15 @@ export function createGraph(tools: any[]) {
   // Compose the graph
   const workflow = new StateGraph(AgentState)
     .addNode('agent', callModel)
-    .addNode('tools', toolNode)
+    .addNode('safe_tools', safeToolNode)
+    .addNode('unsafe_tools', unsafeToolNode)
     .addEdge(START, 'agent')
     .addConditionalEdges('agent', shouldContinue)
-    .addEdge('tools', 'agent');
+    .addEdge('safe_tools', 'agent')
+    .addEdge('unsafe_tools', 'agent');
 
-  return workflow.compile();
+  return workflow.compile({
+    checkpointer: checkpointer,
+    interruptBefore: unsafeTools.length > 0 ? ['unsafe_tools'] : undefined,
+  });
 }

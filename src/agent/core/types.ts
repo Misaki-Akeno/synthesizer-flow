@@ -2,6 +2,9 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   toolCalls?: ToolCall[];
+  approval?: {
+    status: 'pending' | 'approved' | 'rejected';
+  };
 }
 
 export interface ToolCall {
@@ -34,4 +37,6 @@ export interface ChatResponse {
   toolCalls?: ToolCall[];
   hasToolUse: boolean;
   clientOperations?: ClientOperation[];
+  approvalRequired?: boolean;
+  threadId?: string;
 }

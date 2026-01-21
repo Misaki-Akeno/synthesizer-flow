@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePersistStore, type ProjectConfig } from '@/store/project-store';
 import {
   Tabs,
@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/shadcn/input';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Card, CardContent, CardFooter } from '@/components/ui/shadcn/card';
 import { Badge } from '@/components/ui/shadcn/badge';
-import { PanelRight, Plus, Save, FileText } from 'lucide-react';
+import { PanelRight, Plus, Save, FileText, Loader2 } from 'lucide-react';
 
 interface ProjectManagerProps {
   onClose: () => void;
@@ -25,14 +25,20 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
   const [activeTab, setActiveTab] = useState('user-projects');
 
   const {
-    recentProjects,
+    userProjects,
     builtInProjects,
     currentProject,
     saveCurrentCanvas,
     loadProject,
     deleteProject,
     exportProjectToFile,
+    isLoading,
+    fetchProjects,
   } = usePersistStore();
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
 
   // 显示的日期格式化函数
   const formatDate = (dateStr: string) => {
@@ -50,7 +56,13 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
   };
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <div className="w-full h-full flex flex-col relative">
+      {isLoading && (
+        <div className="absolute inset-0 bg-background/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      )}
+
       {/* 标题栏 */}
       <div className="flex items-center justify-between p-2 border-b">
         <h2 className="text-sm font-medium pl-1">项目管理器</h2>
@@ -132,6 +144,7 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
           <div className="flex justify-end pt-1">
             <Button
               size="sm"
+              disabled={isLoading}
               onClick={async () => {
                 if (!projectName.trim()) {
                   alert('请输入项目名称');
@@ -142,9 +155,9 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
                   projectDesc
                 );
                 if (success) {
-                  alert(`项目"${projectName}"已保存成功!`);
+                  // 保存成功，UI已经在store里更新了
                 } else {
-                  alert('保存失败，请检查控制台日志');
+                  alert('保存失败，请检查网络或权限');
                 }
               }}
             >
@@ -163,7 +176,7 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
           >
             <TabsList className="grid grid-cols-2 mb-2">
               <TabsTrigger value="user-projects">
-                我的项目 ({recentProjects.length})
+                我的项目 ({userProjects.length})
               </TabsTrigger>
               <TabsTrigger value="built-in">
                 内置预设 ({builtInProjects.length})
@@ -177,7 +190,7 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
               >
                 <ScrollArea className="flex-1 border rounded">
                   <div className="p-2 space-y-2">
-                    {recentProjects.length === 0 ? (
+                    {userProjects.length === 0 ? (
                       <div className="text-xs text-muted-foreground text-center py-4">
                         <Plus className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <p>暂无保存的项目</p>
@@ -186,18 +199,18 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
                         </p>
                       </div>
                     ) : (
-                      recentProjects.map((project) => (
+                      userProjects.map((project) => (
                         <ProjectCard
-                          key={project.name}
+                          key={project.id}
                           project={project}
                           onLoad={() => loadProject(project)}
-                          onExport={() => exportProjectToFile(project.name)}
+                          onExport={() => exportProjectToFile(project.id)}
                           onDelete={() => {
                             if (confirm(`确定要删除项目"${project.name}"吗?`)) {
-                              deleteProject(project.name);
+                              deleteProject(project.id);
                             }
                           }}
-                          isActive={currentProject?.name === project.name}
+                          isActive={currentProject?.id === project.id}
                         />
                       ))
                     )}
@@ -217,7 +230,7 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
                         project={project}
                         onLoad={() => loadProject(project)}
                         onExport={() => exportProjectToFile(project.name)}
-                        onDelete={() => {}} // 内置预设不允许删除
+                        onDelete={() => { }} // 内置预设不允许删除
                         isActive={currentProject?.name === project.name}
                         isBuiltIn
                       />

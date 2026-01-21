@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.8.3 (2026-01-14)
+
+### Features
+
+- **Human-in-the-Loop (HIL)**: Implemented a secure approval workflow for sensitive agent actions.
+  - **Sensitive Tool Protection**: Tools like `delete_module` and `disconnect_modules` now pause execution and require explicit user approval.
+  - **Interactive Chat UI**: Integrated approval requests directly into the chat stream with "Approve" and "Reject" actions.
+  - **Audit Trail**: User decisions are persisted in the chat history for future reference.
+
+### Infrastructure
+
+- **LangGraph Persistence**: Built a custom `DrizzleCheckpointer` to store full agent state in PostgreSQL.
+  - Enables reliable interruption and resumption of complex agent workflows.
+  - Solved complex object serialization issues for LangChain message types.
+- **Robust Error Handling**: Improved logger robustness to prevent server-side UI rendering errors (`toast` on server).
+
+## 0.8.2 (2026-01-13)
+
+### Features
+
+- **Agent System**: Implemented **Chat Checkpoints**.
+  - Integrated LangGraph checkpoints with the database, allowing users to save, view, and restore chat sessions from any point in history.
+  - Added UI for visualizing and navigating chat history checkpoints.
+- **Module Core**: Added support for **Input Stacking**.
+  - `Array` type ports now support multiple simultaneous connections, enabling more complex signal routing topologies.
+
+### Improvements
+
+- **Tool Execution**: Implemented `SequentialToolNode` to ensure strictly sequential execution of Agent tools, resolving race conditions in multi-step operations.
+- **RAG System**: Fixed logic in `executor.ts` to improve tool reliability.
+- **UI**: Fixed alignment and rendering issues in the `XYPad` component.
+
+## 0.8.1 (2026-01-13)
+
+### Features
+
+- **Project Management System**: Implemented a comprehensive project persistence and management system.
+  - **Database Schema**: Added `projects` and `users_to_projects` tables supporting many-to-many relationships and ownership.
+  - **Server Actions**: Implemented secure CRUD actions (`saveProject`, `getUserProjects`, `deleteProject`) for project data.
+  - **Dual-Layer State Management**: Introduced `useProjectStore` to handle project lists (remote) and active canvas state (local/hybrid).
+  - **Smart Hydration**: `Canvas` component now intelligently resolves conflicts between URL parameters, local cache, and server data.
+  - **DevTools**: Enhanced `SerializationTester` for robust testing of the save/load workflows.
+
+### Bug Fixes
+
+- **RAG System**: Fixed issues related to RAG document ingestion and vector storage (`1d29238`).
+- **UI**: Fixed project deletion bug in dev tools where name was used instead of ID.
+
 ## 0.8.0 (2026-01-07)
 
 ### Architecture

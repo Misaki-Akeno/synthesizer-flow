@@ -30,7 +30,7 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
     useFlowStore();
 
-  const { getProjectById, loadProject, builtInProjects, currentProject } =
+  const { loadProject, currentProject } =
     usePersistStore();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -50,23 +50,39 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
     if (hasLoadedProject.current) return;
 
     const loadInitialProject = async () => {
+      const state = usePersistStore.getState();
+      const cachedProject = state.currentProject;
+
+      // 1. 如果 URL 指定了 ID
       if (projectId) {
-        const projectToLoad = getProjectById(projectId);
-        if (projectToLoad) {
+        // 关键检查：如果 URL 的 ID 和本地缓存的项目 ID 一致，
+        // 我们应该优先加载本地缓存！因为本地缓存可能包含未保存的修改。
+        // 如果直接从服务器加载(loadProject(projectId))，会覆盖本地修改。
+        if (cachedProject && cachedProject.id === projectId) {
           hasLoadedProject.current = true;
-          await loadProject(projectToLoad);
+          await loadProject(cachedProject);
           return;
         }
+
+        // 如果 ID 不匹配，说明要切换项目，从服务器/列表加载
+        hasLoadedProject.current = true;
+        await loadProject(projectId);
+        return;
       }
 
-      if (!hasLoadedProject.current && builtInProjects.length > 0) {
+      // 2. 如果没有 URL 参数，尝试恢复本地缓存
+      if (cachedProject) {
         hasLoadedProject.current = true;
-        await loadProject(builtInProjects[0]);
+        await loadProject(cachedProject);
+        return;
       }
+
+      // 3. 否则保持空项目
     };
 
     loadInitialProject();
-  }, [projectId, getProjectById, loadProject, builtInProjects]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   useEffect(() => {
     if (!currentProject) return;

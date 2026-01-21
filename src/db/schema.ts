@@ -10,6 +10,7 @@ import {
   index,
   jsonb,
   vector,
+  boolean,
 } from 'drizzle-orm/pg-core';
 import { InferSelectModel, InferInsertModel, sql } from 'drizzle-orm';
 
@@ -25,6 +26,7 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 256 }).notNull().unique(),
   emailVerified: timestamp('email_verified', { mode: 'date' }),
   image: text('image'),
+  settings: jsonb('settings'), // 用户设置
 });
 
 // 定义 accounts 表 (OAuth 认证需要)
@@ -121,3 +123,87 @@ export const ragDocuments = pgTable(
 
 export type RagDocument = InferSelectModel<typeof ragDocuments>;
 export type NewRagDocument = InferInsertModel<typeof ragDocuments>;
+
+// 定义 projects 表
+export const projects = pgTable('projects', {
+  id: varchar('id', { length: 255 }).notNull().primaryKey(),
+  name: text('name').notNull(),
+  data: jsonb('data').notNull(), // 存储 canvas JSON 数据
+  isPreset: boolean('is_preset').default(false).notNull(), // 是否为内置预设
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+});
+
+// 定义 users_to_projects 表 (多对多关联)
+export const usersToProjects = pgTable(
+  'users_to_projects',
+  {
+    userId: varchar('user_id', { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    projectId: varchar('project_id', { length: 255 })
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // 可以添加角色字段，例如 'owner', 'editor', 'viewer'
+    role: varchar('role', { length: 50 }).default('owner').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey(t.userId, t.projectId),
+    userIdIdx: index('users_to_projects_user_id_idx').on(t.userId),
+    projectIdIdx: index('users_to_projects_project_id_idx').on(t.projectId),
+  })
+);
+
+// 导出新增的 TypeScript 类型
+export type Project = InferSelectModel<typeof projects>;
+export type NewProject = InferInsertModel<typeof projects>;
+export type UserToProject = InferSelectModel<typeof usersToProjects>;
+export type NewUserToProject = InferInsertModel<typeof usersToProjects>;
+
+// Define checkpoints table
+export const checkpoints = pgTable('checkpoints', {
+  id: varchar('id', { length: 255 }).notNull().primaryKey(),
+  userId: varchar('user_id', { length: 255 })
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  messages: jsonb('messages').notNull(), // Chat history
+  graphState: jsonb('graph_state').notNull(), // Nodes and edges snapshot
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+});
+
+export type Checkpoint = InferSelectModel<typeof checkpoints>;
+export type NewCheckpoint = InferInsertModel<typeof checkpoints>;
+
+// LangGraph Checkpoints Table
+export const langgraphCheckpoints = pgTable(
+  'langgraph_checkpoints',
+  {
+    thread_id: text('thread_id').notNull(),
+    checkpoint_id: text('checkpoint_id').notNull(),
+    parent_checkpoint_id: text('parent_checkpoint_id'),
+    checkpoint: jsonb('checkpoint').notNull(),
+    metadata: jsonb('metadata').notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.thread_id, table.checkpoint_id] }),
+  })
+);
+
+// LangGraph Writes Table
+export const langgraphWrites = pgTable(
+  'langgraph_writes',
+  {
+    thread_id: text('thread_id').notNull(),
+    checkpoint_id: text('checkpoint_id').notNull(),
+    task_id: text('task_id').notNull(),
+    idx: integer('idx').notNull(),
+    channel: text('channel').notNull(),
+    value: jsonb('value'),
+  },
+  (table) => ({
+    pk: primaryKey({
+      columns: [table.thread_id, table.checkpoint_id, table.task_id, table.idx],
+    }),
+  })
+);
