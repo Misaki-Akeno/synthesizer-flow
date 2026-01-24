@@ -13,6 +13,7 @@
 ### UI Enhancements
 
 - **Parameter Controls**: Added support for `String` type parameters and `readonly` property in the UI, enabling better status display for modules like Calendar.
+- **Sequencer UI**: When the Agent (or any external source) updates the sequence, the UI immediately reflects the new notes.
 
 ## 0.8.3 (2026-01-14)
 
