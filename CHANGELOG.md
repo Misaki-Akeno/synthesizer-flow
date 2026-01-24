@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.5 (2026-01-24)
+
+### Features
+
+- **New Audio Effects**: Added 3 new effect modules to enhance sound design capabilities.
+  - **EQ Module**: A 3-band equalizer with adjustable crossover frequencies for precise tone shaping.
+  - **BitCrusher Module**: Added a BitCrusher effect for lo-fi and digital distortion sounds.
+  - **Trumpet Module**: Added a physical modeling trumpet synthesizer.
+- **UI Enhancements**:
+  - **XY Pad**: Added `step` support for XY Pad parameters, allowing for quantized control of values.
+
 ## 0.8.4 (2026-01-24)
 
 ### Features

@@ -14,6 +14,7 @@ interface XYPadProps {
     label?: string;
     min: number;
     max: number;
+    step?: number;
   };
   // Y轴参数配置
   yParam: {
@@ -21,6 +22,7 @@ interface XYPadProps {
     label?: string;
     min: number;
     max: number;
+    step?: number;
   };
   // 自定义尺寸
   width?: number;
@@ -81,10 +83,26 @@ const XYPad: React.FC<XYPadProps> = ({
     min: number,
     max: number,
     dimension: number,
+    step?: number,
     invert = false
   ): number {
     const normalized = invert ? dimension - pos : pos;
-    return min + (normalized / dimension) * (max - min);
+    let value = min + (normalized / dimension) * (max - min);
+
+    // 如果定义了步长，则进行舍入
+    if (step && step > 0) {
+      const steps = Math.round((value - min) / step);
+      value = min + steps * step;
+
+      // 处理浮点数精度问题
+      const precision = Math.floor(Math.log10(1 / step)) + 1; // 简单的精度估算
+      if (precision > 0) {
+        value = parseFloat(value.toFixed(Math.max(0, precision)));
+      }
+    }
+
+    // 确保值在范围内
+    return Math.max(min, Math.min(max, value));
   }
 
   // 更新位置和触发值更改
@@ -113,12 +131,13 @@ const XYPad: React.FC<XYPadProps> = ({
       setPosition({ x, y });
 
       // 更新参数值
-      const newXValue = denormalizeValue(x, xParam.min, xParam.max, width);
+      const newXValue = denormalizeValue(x, xParam.min, xParam.max, width, xParam.step);
       const newYValue = denormalizeValue(
         y,
         yParam.min,
         yParam.max,
         height,
+        yParam.step,
         true
       );
 

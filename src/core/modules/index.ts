@@ -1,9 +1,12 @@
 import { SimpleOscillatorModule } from './audio/OscillatorModule';
 import { AdvancedOscillatorModule } from './audio/AdvancedOscillatorModule';
+import { EQModule } from './audio/EQModule';
 import { LFOModule } from './modulation/LFOModule';
 import { MIDIInputModule } from './input/MIDIInputModule';
 import { KeyboardInputModule } from './input/KeyboardInputModule';
 import { ReverbModule } from './audio/ReverbModule';
+import { DelayModule } from './audio/DelayModule';
+import { BitCrusherModule } from './audio/BitCrusherModule';
 import { SpeakerModule } from './audio/SpeakerModule';
 import { TrumpetModule } from './audio/TrumpetModule';
 import { SequencerModule } from './input/SequencerModule';
@@ -20,6 +23,9 @@ export {
   MIDIInputModule,
   KeyboardInputModule,
   ReverbModule,
+  DelayModule,
+  EQModule,
+  BitCrusherModule,
   SpeakerModule,
   TrumpetModule,
   SequencerModule,
@@ -39,6 +45,9 @@ export const moduleClassMap: Record<
   midiinput: MIDIInputModule,
   keyboardinput: KeyboardInputModule,
   reverb: ReverbModule,
+  delay: DelayModule,
+  eq: EQModule,
+  bitcrusher: BitCrusherModule,
   speaker: SpeakerModule,
   trumpet: TrumpetModule,
   sequencer: SequencerModule,
