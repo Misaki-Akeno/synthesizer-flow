@@ -3,6 +3,7 @@ import './globals.css';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { Toaster } from '@/components/ui/shadcn/sonner';
 import { SpeedInsights } from '@vercel/speed-insights/next';
+import { Analytics } from '@vercel/analytics/next';
 
 export const metadata: Metadata = {
   title: 'Synthesizer Flow',
@@ -19,7 +20,12 @@ export default function RootLayout({
       <body className={`antialiased`}>
         <AuthProvider>{children}</AuthProvider>
         <Toaster />
-        {process.env.NODE_ENV === 'production' && <SpeedInsights />}
+        {process.env.NODE_ENV === 'production' && (
+          <>
+            <SpeedInsights />
+            <Analytics />
+          </>
+        )}
       </body>
     </html>
   );
