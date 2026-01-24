@@ -145,6 +145,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     type: ParameterType;
     label: string;
     describe?: string;
+    readonly?: boolean;
     meta: {
       min?: number;
       max?: number;
@@ -168,6 +169,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
       const displayName = (meta.uiOptions?.label as string) || paramKey;
       const description = meta.uiOptions?.describe as string | undefined;
       const group = (meta.uiOptions?.group as string) || '';
+      const readonly = meta.uiOptions?.readonly as boolean | undefined;
       const value = paramValues[paramKey];
 
       // 创建参数对象
@@ -176,6 +178,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
         type: meta.type,
         label: displayName,
         describe: description,
+        readonly,
         meta: {
           min: meta.min,
           max: meta.max,
@@ -241,6 +244,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
           updateParameter={handleParameterChange}
           label={param.label}
           description={param.describe}
+          readonly={param.readonly}
         />
       ))}
 
@@ -269,6 +273,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
                           updateParameter={handleParameterChange}
                           label={param.label}
                           description={param.describe}
+                          readonly={param.readonly}
                         />
                       ))}
                     </div>

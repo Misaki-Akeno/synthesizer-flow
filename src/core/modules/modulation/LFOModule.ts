@@ -16,7 +16,7 @@ export class LFOModule extends AudioModuleBase {
     type: 'lfo',
     label: '低频振荡器(LFO)',
     description: '产生低频调制信号，用于调制其他参数',
-    category: '调制',
+    category: '逻辑',
     iconType: 'Sliders',
   };
 

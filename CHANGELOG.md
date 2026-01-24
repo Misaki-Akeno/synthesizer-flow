@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.4 (2026-01-24)
+
+### Features
+
+- **Logic Modules**: Introduced a new "Logic" module category.
+  - **Calculator Module**: Added a new calculator module supporting addition, subtraction, multiplication, and division.
+  - **Number Input Module**: Added a dedicated number input module with slider control for generating precise numeric values.
+  - **LFO Category Update**: Moved LFO module to the Logic category for better organization.
+- **Sequencer Enhancements**: Added an external BPM input port to the Sequencer module, allowing dynamic speed control via other modules (e.g., Number Input).
+
+### UI Enhancements
+
+- **Parameter Controls**: Added support for `String` type parameters and `readonly` property in the UI, enabling better status display for modules like Calendar.
+
 ## 0.8.3 (2026-01-14)
 
 ### Features

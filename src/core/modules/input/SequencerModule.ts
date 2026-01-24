@@ -103,13 +103,18 @@ export class SequencerModule extends AudioModuleBase {
             },
         };
 
-        const inputPorts = {};
+        const inputPorts = {
+            // 支持外部 BPM 控制
+            bpm: {
+                type: PortType.NUMBER,
+                value: 0, // 0 means ignored/no input override initially? Or we just take whatever comes.
+            },
+        };
 
         super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
     }
 
     // ... (rest of the file) ...
-
 
 
     /**
@@ -120,6 +125,9 @@ export class SequencerModule extends AudioModuleBase {
 
         this.setupParameterBindings();
 
+        // Check if input port is already connected/has value (though likely 0 initially)
+        // We rely on subscription to input port.
+
         // 初始化序列
         this.recreateSequence();
     }
@@ -128,12 +136,26 @@ export class SequencerModule extends AudioModuleBase {
      * 设置参数绑定
      */
     private setupParameterBindings(): void {
-        // BPM变化
+        // BPM变化 (Parameter)
         const bpmSubscription = this.parameters['bpm'].subscribe((val) => {
+            // Only update transport if NO input is active overriding it?
+            // Or usually input overrides parameter. 
+            // Let's say: if input is connected, parameter acts as base or is ignored?
+            // Standard modular: Input + Offset (Parameter). 
+            // For BPM, usually you either set it internally or externally. 
+            // Let's implement: Parameter is the value, Input overwrites Parameter if present?
+            // "bindInputToParameter" does exactly that: Input updates Parameter.
+
             if (typeof val === 'number') {
+                // Determine if we should set Transport BPM
+                // If this module is controlling Transport (it seems to assume so)
                 this.Tone.Transport.bpm.value = val;
             }
         });
+
+        // Listen to BPM Input Port and update Parameter
+        // This makes the UI slider move if external input changes it, which is nice visual feedback.
+        this.bindInputToParameter('bpm', 'bpm');
 
         // 运行状态变化
         const runningSubscription = this.parameters['running'].subscribe((val) => {
