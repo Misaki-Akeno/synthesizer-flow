@@ -30,14 +30,21 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
     // 本地状态
     const [steps, setSteps] = useState<SequenceStep[]>([]);
 
+    const serializedSeq = paramValues[sequenceParam] as string;
+
     // 从参数加载序列
     useEffect(() => {
         try {
-            const storedSeq = paramValues[sequenceParam] as string;
-            if (storedSeq) {
-                const parsed = JSON.parse(storedSeq);
+            if (serializedSeq) {
+                const parsed = JSON.parse(serializedSeq);
                 if (Array.isArray(parsed)) {
-                    setSteps(parsed);
+                    setSteps(prev => {
+                        // 防止循环更新：如果内容一致则不更新
+                        if (JSON.stringify(prev) === JSON.stringify(parsed)) {
+                            return prev;
+                        }
+                        return parsed;
+                    });
                 }
             } else {
                 // 默认初始值
@@ -54,7 +61,7 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
         } catch (e) {
             console.error("Failed to parse sequence", e);
         }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [serializedSeq, sequenceParam, onParamChange]);
 
     // 当 updateSteps 被调用时，更新本地状态并同步到参数
     const updateSteps = (newSteps: SequenceStep[]) => {

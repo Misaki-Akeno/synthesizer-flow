@@ -1,12 +1,18 @@
 import { SimpleOscillatorModule } from './audio/OscillatorModule';
 import { AdvancedOscillatorModule } from './audio/AdvancedOscillatorModule';
+import { EQModule } from './audio/EQModule';
 import { LFOModule } from './modulation/LFOModule';
 import { MIDIInputModule } from './input/MIDIInputModule';
 import { KeyboardInputModule } from './input/KeyboardInputModule';
 import { ReverbModule } from './audio/ReverbModule';
+import { DelayModule } from './audio/DelayModule';
+import { BitCrusherModule } from './audio/BitCrusherModule';
 import { SpeakerModule } from './audio/SpeakerModule';
 import { TrumpetModule } from './audio/TrumpetModule';
 import { SequencerModule } from './input/SequencerModule';
+import { NumberInputModule } from './logic/NumberInputModule';
+import { CalculatorModule } from './logic/CalculatorModule';
+import { OscilloscopeModule } from './logic/OscilloscopeModule';
 import { ModuleBase, ModuleMetadata } from '../base/ModuleBase';
 
 // 导出所有模块类
@@ -17,9 +23,15 @@ export {
   MIDIInputModule,
   KeyboardInputModule,
   ReverbModule,
+  DelayModule,
+  EQModule,
+  BitCrusherModule,
   SpeakerModule,
   TrumpetModule,
   SequencerModule,
+  NumberInputModule,
+  CalculatorModule,
+  OscilloscopeModule,
 };
 
 // 定义一个映射表，将模块类型名与对应的模块类关联
@@ -33,9 +45,15 @@ export const moduleClassMap: Record<
   midiinput: MIDIInputModule,
   keyboardinput: KeyboardInputModule,
   reverb: ReverbModule,
+  delay: DelayModule,
+  eq: EQModule,
+  bitcrusher: BitCrusherModule,
   speaker: SpeakerModule,
   trumpet: TrumpetModule,
   sequencer: SequencerModule,
+  numberinput: NumberInputModule,
+  calculator: CalculatorModule,
+  oscilloscope: OscilloscopeModule,
 };
 
 // 获取所有模块类的元数据

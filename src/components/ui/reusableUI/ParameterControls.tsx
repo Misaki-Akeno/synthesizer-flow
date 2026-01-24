@@ -207,6 +207,67 @@ export const ListParameterControl = ({
   );
 };
 
+// 字符串参数控制组件
+export const StringParameterControl = ({
+  paramKey,
+  value,
+  updateParameter,
+  label,
+  description,
+  readonly = false,
+}: {
+  paramKey: string;
+  value: string;
+  updateParameter: (key: string, value: string) => void;
+  label: string;
+  description?: string;
+  readonly?: boolean;
+}) => {
+  const [inputValue, setInputValue] = useState(value);
+
+  // 当外部value变化时更新
+  React.useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+  };
+
+  const handleCommit = () => {
+    if (inputValue !== value) {
+      updateParameter(paramKey, inputValue);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleCommit();
+    }
+  };
+
+  // 创建参数标签组件
+  const labelComponent = <ParamLabel label={label} description={description} />;
+
+  return (
+    <div className="mb-3">
+      <div className="flex justify-between items-center text-xs mb-1">
+        {labelComponent}
+      </div>
+      <Input
+        type="text"
+        value={inputValue}
+        onChange={handleInputChange}
+        onBlur={handleCommit}
+        onKeyDown={handleKeyDown}
+        readOnly={readonly}
+        disabled={readonly}
+        className={`h-7 text-xs px-2 py-1 ${readonly ? 'opacity-80 bg-gray-50' : ''}`}
+      />
+    </div>
+  );
+};
+
 // 参数控制组件
 export const ParameterControl = ({
   paramKey,
@@ -216,6 +277,7 @@ export const ParameterControl = ({
   updateParameter,
   label,
   description,
+  readonly,
 }: {
   paramKey: string;
   paramType: ParameterType;
@@ -229,6 +291,7 @@ export const ParameterControl = ({
   updateParameter: (key: string, value: number | boolean | string) => void;
   label: string;
   description?: string;
+  readonly?: boolean;
 }) => {
   switch (paramType) {
     case ParameterType.NUMBER:
@@ -272,6 +335,20 @@ export const ParameterControl = ({
           }
           label={label}
           description={description}
+        />
+      );
+    case ParameterType.STRING:
+      return (
+        <StringParameterControl
+          key={paramKey}
+          paramKey={paramKey}
+          value={String(value)}
+          updateParameter={
+            updateParameter as (key: string, value: string) => void
+          }
+          label={label}
+          description={description}
+          readonly={readonly}
         />
       );
     default:

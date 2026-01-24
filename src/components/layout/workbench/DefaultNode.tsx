@@ -39,6 +39,20 @@ interface DefaultNodeProps {
   selected?: boolean;
 }
 
+interface CustomUIComponentProps {
+  [key: string]: unknown;
+  xParam?: {
+    paramKey?: string;
+    step?: number;
+    [key: string]: unknown;
+  };
+  yParam?: {
+    paramKey?: string;
+    step?: number;
+    [key: string]: unknown;
+  };
+}
+
 const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
   const { module: moduleInstance } = data;
   const updateModuleParameter = useFlowStore(
@@ -110,6 +124,23 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
       handleParameterChange(paramKey, value);
     };
 
+    // 增强 props，自动注入 step
+    const enhancedProps = { ...(props as CustomUIComponentProps) };
+    if (componentType === 'XYPad' && moduleInstance) {
+      if (enhancedProps.xParam && enhancedProps.xParam.paramKey && !enhancedProps.xParam.step) {
+        const meta = moduleInstance.getParameterMeta(enhancedProps.xParam.paramKey);
+        if (meta && meta.step) {
+          enhancedProps.xParam.step = meta.step;
+        }
+      }
+      if (enhancedProps.yParam && enhancedProps.yParam.paramKey && !enhancedProps.yParam.step) {
+        const meta = moduleInstance.getParameterMeta(enhancedProps.yParam.paramKey);
+        if (meta && meta.step) {
+          enhancedProps.yParam.step = meta.step;
+        }
+      }
+    }
+
     // 将模块参数和metaData与UI组件props合并（使用安全类型）
     return (
       <div className="custom-ui-container">
@@ -133,7 +164,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
           module={moduleInstance}
           paramValues={paramValues}
           onParamChange={handleParamChange}
-          {...(props as Record<string, unknown>)}
+          {...enhancedProps}
         />
       </div>
     );
@@ -145,6 +176,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     type: ParameterType;
     label: string;
     describe?: string;
+    readonly?: boolean;
     meta: {
       min?: number;
       max?: number;
@@ -168,6 +200,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
       const displayName = (meta.uiOptions?.label as string) || paramKey;
       const description = meta.uiOptions?.describe as string | undefined;
       const group = (meta.uiOptions?.group as string) || '';
+      const readonly = meta.uiOptions?.readonly as boolean | undefined;
       const value = paramValues[paramKey];
 
       // 创建参数对象
@@ -176,6 +209,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
         type: meta.type,
         label: displayName,
         describe: description,
+        readonly,
         meta: {
           min: meta.min,
           max: meta.max,
@@ -241,6 +275,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
           updateParameter={handleParameterChange}
           label={param.label}
           description={param.describe}
+          readonly={param.readonly}
         />
       ))}
 
@@ -269,6 +304,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
                           updateParameter={handleParameterChange}
                           label={param.label}
                           description={param.describe}
+                          readonly={param.readonly}
                         />
                       ))}
                     </div>
