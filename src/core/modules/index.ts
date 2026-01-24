@@ -9,6 +9,7 @@ import { TrumpetModule } from './audio/TrumpetModule';
 import { SequencerModule } from './input/SequencerModule';
 import { NumberInputModule } from './logic/NumberInputModule';
 import { CalculatorModule } from './logic/CalculatorModule';
+import { OscilloscopeModule } from './logic/OscilloscopeModule';
 import { ModuleBase, ModuleMetadata } from '../base/ModuleBase';
 
 // 导出所有模块类
@@ -24,6 +25,7 @@ export {
   SequencerModule,
   NumberInputModule,
   CalculatorModule,
+  OscilloscopeModule,
 };
 
 // 定义一个映射表，将模块类型名与对应的模块类关联
@@ -42,6 +44,7 @@ export const moduleClassMap: Record<
   sequencer: SequencerModule,
   numberinput: NumberInputModule,
   calculator: CalculatorModule,
+  oscilloscope: OscilloscopeModule,
 };
 
 // 获取所有模块类的元数据

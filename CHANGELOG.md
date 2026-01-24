@@ -9,6 +9,7 @@
   - **Number Input Module**: Added a dedicated number input module with slider control for generating precise numeric values.
   - **LFO Category Update**: Moved LFO module to the Logic category for better organization.
 - **Sequencer Enhancements**: Added an external BPM input port to the Sequencer module, allowing dynamic speed control via other modules (e.g., Number Input).
+- **Oscilloscope Module**: Added a real-time oscilloscope for visualizing `NUMBER` signal changes, powered by `recharts`.
 
 ### UI Enhancements
 

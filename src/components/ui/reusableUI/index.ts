@@ -1,6 +1,7 @@
 import XYPad from './XYPad';
 import PianoKeyboard from './PianoKeyboard';
 import SequenceEditor from './SequenceEditor';
+import Oscilloscope from './Oscilloscope';
 import {
   ParameterControl,
   NumberParameterControl,
@@ -32,7 +33,8 @@ export const CustomUIComponents = {
   XYPad,
   PianoKeyboard,
   CommonButton: ModuleButton,
-  SequenceEditor, // Register SequenceEditor
+  SequenceEditor, // sequencer: SequenceEditor,
+  oscilloscope: Oscilloscope,
 };
 
 // 设置默认导出
