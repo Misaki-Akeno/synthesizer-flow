@@ -23,10 +23,11 @@ const nodeTypes = {
 
 interface CanvasProps {
   projectId?: string; // 简化为仅使用projectId
+  onAutoLoad?: () => void;
 }
 
 // 内部Canvas组件，包含实际的ReactFlow
-const CanvasInner = ({ projectId }: CanvasProps) => {
+const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
     useFlowStore();
 
@@ -73,11 +74,14 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
       // 2. 如果没有 URL 参数，尝试恢复本地缓存
       if (cachedProject) {
         hasLoadedProject.current = true;
+        if (onAutoLoad) onAutoLoad();
         await loadProject(cachedProject);
         return;
       }
 
       // 3. 否则保持空项目
+      if (onAutoLoad) onAutoLoad();
+      // trigger onAutoLoad either way when no project inside url, so we can hide loading state
     };
 
     loadInitialProject();
@@ -176,14 +180,14 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
 };
 
 // 外层Canvas组件，提供所有必要的上下文
-export default function Canvas({ projectId }: CanvasProps = {}) {
+export default function Canvas({ projectId, onAutoLoad }: CanvasProps = {}) {
   return (
     <div
       style={{ width: '100%', height: '100%' }}
       onContextMenu={(e) => e.preventDefault()}
       className="h-full w-full"
     >
-      <CanvasInner projectId={projectId} />
+      <CanvasInner projectId={projectId} onAutoLoad={onAutoLoad} />
     </div>
   );
 }

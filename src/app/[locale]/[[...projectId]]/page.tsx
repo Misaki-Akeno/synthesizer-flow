@@ -1,12 +1,11 @@
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import Canvas from '@/components/workbench/EditorCanvas';
 import { ContextMenuProvider } from '@/components/providers/ContextMenuProvider';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { WorkbenchLayout } from '@/components/layout/WorkbenchLayout';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { WelcomeWindowWrapper } from '@/components/workbench/WelcomeWindowWrapper';
+import { PlaygroundContent } from '@/components/workbench/PlaygroundContent';
 
 
 export async function generateMetadata({
@@ -42,9 +41,8 @@ export default async function PlaygroundPage({
                     <WorkbenchLayout>
                         <main className="h-full w-full relative">
                             <ContextMenuProvider>
-                                <Canvas projectId={projectId} />
+                                <PlaygroundContent projectId={projectId} />
                             </ContextMenuProvider>
-                            {!projectId && <WelcomeWindowWrapper />}
                         </main>
                     </WorkbenchLayout>
                 </ReactFlowProvider>

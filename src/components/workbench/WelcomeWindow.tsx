@@ -6,8 +6,10 @@ import {
     DialogDescription,
 } from '@/components/ui/shadcn/dialog';
 import { Button } from '@/components/ui/shadcn/button';
-import { Plus, FolderOpen, Sparkles } from 'lucide-react';
+import { Plus, Sparkles } from 'lucide-react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useEffect } from 'react';
+import { usePersistStore } from '@/store/projects-store';
 
 interface WelcomeWindowProps {
     open: boolean;
@@ -18,6 +20,13 @@ export function WelcomeWindow({ open, onOpenChange }: WelcomeWindowProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const pathname = usePathname();
+    const fetchProjects = usePersistStore((state) => state.fetchProjects);
+
+    useEffect(() => {
+        if (open) {
+            fetchProjects();
+        }
+    }, [open, fetchProjects]);
 
     const handleAction = (panelAction?: string) => {
         onOpenChange(false);
@@ -25,11 +34,7 @@ export function WelcomeWindow({ open, onOpenChange }: WelcomeWindowProps) {
         // 如果需要打开特定面板，更新 URL 参数
         if (panelAction) {
             const params = new URLSearchParams(searchParams);
-            if (panelAction === 'past-projects') {
-                params.set('panel', 'project-manager');
-                // 可选：添加参数以选择特定的 Tab
-                // params.set('projectTab', 'user-projects');
-            } else if (panelAction === 'example-projects') {
+            if (panelAction === 'example-projects') {
                 params.set('panel', 'project-manager');
                 params.set('projectTab', 'built-in');
             }
@@ -73,20 +78,6 @@ export function WelcomeWindow({ open, onOpenChange }: WelcomeWindowProps) {
                         <div className="flex flex-col items-start">
                             <span>加载示例项目</span>
                             <span className="text-xs opacity-80 font-normal">体验预设的神奇声音</span>
-                        </div>
-                    </Button>
-
-                    <Button
-                        className="flex items-center justify-start gap-3 h-14 text-base"
-                        variant="outline"
-                        onClick={() => handleAction('past-projects')}
-                    >
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted">
-                            <FolderOpen className="h-5 w-5" />
-                        </div>
-                        <div className="flex flex-col items-start">
-                            <span>加载以往项目</span>
-                            <span className="text-xs opacity-80 font-normal">继续之前的工作</span>
                         </div>
                     </Button>
                 </div>
