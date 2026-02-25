@@ -1,5 +1,8 @@
 import path from 'path';
 import type { NextConfig } from 'next';
+import createNextIntlPlugin from 'next-intl/plugin';
+
+const withNextIntl = createNextIntlPlugin();
 
 const nextConfig: NextConfig = {
   // 强制转译音频处理相关包，解决 Source Map 路径错误和 HMR 循环问题
@@ -18,7 +21,7 @@ const nextConfig: NextConfig = {
       ...(config.resolve.alias || {}),
       '@': path.resolve(__dirname, 'src'),
     };
-    
+
     // 解决 LangChain 在客户端使用的 Node.js 模块依赖问题
     if (!config.resolve.fallback) {
       config.resolve.fallback = {};
@@ -48,4 +51,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

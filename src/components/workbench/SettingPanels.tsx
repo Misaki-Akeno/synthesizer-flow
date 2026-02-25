@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, memo, useCallback } from 'react';
+import { useState, memo, useCallback, useTransition } from 'react';
 import { Input } from '@/components/ui/shadcn/input';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Slider } from '@/components/ui/shadcn/slider';
 import { Separator } from '@/components/ui/shadcn/separator';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/shadcn/select';
 import {
   CanvasSettings,
   AISettings,
@@ -13,8 +20,10 @@ import {
   useAISettings,
   useUpdateSettings,
 } from '@/store/settings-store';
-import { Paintbrush, Bot, Lock, Save, Grid3X3 } from 'lucide-react';
+import { Paintbrush, Bot, Lock, Save, Grid3X3, Globe } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslations, useLocale } from 'next-intl';
+import { useRouter, usePathname } from '@/i18n/routing';
 
 // 定义子组件的属性类型
 interface CanvasSettingsPanelProps {
@@ -30,6 +39,13 @@ interface AISettingsPanelProps {
 // 子组件：画布设置面板
 const CanvasSettingsPanel = memo(
   ({ settings, onUpdate }: CanvasSettingsPanelProps) => {
+    const t = useTranslations('Settings.general');
+    const toastT = useTranslations('Settings.toast');
+    const locale = useLocale();
+    const router = useRouter();
+    const pathname = usePathname();
+    const [isPending, startTransition] = useTransition();
+
     const handleChange = useCallback(
       <K extends keyof CanvasSettings>(key: K, value: CanvasSettings[K]) => {
         onUpdate({ [key]: value });
@@ -37,26 +53,59 @@ const CanvasSettingsPanel = memo(
       [onUpdate]
     );
 
+    const onLanguageChange = (nextLocale: string) => {
+      startTransition(() => {
+        router.replace(pathname, { locale: nextLocale });
+        toast.success(toastT('languageUpdated'), { duration: 2000 });
+      });
+    };
+
     return (
       <div className="space-y-6 pb-4">
         <div>
           <h2 className="text-lg font-medium flex items-center gap-2">
             <Paintbrush className="h-5 w-5" />
-            画布设置
+            {t('title')}
           </h2>
           <p className="text-sm text-muted-foreground">
-            调整画布显示和交互的相关设置
+            {t('description')}
           </p>
         </div>
 
         <Separator />
 
+        {/* 语言选择器 */}
+        <div className="flex flex-row items-center justify-between">
+          <div className="space-y-0.5">
+            <label className="text-sm font-medium leading-none flex items-center gap-1">
+              <Globe className="h-4 w-4" />
+              {t('language.label')}
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {t('language.description')}
+            </p>
+          </div>
+          <Select
+            value={locale}
+            onValueChange={onLanguageChange}
+            disabled={isPending}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder={t('language.en-US')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="zh-CN">{t('language.zh-CN')}</SelectItem>
+              <SelectItem value="en-US">{t('language.en-US')}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* 暗黑模式开关 */}
         <div className="flex flex-row items-center justify-between">
           <div className="space-y-0.5">
-            <label className="text-sm font-medium leading-none">暗黑模式</label>
+            <label className="text-sm font-medium leading-none">{t('darkMode.label')}</label>
             <p className="text-xs text-muted-foreground">
-              启用应用的暗黑模式主题
+              {t('darkMode.description')}
             </p>
           </div>
           <Switch
@@ -70,10 +119,10 @@ const CanvasSettingsPanel = memo(
           <div className="space-y-0.5">
             <label className="text-sm font-medium leading-none">
               <Save className="h-4 w-4 inline-block mr-1" />
-              自动保存
+              {t('autoSave.label')}
             </label>
             <p className="text-xs text-muted-foreground">
-              自动保存画布状态的更改
+              {t('autoSave.description')}
             </p>
           </div>
           <Switch
@@ -87,9 +136,9 @@ const CanvasSettingsPanel = memo(
           <div className="space-y-0.5">
             <label className="text-sm font-medium leading-none">
               <Grid3X3 className="h-4 w-4 inline-block mr-1" />
-              网格对齐
+              {t('snapToGrid.label')}
             </label>
-            <p className="text-xs text-muted-foreground">将模块对齐到网格</p>
+            <p className="text-xs text-muted-foreground">{t('snapToGrid.description')}</p>
           </div>
           <Switch
             checked={settings.snapToGrid}
@@ -101,7 +150,7 @@ const CanvasSettingsPanel = memo(
         {settings.snapToGrid && (
           <div className="pt-2">
             <label className="text-sm font-medium mb-2 block">
-              网格大小: {settings.gridSize}px
+              {t('gridSize', { size: settings.gridSize })}
             </label>
             <Slider
               min={5}
@@ -120,6 +169,8 @@ CanvasSettingsPanel.displayName = 'CanvasSettingsPanel';
 
 // 子组件：AI设置面板
 const AISettingsPanel = memo(({ settings, onUpdate }: AISettingsPanelProps) => {
+  const t = useTranslations('Settings.ai');
+
   const handleChange = useCallback(
     <K extends keyof AISettings>(key: K, value: AISettings[K]) => {
       onUpdate({ [key]: value });
@@ -132,10 +183,10 @@ const AISettingsPanel = memo(({ settings, onUpdate }: AISettingsPanelProps) => {
       <div>
         <h2 className="text-lg font-medium flex items-center gap-2">
           <Bot className="h-5 w-5" />
-          AI 模型设置
+          {t('title')}
         </h2>
         <p className="text-sm text-muted-foreground">
-          配置AI模型连接以增强应用功能
+          {t('description')}
         </p>
       </div>
 
@@ -143,14 +194,14 @@ const AISettingsPanel = memo(({ settings, onUpdate }: AISettingsPanelProps) => {
 
       {/* 模型名称输入 */}
       <div className="space-y-2">
-        <label className="text-sm font-medium leading-none">模型名称</label>
+        <label className="text-sm font-medium leading-none">{t('modelName.label')}</label>
         <Input
-          placeholder="例如: gpt-4, claude-3"
+          placeholder={t('modelName.placeholder')}
           value={settings.modelName}
           onChange={(e) => handleChange('modelName', e.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          指定要使用的AI模型名称
+          {t('modelName.description')}
         </p>
       </div>
 
@@ -158,10 +209,10 @@ const AISettingsPanel = memo(({ settings, onUpdate }: AISettingsPanelProps) => {
       <div className="space-y-2">
         <label className="text-sm font-medium leading-none flex items-center">
           <Lock className="h-4 w-4 mr-1" />
-          API密钥 <span className="text-red-500 ml-1">*</span>
+          {t('apiKey.label')} <span className="text-red-500 ml-1">*</span>
         </label>
         <Input
-          placeholder="输入您的API密钥"
+          placeholder={t('apiKey.placeholder')}
           spellCheck="false"
           autoComplete="new-password"
           autoCapitalize="off"
@@ -173,26 +224,26 @@ const AISettingsPanel = memo(({ settings, onUpdate }: AISettingsPanelProps) => {
           className={settings.apiKey.trim() === '' ? 'border-red-300' : ''}
         />
         {settings.apiKey.trim() === '' && (
-          <p className="text-xs text-red-500">API密钥不能为空</p>
+          <p className="text-xs text-red-500">{t('apiKey.errorEmpty')}</p>
         )}
         <p className="text-xs text-muted-foreground">
-          您的API密钥将安全地存储在本地
+          {t('apiKey.description')}
         </p>
       </div>
 
       {/* API端点输入 */}
       <div className="space-y-2">
         <label className="text-sm font-medium leading-none">
-          API端点（可选）
+          {t('apiEndpoint.label')}
         </label>
         <Input
           autoComplete="off"
-          placeholder="https://api.example.com/v1"
+          placeholder={t('apiEndpoint.placeholder')}
           value={settings.apiEndpoint}
           onChange={(e) => handleChange('apiEndpoint', e.target.value)}
         />
         <p className="text-xs text-muted-foreground">
-          如果您使用自定义API端点，请在此处指定
+          {t('apiEndpoint.description')}
         </p>
       </div>
     </div>
@@ -207,21 +258,23 @@ export function SettingsPanels() {
   const { updateCanvas, updateAI } = useUpdateSettings();
 
   const [activeTab, setActiveTab] = useState<'canvas' | 'ai'>('canvas');
+  const t = useTranslations('Settings.tabs');
+  const toastT = useTranslations('Settings.toast');
 
   const handleCanvasSettingChange = useCallback(
     (updates: Partial<CanvasSettings>) => {
       updateCanvas(updates);
-      toast.success('画布设置已更新', { duration: 2000 });
+      toast.success(toastT('generalUpdated'), { duration: 2000 });
     },
-    [updateCanvas]
+    [updateCanvas, toastT]
   );
 
   const handleAISettingChange = useCallback(
     (updates: Partial<AISettings>) => {
       updateAI(updates);
-      toast.success('AI设置已更新', { duration: 2000 });
+      toast.success(toastT('aiUpdated'), { duration: 2000 });
     },
-    [updateAI]
+    [updateAI, toastT]
   );
 
   return (
@@ -236,7 +289,7 @@ export function SettingsPanels() {
             }`}
         >
           <Paintbrush className="h-5 w-5" />
-          <span>画布设置</span>
+          <span>{t('general')}</span>
         </button>
 
         <button
@@ -247,7 +300,7 @@ export function SettingsPanels() {
             }`}
         >
           <Bot className="h-5 w-5" />
-          <span>AI 模型设置</span>
+          <span>{t('ai')}</span>
         </button>
       </div>
 

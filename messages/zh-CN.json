@@ -1,0 +1,60 @@
+{
+    "Playground": {
+        "title": "合成器游乐场",
+        "description": "用于构建模块化合成器的游乐场"
+    },
+    "Settings": {
+        "tabs": {
+            "general": "通用与画布",
+            "ai": "AI 模型"
+        },
+        "general": {
+            "title": "通用与画布设置",
+            "description": "调整应用显示、语言和画布交互的相关设置",
+            "darkMode": {
+                "label": "暗黑模式",
+                "description": "启用应用的暗黑模式主题"
+            },
+            "language": {
+                "label": "语言",
+                "description": "选择应用的显示语言",
+                "en-US": "English",
+                "zh-CN": "简体中文"
+            },
+            "autoSave": {
+                "label": "自动保存",
+                "description": "自动保存画布状态的更改"
+            },
+            "snapToGrid": {
+                "label": "网格对齐",
+                "description": "将模块对齐到网格"
+            },
+            "gridSize": "网格大小: {size}px"
+        },
+        "ai": {
+            "title": "AI 模型设置",
+            "description": "配置AI模型连接以增强应用功能",
+            "modelName": {
+                "label": "模型名称",
+                "placeholder": "例如: gpt-4, claude-3",
+                "description": "指定要使用的AI模型名称"
+            },
+            "apiKey": {
+                "label": "API 密钥",
+                "placeholder": "输入您的API密钥",
+                "errorEmpty": "API密钥不能为空",
+                "description": "您的API密钥将安全地存储在本地"
+            },
+            "apiEndpoint": {
+                "label": "API 端点（可选）",
+                "placeholder": "https://api.example.com/v1",
+                "description": "如果您使用自定义API端点，请在此处指定"
+            }
+        },
+        "toast": {
+            "generalUpdated": "设置已更新",
+            "aiUpdated": "AI设置已更新",
+            "languageUpdated": "语言已切换"
+        }
+    }
+}
