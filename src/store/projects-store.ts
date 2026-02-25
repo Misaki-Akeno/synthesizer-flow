@@ -467,8 +467,12 @@ export const useProjectStore = create<ProjectPersistState>()(
     }),
     {
       name: 'synthesizerflow-projects',
-      // 只持久化 currentProject，实现"本地缓存"
-      partialize: (state) => ({ currentProject: state.currentProject }),
+      // 持久化项目列表和当前项目，实现“本地缓存”
+      partialize: (state) => ({
+        currentProject: state.currentProject,
+        userProjects: state.userProjects,
+        builtInProjects: state.builtInProjects
+      }),
       onRehydrateStorage: () => (state) => {
         if (state) {
           logger.info('本地缓存已恢复');
