@@ -24,6 +24,8 @@ import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Badge } from '@/components/ui/shadcn/badge';
 import { Save, FileText, Loader2, Trash2, FolderOpen, PanelRight, Sparkles, FolderSync, RefreshCcw, Info } from 'lucide-react';
 
+import { useSearchParams } from 'next/navigation';
+
 interface ProjectManagerProps {
   onClose: () => void;
 }
@@ -31,7 +33,10 @@ interface ProjectManagerProps {
 export function ProjectManager({ onClose }: ProjectManagerProps) {
   const [projectName, setProjectName] = useState('新项目');
   const [projectDesc, setProjectDesc] = useState('');
-  const [activeTab, setActiveTab] = useState('user-projects');
+
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('projectTab') === 'built-in' ? 'built-in' : 'user-projects';
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   const {
     userProjects,

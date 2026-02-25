@@ -95,9 +95,12 @@ const CanvasInner = ({ projectId }: CanvasProps) => {
     }
     hasUpdatedUrl.current = true;
 
+    const locale = pathname.split('/')[1] || 'zh-CN';
     const params = new URLSearchParams(searchParams);
-    params.set('project', currentProject.id);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    params.delete('project');
+    const newPathname = `/${locale}/${currentProject.id}`;
+
+    router.replace(`${newPathname}?${params.toString()}`, { scroll: false });
   }, [currentProject, router, pathname, searchParams]);
 
   // 验证连接是否有效的函数

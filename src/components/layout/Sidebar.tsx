@@ -37,6 +37,7 @@ export function Sidebar({ className }: SidebarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const activePanelFromUrl = searchParams.get('panel') as PanelType;
+  const projectTabFromUrl = searchParams.get('projectTab');
   const [activePanel, setActivePanel] = useState<PanelType>(activePanelFromUrl);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
@@ -44,7 +45,7 @@ export function Sidebar({ className }: SidebarProps) {
   useEffect(() => {
     // 当 URL 中的 panel 参数变化时，更新 activePanel
     setActivePanel(activePanelFromUrl);
-  }, [activePanelFromUrl]);
+  }, [activePanelFromUrl, projectTabFromUrl]);
 
   const togglePanel = (panel: PanelType) => {
     const newPanel = activePanel === panel ? null : panel;

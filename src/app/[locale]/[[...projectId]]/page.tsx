@@ -6,13 +6,13 @@ import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { WorkbenchLayout } from '@/components/layout/WorkbenchLayout';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
+import { WelcomeWindowWrapper } from '@/components/workbench/WelcomeWindowWrapper';
 
-type SearchParams = { [key: string]: string | string[] | undefined };
 
 export async function generateMetadata({
     params,
 }: {
-    params: Promise<{ locale: string }>;
+    params: Promise<{ locale: string; projectId?: string[] }>;
 }) {
     const { locale } = await params;
     const t = await getTranslations({ locale, namespace: 'Playground' });
@@ -24,21 +24,14 @@ export async function generateMetadata({
 }
 
 export default async function PlaygroundPage({
-    searchParams,
     params,
 }: {
-    searchParams: Promise<SearchParams>;
-    params: Promise<{ locale: string }>;
+    params: Promise<{ locale: string; projectId?: string[] }>;
 }) {
-    const { locale } = await params;
+    const { locale, projectId: projectIdArray } = await params;
     setRequestLocale(locale);
 
-    const resolvedSearchParams = await searchParams;
-
-    const projectId =
-        typeof resolvedSearchParams.project === 'string'
-            ? resolvedSearchParams.project
-            : undefined;
+    const projectId = projectIdArray?.[0];
 
     return (
         <div className="h-screen flex flex-col">
@@ -51,6 +44,7 @@ export default async function PlaygroundPage({
                             <ContextMenuProvider>
                                 <Canvas projectId={projectId} />
                             </ContextMenuProvider>
+                            {!projectId && <WelcomeWindowWrapper />}
                         </main>
                     </WorkbenchLayout>
                 </ReactFlowProvider>
