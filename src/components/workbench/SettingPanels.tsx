@@ -12,7 +12,7 @@ import {
   useCanvasSettings,
   useAISettings,
   useUpdateSettings,
-} from '@/store/settings';
+} from '@/store/settings-store';
 import { Paintbrush, Bot, Lock, Save, Grid3X3 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -230,11 +230,10 @@ export function SettingsPanels() {
       <div className="w-48 border-r p-2 flex flex-col">
         <button
           onClick={() => setActiveTab('canvas')}
-          className={`flex items-center gap-2 p-2 mb-2 rounded-md text-left ${
-            activeTab === 'canvas'
-              ? 'bg-primary text-primary-foreground'
-              : 'hover:bg-muted'
-          }`}
+          className={`flex items-center gap-2 p-2 mb-2 rounded-md text-left ${activeTab === 'canvas'
+            ? 'bg-primary text-primary-foreground'
+            : 'hover:bg-muted'
+            }`}
         >
           <Paintbrush className="h-5 w-5" />
           <span>画布设置</span>
@@ -242,11 +241,10 @@ export function SettingsPanels() {
 
         <button
           onClick={() => setActiveTab('ai')}
-          className={`flex items-center gap-2 p-2 mb-2 rounded-md text-left ${
-            activeTab === 'ai'
-              ? 'bg-primary text-primary-foreground'
-              : 'hover:bg-muted'
-          }`}
+          className={`flex items-center gap-2 p-2 mb-2 rounded-md text-left ${activeTab === 'ai'
+            ? 'bg-primary text-primary-foreground'
+            : 'hover:bg-muted'
+            }`}
         >
           <Bot className="h-5 w-5" />
           <span>AI 模型设置</span>

@@ -4,8 +4,8 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 import type { KeyboardEvent } from 'react';
 import { ParameterType, ModuleBase } from '@/core/base/ModuleBase';
 import { useModuleSubscription } from '@/core/hooks/useModuleSubscription';
-import { useFlowStore } from '@/store/store';
-import { ParameterControl } from '@/components/ui/reusableUI';
+import { useFlowStore } from '@/store/canvas-store';
+import { ParameterControl } from '@/components/audioControls';
 import type { FlowNode } from '@/core/services/ModuleManager';
 import { Input } from '@/components/ui/shadcn/input';
 

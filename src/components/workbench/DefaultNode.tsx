@@ -4,7 +4,7 @@ import {
   ParameterType,
   PortType,
 } from '@/core/base/ModuleBase';
-import { useFlowStore } from '@/store/store';
+import { useFlowStore } from '@/store/canvas-store';
 import { useModuleSubscription } from '@/core/hooks/useModuleSubscription';
 import React from 'react';
 import { AudioModuleBase } from '@/core/base/AudioModuleBase';
@@ -13,7 +13,7 @@ import CustomUIComponents, {
   InputPort,
   OutputPort,
   ModuleEnableToggle,
-} from '@/components/ui/reusableUI';
+} from '@/components/audioControls';
 import {
   Accordion,
   AccordionContent,

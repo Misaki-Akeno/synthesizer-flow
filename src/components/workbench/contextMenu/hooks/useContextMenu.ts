@@ -1,7 +1,7 @@
 'use client';
 
 import { useContext, useCallback } from 'react';
-import { ContextMenuContext } from '../ContextMenuProvider';
+import { ContextMenuContext } from '../../../providers/ContextMenuProvider';
 import { MenuItem } from '../types';
 
 export const useContextMenu = () => {

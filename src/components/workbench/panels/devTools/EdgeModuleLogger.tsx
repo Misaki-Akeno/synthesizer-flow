@@ -1,4 +1,4 @@
-import { useFlowStore } from '@/store/store';
+import { useFlowStore } from '@/store/canvas-store';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 
 export default function EdgeModuleLogger() {

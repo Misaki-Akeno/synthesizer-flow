@@ -7,8 +7,8 @@ import { TooltipProvider } from '@/components/ui/shadcn/tooltip';
 import { Button } from '@/components/ui/shadcn/button';
 import { X } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ChatInterface } from '@/components/ui/llm/ChatInterface';
-import { ModulePropertiesPanel } from '@/components/layout/sidebars/ModulePropertiesPanel';
+import { ChatInterface } from '@/components/workbench/panels/llm/ChatInterface';
+import { ModulePropertiesPanel } from '@/components/workbench/panels/ModulePropertiesPanel';
 
 interface AuxiliarySidebarProps {
   className?: string;

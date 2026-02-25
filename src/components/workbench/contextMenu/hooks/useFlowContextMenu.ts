@@ -4,7 +4,7 @@ import { useCallback } from 'react';
 import { Node, Edge, useReactFlow } from '@xyflow/react';
 import { useContextMenu } from './useContextMenu';
 import { MenuItem } from '../types';
-import { useFlowStore } from '@/store/store';
+import { useFlowStore } from '@/store/canvas-store';
 
 export const useFlowContextMenu = () => {
   const { handleContextMenu } = useContextMenu();

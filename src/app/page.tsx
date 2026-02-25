@@ -1,10 +1,10 @@
 import { Metadata } from 'next';
 import { ReactFlowProvider } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import Canvas from '@/components/layout/workbench/Canvas';
-import { ContextMenuProvider } from '@/components/ui/contextMenu/ContextMenuProvider';
-import { Header } from '@/components/layout/navigation/Header';
-import { Sidebar } from '@/components/layout/Activitybar';
+import Canvas from '@/components/workbench/EditorCanvas';
+import { ContextMenuProvider } from '@/components/providers/ContextMenuProvider';
+import { Header } from '@/components/layout/Header';
+import { Sidebar } from '@/components/layout/Sidebar';
 import { WorkbenchLayout } from '@/components/layout/WorkbenchLayout';
 
 export const metadata: Metadata = {

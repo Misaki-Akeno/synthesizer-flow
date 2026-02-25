@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePersistStore, type ProjectConfig } from '@/store/project-store';
+import { usePersistStore, type ProjectConfig } from '@/store/projects-store';
 import {
   Tabs,
   TabsContent,

@@ -18,8 +18,8 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import { useAISettings, useIsAIConfigured } from '@/store/settings';
-import { useFlowStore } from '@/store/store';
+import { useAISettings, useIsAIConfigured } from '@/store/settings-store';
+import { useFlowStore } from '@/store/canvas-store';
 import { ChatMessage, ClientOperation, ToolCall } from '@/agent';
 import { getSystemPrompt } from '@/agent/prompts/system';
 import { chatWithAgent } from '@/agent/actions';

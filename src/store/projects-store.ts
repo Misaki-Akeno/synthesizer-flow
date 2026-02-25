@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { useFlowStore } from './store';
+import { useFlowStore } from './canvas-store';
 import { createModuleLogger } from '@/lib/logger';
 import {
   validateAndParseJson,

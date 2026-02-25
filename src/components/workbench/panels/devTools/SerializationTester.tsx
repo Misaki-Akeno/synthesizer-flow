@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
-import { usePersistStore, type ProjectConfig } from '@/store/project-store';
+import { usePersistStore, type ProjectConfig } from '@/store/projects-store';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Card, CardContent, CardFooter } from '@/components/ui/shadcn/card';
-import { useFlowStore } from '@/store/store';
+import { useFlowStore } from '@/store/canvas-store';
 import { Badge } from '@/components/ui/shadcn/badge';
 import {
   Tabs,

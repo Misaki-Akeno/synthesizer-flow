@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import { SearchBar } from './SearchBar';
+import { SearchBar } from '../workbench/SearchBar';
 import {
   Menu,
   LayoutPanelTop,

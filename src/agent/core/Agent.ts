@@ -1,6 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, AIMessage, SystemMessage, BaseMessage, ToolMessage } from '@langchain/core/messages';
-import { AISettings } from '@/store/settings';
+import { AISettings } from '@/store/settings-store';
 import { createModuleLogger } from '@/lib/logger';
 import { ChatMessage, ChatResponse, GraphStateSnapshot } from './types';
 import { createGraph } from '../graph/workflow';

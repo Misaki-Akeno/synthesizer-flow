@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { SidebarProvider } from '@/components/ui/shadcn/sidebar';
-import { ProjectManager } from './sidebars/ProjectManager';
-import { ModuleBrowser } from './sidebars/ModuleBrowser';
-import DevTools from '@/components/layout/sidebars/devTools/DevTools';
-import { NavUser } from './navigation/NavUser';
+import { ProjectManager } from '@/components/workbench/panels/ProjectManager';
+import { ModuleBrowser } from '@/components/workbench/panels/ModuleBrowser';
+import DevTools from '@/components/workbench/panels/devTools/DevTools';
+import { NavUser } from '@/components/workbench/NavUser';
 import { Button } from '@/components/ui/shadcn/button';
 import { Code, Cpu, FileText, Settings, HelpCircle } from 'lucide-react';
 import {
@@ -24,7 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/shadcn/dialog';
-import { SettingsPanels } from './SettingPanels';
+import { SettingsPanels } from '@/components/workbench/SettingPanels';
 
 interface SidebarProps {
   className?: string;
@@ -209,7 +209,7 @@ function ActivityBarButton({
           className={cn(
             'w-full h-12 rounded-none relative flex items-center justify-center',
             active &&
-              'bg-accent text-accent-foreground before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-primary'
+            'bg-accent text-accent-foreground before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-primary'
           )}
           onClick={onClick}
         >

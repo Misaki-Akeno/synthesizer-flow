@@ -7,7 +7,7 @@ import React, {
   ReactNode,
   useEffect,
 } from 'react';
-import { ContextMenuState, MenuItem } from './types';
+import { ContextMenuState, MenuItem } from '../workbench/contextMenu/types';
 
 interface ContextMenuContextType {
   state: ContextMenuState;
@@ -24,8 +24,8 @@ const initialState: ContextMenuState = {
 
 export const ContextMenuContext = createContext<ContextMenuContextType>({
   state: initialState,
-  showMenu: () => {},
-  hideMenu: () => {},
+  showMenu: () => { },
+  hideMenu: () => { },
 });
 
 interface ContextMenuProviderProps {

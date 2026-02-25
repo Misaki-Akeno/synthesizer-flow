@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useReactFlow, ReactFlowProvider } from '@xyflow/react';
-import { useFlowStore } from '@/store/store';
+import { useFlowStore } from '@/store/canvas-store';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import {
   Accordion,

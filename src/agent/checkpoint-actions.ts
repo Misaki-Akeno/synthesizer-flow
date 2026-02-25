@@ -9,7 +9,7 @@ import { nanoid } from 'nanoid';
 
 import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage } from '@langchain/core/messages';
-import { AISettings } from '@/store/settings';
+import { AISettings } from '@/store/settings-store';
 
 async function generateTitle(messages: ChatMessage[], settings?: AISettings): Promise<string> {
     if (!settings || !settings.apiKey || messages.length === 0) {

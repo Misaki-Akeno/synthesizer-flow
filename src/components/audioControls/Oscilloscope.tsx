@@ -6,7 +6,7 @@ import {
     CartesianGrid,
     ResponsiveContainer,
 } from 'recharts';
-import { useFlowStore } from '@/store/store';
+import { useFlowStore } from '@/store/canvas-store';
 import { OscilloscopeModule } from '@/core/modules/logic/OscilloscopeModule';
 import { Card, CardContent } from '@/components/ui/shadcn/card';
 
