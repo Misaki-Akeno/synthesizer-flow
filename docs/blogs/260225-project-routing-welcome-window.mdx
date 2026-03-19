@@ -1,0 +1,32 @@
+---
+title: 'Streamlined Navigation: Path-based Routing and Welcome Window'
+publishedAt: '2026-02-25'
+summary: 'SynthesizerFlow introduces a cleaner URL structure using path parameters for project IDs and a brand new Welcome Window to guide users into the modular audio experience seamlessly.'
+author: 'SynthesizerFlow Team'
+---
+
+We are thrilled to announce our latest updates focusing on improving the first-time user experience and deeply integrating project states with the application's URL routing.
+
+## What's New?
+
+### 🛣️ Path-Based Project Routing
+
+Previously, projects were loaded using query parameters (e.g., `/?project=my-project-id`). In this update, we have fully refactored our Next.js App Router setup to use path variables (e.g., `/[locale]/[projectId]`).
+
+-   **Cleaner URLs**: Sharing projects is now much more intuitive with a clean path like `/zh-CN/my-project`.
+-   **Shareability**: Path-based routing acts as a foundational step toward better indexability for public projects and tighter platform integrations.
+-   **Seamless URL Sync**: When you load or switch projects from the sidebar, the URL automatically updates without a full page refresh using Next.js shallow routing, preserving your audio context and state.
+
+### 👋 Brand New Welcome Window
+
+To provide a better onboarding experience, users hitting the root of the application (e.g., `/zh-CN`) will now be greeted with a focused Welcome Window.
+
+-   **Quick Starts**: Instantly create a blank project ("New Project") or explore our built-in templates ("Load Example Projects") directly from the central dialog.
+-   **Smart Caching & Auto-load**: The application intelligently checks your local persisted state. If you have an active un-saved project in cache, the Canvas will auto-load it instantly, suppressing the Welcome Window to ensure your creative flow is uninterrupted.
+-   **Automated Prefetching**: Example projects are silently prefetched in the background while the Welcome Window is open. Clicking "Load Example Projects" will instantly spring open the Project Manager side-panel fully loaded to the built-in presets.
+
+## Moving Forward
+
+This UX polish ensures that whether you are a power user jumping straight back into your last local draft, or a newcomer looking for a polyphonic synth template, SynthesizerFlow handles the state securely and elegantly. 
+
+Dive right into the modular audio workspace and start patching!

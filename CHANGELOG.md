@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.6 (2026-02-25)
+
+### Architecture & Infrastructure
+
+- **Path-Based Routing**: Converted project ID routing from query parameters (`?project=id`) to path parameters (`/[locale]/[projectId]`) for cleaner and more shareable URLs.
+- **URL Synchronization**: Automatically sync active Canvas project to the URL path during runtime using Next.js shallow routing.
+- **Internationalization (i18n)**: Integrated foundational i18n support for dynamic runtime locales (e.g., `zh-CN`).
+- **Directory Optimization**: Refactored and optimized the `src/components` directory structure for improved organization and maintainability.
+
+### UI Enhancements
+
+- **Welcome Window**: Added a dedicated `WelcomeWindow` component at the root path, prompting users to start a "New Project" or "Load Example Projects" when opening the app.
+- **Smart Loading State**: Prevents the Welcome window from flashing when a local cached project is restored implicitly by the Canvas state.
+- **Deep Linking Tabs**: Sidebar Project Manager now accepts internal `projectTab` routing params, smoothly transitioning from the Welcome screen directly to the Built-in project presets.
+- **Project Manager Refinement**: Beautified the Project Manager panel interface and introduced robust caching capabilities for faster preset loading.
+
 ## 0.8.5 (2026-01-24)
 
 ### Features

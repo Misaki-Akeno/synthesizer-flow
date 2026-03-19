@@ -2,7 +2,7 @@
 
 import { Agent } from './core/Agent';
 import { ChatMessage, GraphStateSnapshot } from './core/types';
-import { AISettings } from '@/store/settings';
+import { AISettings } from '@/store/settings-store';
 
 export async function chatWithAgent(
   messages: ChatMessage[],

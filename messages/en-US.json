@@ -1,0 +1,60 @@
+{
+    "Playground": {
+        "title": "Synthesizer Playground",
+        "description": "A playground for building synthesizers"
+    },
+    "Settings": {
+        "tabs": {
+            "general": "General & Canvas",
+            "ai": "AI Models"
+        },
+        "general": {
+            "title": "General & Canvas Settings",
+            "description": "Adjust application display, language, and canvas interactions",
+            "darkMode": {
+                "label": "Dark Mode",
+                "description": "Enable dark mode theme"
+            },
+            "language": {
+                "label": "Language",
+                "description": "Select application language",
+                "en-US": "English",
+                "zh-CN": "简体中文"
+            },
+            "autoSave": {
+                "label": "Auto Save",
+                "description": "Automatically save canvas state"
+            },
+            "snapToGrid": {
+                "label": "Snap to Grid",
+                "description": "Snap modules to the grid"
+            },
+            "gridSize": "Grid Size: {size}px"
+        },
+        "ai": {
+            "title": "AI Model Settings",
+            "description": "Configure AI model connections to enhance application features",
+            "modelName": {
+                "label": "Model Name",
+                "placeholder": "e.g., gpt-4, claude-3",
+                "description": "Specify the AI model name to use"
+            },
+            "apiKey": {
+                "label": "API Key",
+                "placeholder": "Enter your API key",
+                "errorEmpty": "API Key cannot be empty",
+                "description": "Your API key will be safely stored locally"
+            },
+            "apiEndpoint": {
+                "label": "API Endpoint (Optional)",
+                "placeholder": "https://api.example.com/v1",
+                "description": "If you use a custom API endpoint, specify it here"
+            }
+        },
+        "toast": {
+            "generalUpdated": "General settings updated",
+            "aiUpdated": "AI settings updated",
+            "languageUpdated": "Language changed"
+        }
+    }
+}
