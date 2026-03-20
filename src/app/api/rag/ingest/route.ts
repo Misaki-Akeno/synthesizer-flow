@@ -13,6 +13,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // 管理员检查
+    if (session.user.email !== 'cxf213@outlook.com') {
+      return NextResponse.json({ error: 'Forbidden: Admin only' }, { status: 403 });
+    }
+
     const body = await req.json();
     // log body summary for debugging (avoid logging secrets)
     try {

@@ -9,6 +9,7 @@ import DevTools from '@/components/workbench/panels/devTools/DevTools';
 import { NavUser } from '@/components/workbench/NavUser';
 import { Button } from '@/components/ui/shadcn/button';
 import { Code, Cpu, FileText, Settings, HelpCircle } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import {
   Tooltip,
   TooltipContent,
@@ -36,16 +37,26 @@ type PanelType = 'project-manager' | 'module-browser' | 'dev-tools' | null;
 export function Sidebar({ className }: SidebarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const activePanelFromUrl = searchParams.get('panel') as PanelType;
   const projectTabFromUrl = searchParams.get('projectTab');
   const [activePanel, setActivePanel] = useState<PanelType>(activePanelFromUrl);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
+  const isAdmin = session?.user?.email === 'cxf213@outlook.com';
+
   useEffect(() => {
+    // 如果不是管理员，且当前面板是开发工具，则重置
+    if (!isAdmin && activePanelFromUrl === 'dev-tools') {
+      const params = new URLSearchParams(searchParams);
+      params.delete('panel');
+      router.replace(`?${params.toString()}`);
+      return;
+    }
     // 当 URL 中的 panel 参数变化时，更新 activePanel
     setActivePanel(activePanelFromUrl);
-  }, [activePanelFromUrl, projectTabFromUrl]);
+  }, [activePanelFromUrl, projectTabFromUrl, isAdmin, router, searchParams]);
 
   const togglePanel = (panel: PanelType) => {
     const newPanel = activePanel === panel ? null : panel;
@@ -80,12 +91,14 @@ export function Sidebar({ className }: SidebarProps) {
                 tooltip="模块浏览器"
                 onClick={() => togglePanel('module-browser')}
               />
-              <ActivityBarButton
-                icon={<Code size={20} />}
-                active={activePanel === 'dev-tools'}
-                tooltip="开发工具"
-                onClick={() => togglePanel('dev-tools')}
-              />
+              {isAdmin && (
+                <ActivityBarButton
+                  icon={<Code size={20} />}
+                  active={activePanel === 'dev-tools'}
+                  tooltip="开发工具"
+                  onClick={() => togglePanel('dev-tools')}
+                />
+              )}
             </div>
 
             {/* 底部图标 - 下拉菜单选项 */}
@@ -115,7 +128,7 @@ export function Sidebar({ className }: SidebarProps) {
                 {activePanel === 'module-browser' && (
                   <ModuleBrowser onClose={() => togglePanel(null)} />
                 )}
-                {activePanel === 'dev-tools' && (
+                {activePanel === 'dev-tools' && isAdmin && (
                   <DevTools onClose={() => togglePanel(null)} />
                 )}
               </div>
