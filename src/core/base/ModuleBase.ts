@@ -302,7 +302,7 @@ export abstract class ModuleBase {
       const subscription = this.inputPorts[inputPortName].subscribe((value) => {
         if (typeof value === 'number') {
           if (paramType === ParameterType.BOOLEAN) {
-            this.parameters[paramKey].next(value >= 0.5);
+            this.updateParameter(paramKey, value >= 0.5);
           } else if (paramType === ParameterType.LIST) {
             const options = this.parameterMeta[paramKey].options || [];
             if (options.length > 0) {
@@ -310,15 +310,16 @@ export abstract class ModuleBase {
                 Math.floor(value * options.length),
                 options.length - 1
               );
-              this.parameters[paramKey].next(options[index]);
+              this.updateParameter(paramKey, options[index]);
             }
           } else {
-            this.parameters[paramKey].next(value);
+            this.updateParameter(paramKey, value);
           }
         }
       });
       this.internalSubscriptions.push(subscription);
-    } else {
+    }
+ else {
       console.warn(
         `Port type ${portType} not compatible with parameter type ${paramType}`
       );
