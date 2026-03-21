@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     // log body summary for debugging (avoid logging secrets)
     try {
       console.info('[RAG][ingest] incoming body keys:', Object.keys(body || {}));
-    } catch {}
+    } catch { }
 
     const items = Array.isArray(body?.items) ? body.items : [];
     if (!items.length) {

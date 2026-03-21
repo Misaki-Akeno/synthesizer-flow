@@ -9,13 +9,6 @@ import { revalidatePath } from 'next/cache';
 
 const ADMIN_EMAIL = 'cxf213@outlook.com';
 
-/**
- * 校验当前用户是否为管理员
- */
-async function isAdmin() {
-    const session = await auth();
-    return session?.user?.email === ADMIN_EMAIL;
-}
 
 /**
  * 获取当前用户的项目列表（仅元数据，不含大字段 data）
