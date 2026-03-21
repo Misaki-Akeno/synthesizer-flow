@@ -24,6 +24,8 @@ export class SpeakerModule extends AudioModuleBase {
   private gainLeft: any = null;
   private gainRight: any = null;
   private merger: any = null;
+  // 右声道音频输入处理器
+  private rightInputHandler: AudioInputHandler | null = null;
   // 音频上下文状态
   private contextReady: boolean = false;
   // 状态检查定时器
@@ -109,8 +111,9 @@ export class SpeakerModule extends AudioModuleBase {
       this.gainRight.connect(this.merger, 0, 1);
       this.merger.toDestination();
 
-      // 创建音频输入处理器 - 用于左声道
+      // 创建音频输入处理器 - 用于左、右声道
       this.audioInputHandler = new AudioInputHandler(this.gainLeft, this.Tone);
+      this.rightInputHandler = new AudioInputHandler(this.gainRight, this.Tone);
 
       // 设置初始状态
       const levelDB = this.getParameterValue('level') as number;
@@ -229,28 +232,15 @@ export class SpeakerModule extends AudioModuleBase {
     sourceModuleId: string,
     sourcePortName: string
   ): void {
-    if (!this.initialized) {
-      // 将音频输入添加到待处理队列
-      this.pendingAudioInputs.push({
-        sourceModuleId,
-        sourcePortName,
-        audioInput,
-      });
-      // 更新输入端口状态
-      this.inputPorts[inputPortName].next(audioInput);
-      return;
-    }
+    // 基类 AudioModuleBase 会在 !this.initialized 时处理 pendingAudioInputs
 
     // 根据输入端口选择正确的目标节点
-    if (inputPortName === 'audioInRight' && audioInput && this.gainRight) {
-      try {
-        audioInput.connect(this.gainRight);
-      } catch (error) {
-        console.warn(
-          `[${this.moduleType}Module ${this.id}] 连接右声道失败:`,
-          error
-        );
-      }
+    if (inputPortName === 'audioInRight' && this.rightInputHandler) {
+      this.rightInputHandler.handleInput(
+        audioInput,
+        sourceModuleId,
+        sourcePortName
+      );
     } else if (inputPortName === 'audioInLeft' && this.audioInputHandler) {
       // 左声道使用audioInputHandler来处理
       this.audioInputHandler.handleInput(
@@ -272,19 +262,8 @@ export class SpeakerModule extends AudioModuleBase {
     sourceModuleId?: string,
     sourcePortName?: string
   ): void {
-    if (inputPortName === 'audioInRight' && this.gainRight) {
-      // 手动处理右声道的断开
-      try {
-        const source = this.inputPorts[inputPortName].getValue();
-        if (source) {
-          source.disconnect(this.gainRight);
-        }
-      } catch (error) {
-        console.warn(
-          `[${this.moduleType}Module ${this.id}] 断开右声道失败:`,
-          error
-        );
-      }
+    if (inputPortName === 'audioInRight' && this.rightInputHandler) {
+      this.rightInputHandler.handleDisconnect(sourceModuleId, sourcePortName);
     } else if (inputPortName === 'audioInLeft' && this.audioInputHandler) {
       // 左声道使用audioInputHandler来处理
       this.audioInputHandler.handleDisconnect(sourceModuleId, sourcePortName);
@@ -331,6 +310,11 @@ export class SpeakerModule extends AudioModuleBase {
     if (this.contextCheckInterval) {
       clearInterval(this.contextCheckInterval);
       this.contextCheckInterval = null;
+    }
+
+    if (this.rightInputHandler) {
+      this.rightInputHandler.dispose();
+      this.rightInputHandler = null;
     }
 
     this.disposeAudioNodes([this.merger, this.gainLeft, this.gainRight]);

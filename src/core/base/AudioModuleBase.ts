@@ -18,6 +18,7 @@ export abstract class AudioModuleBase extends ModuleBase {
   protected smoothTime: number = 0.005;
   // 待处理的音频输入队列
   protected pendingAudioInputs: Array<{
+    inputPortName: string;
     sourceModuleId: string;
     sourcePortName: string;
     audioInput: any;
@@ -134,12 +135,13 @@ export abstract class AudioModuleBase extends ModuleBase {
    * 处理待处理的音频输入
    */
   protected processPendingInputs(): void {
-    if (!this.initialized || !this.audioInputHandler) return;
+    if (!this.initialized) return;
 
     // 处理所有待处理的输入
     this.pendingAudioInputs.forEach(
-      ({ sourceModuleId, sourcePortName, audioInput }) => {
-        this.audioInputHandler?.handleInput(
+      ({ inputPortName, sourceModuleId, sourcePortName, audioInput }) => {
+        this.handleAudioInput(
+          inputPortName,
           audioInput,
           sourceModuleId,
           sourcePortName
@@ -259,6 +261,7 @@ export abstract class AudioModuleBase extends ModuleBase {
     if (!this.initialized) {
       // 将音频输入添加到待处理队列
       this.pendingAudioInputs.push({
+        inputPortName,
         sourceModuleId,
         sourcePortName,
         audioInput,
