@@ -7,6 +7,9 @@ import { eq, and, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { revalidatePath } from 'next/cache';
 
+const ADMIN_EMAIL = 'cxf213@outlook.com';
+
+
 /**
  * 获取当前用户的项目列表（仅元数据，不含大字段 data）
  */
@@ -88,10 +91,6 @@ export async function getBuiltInPresets() {
             .select({
                 id: projects.id,
                 name: projects.name,
-                // Description 不在 DB 中，暂时返回 null 或空
-                // createdAt: projects.createdAt, 
-                // updatedAt: projects.updatedAt,
-                // 上面的一起取
                 createdAt: projects.createdAt,
                 updatedAt: projects.updatedAt,
                 data: projects.data,
@@ -124,6 +123,11 @@ export async function saveProject(
     const session = await auth();
     if (!session?.user?.id) {
         return { success: false, error: 'Unauthorized' };
+    }
+
+    // 如果尝试保存为系统预设，必须是管理员
+    if (isPreset && session.user.email !== ADMIN_EMAIL) {
+        return { success: false, error: 'Forbidden: Admin only' };
     }
 
     try {
@@ -221,7 +225,17 @@ export async function deleteProjectAction(projectId: string) {
             .limit(1);
 
         if (link.length === 0) {
-            return { success: false, error: 'Project not found or access denied' };
+            // 额外检查是否是管理员试图删除预设
+            if (session.user.email === ADMIN_EMAIL) {
+                const project = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
+                if (project.length > 0 && project[0].isPreset) {
+                    // 管理员可以删除预设
+                } else {
+                    return { success: false, error: 'Project not found or access denied' };
+                }
+            } else {
+                return { success: false, error: 'Project not found or access denied' };
+            }
         }
 
         // projects 表被 usersToProjects 引用，但 projects 删除时
@@ -235,3 +249,4 @@ export async function deleteProjectAction(projectId: string) {
         return { success: false, error: 'Failed to delete project' };
     }
 }
+

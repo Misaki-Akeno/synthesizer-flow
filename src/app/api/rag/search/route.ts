@@ -1,10 +1,21 @@
 import { NextResponse } from 'next/server';
 import { searchDocuments } from '@/lib/rag/vectorStore';
+import { auth } from '@/lib/auth/auth';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   try {
+    // 1. 鉴权与管理员检查
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.user.email !== 'cxf213@outlook.com') {
+      return NextResponse.json({ error: 'Forbidden: Admin only' }, { status: 403 });
+    }
+
     const body = await req.json();
     const query: string = body?.query;
     const topK: number = Math.max(1, Math.min(Number(body?.topK) || 5, 20));

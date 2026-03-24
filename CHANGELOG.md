@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.8.8 (2026-02-27)
+
+### RAG & Search Enhancements
+
+- **Hybrid Search Index**: Implemented a hybrid RAG retrieval system combining HNSW (vector search) and BM25-style keyword search (PostgreSQL Full-Text Search).
+- **Reciprocal Rank Fusion (RRF)**: Integrated the RRF algorithm to intelligently merge results from vector similarity and text relevance, improving retrieval accuracy for both semantic and exact-match queries.
+- **Database Schema Update**: Added a GIN index on the `text_snippet` column to support high-performance full-text searches.
+- **Enhanced Debugging**: Updated RAG search results to include internal vector and FTS scores in metadata for easier performance tuning.
+
+## 0.8.7 (2026-02-26)
+
+### Security & Access Control
+
+- **Admin-Only Dev Panel**: Restricted the DevTools panel and its associated backend endpoints (RAG ingestion/search, system preset saving) to the administrator (`cxf213@outlook.com`).
+- **Backend Protection**: Added server-side validation to ensure only authorized users can perform sensitive developer operations.
+
+### Bug Fixes
+
+- **Serialization Robustness**: Fixed a critical bug where the `Sequencer` module's BPM would reset to 0 (clamped to 40) upon project reload due to unvalidated input port initialization.
+- **Stereo Restoration**: Resolved an intermittent issue where the `Speaker` module would lose its right channel after being restored from JSON.
+- **Async Initialization**: Improved the `AudioModuleBase` initialization sequence to correctly buffer and replay pending audio inputs to their respective ports once the module is fully ready.
+- **Speaker Module Enhancement**: Upgraded the `Speaker` module with dual `AudioInputHandler` instances, providing robust multi-connection management for both left and right channels.
+
 ## 0.8.6 (2026-02-25)
 
 ### Architecture & Infrastructure

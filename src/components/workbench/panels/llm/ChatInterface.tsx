@@ -4,11 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
-import { Switch } from '@/components/ui/shadcn/switch';
 import {
   Loader2,
   Send,
-  Wrench,
   Plus,
   ChevronDown,
   ChevronRight,
@@ -60,7 +58,7 @@ export function ChatInterface() {
   } = useFlowStore();
 
   // 是否启用工具功能
-  const [useTools, setUseTools] = useState(true);
+  const [useTools, _setUseTools] = useState(true);
 
   // 当组件首次加载时，添加系统提示
   useEffect(() => {
@@ -699,15 +697,6 @@ export function ChatInterface() {
                 </DialogContent>
               </Dialog>
             )}
-          </div>
-          <div className="flex items-center space-x-2">
-            <Wrench className="h-4 w-4" />
-            <span className="text-sm">MCP</span>
-            <Switch
-              checked={useTools}
-              onCheckedChange={setUseTools}
-              disabled={!hasApiKey}
-            />
           </div>
         </div>
 
