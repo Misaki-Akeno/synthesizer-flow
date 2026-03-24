@@ -90,11 +90,20 @@ export async function upsertDocuments(docs: Array<{ id?: string; text: string; m
 }
 
 export async function searchDocuments(query: string, topK = 5) {
+  return searchHybridDocuments(query, topK);
+}
+
+/**
+ * Hybrid search using Reciprocal Rank Fusion (RRF)
+ * Combines HNSW Vector Search and PostgreSQL Full-Text Search (BM25-like)
+ */
+export async function searchHybridDocuments(query: string, topK = 5) {
   const limit = Math.max(1, Math.min(topK, 20));
-  // Skip embedding call if nothing in store
+  // Skip if nothing in store
   const anyDoc = await db.select({ id: ragDocuments.id }).from(ragDocuments).limit(1);
   if (!anyDoc.length) return { matches: [] as Array<{ id: string; score: number; textSnippet: string; meta?: Meta }> };
 
+  // 1. Prepare Vector Query
   const [qv] = await embedTexts([query], {
     model: env.RAG_EMBEDDINGS_MODEL || 'text-embedding-3-small',
     apiKey: env.RAG_EMBEDDINGS_API_KEY,
@@ -102,33 +111,107 @@ export async function searchDocuments(query: string, topK = 5) {
   });
 
   if (!qv?.length) return { matches: [] as Array<{ id: string; score: number; textSnippet: string; meta?: Meta }> };
-  if (qv.length !== EMBEDDING_DIM) {
-    throw new Error(`embedding dimension mismatch (expected ${EMBEDDING_DIM}, got ${qv.length})`);
-  }
 
-  // Build vector literal for pgvector comparison
   const vectorType = sql.raw(`vector(${EMBEDDING_DIM})`);
-  // pgvector literal must be quoted: '[1,2,3]'
   const queryVector = sql.raw(`'[${qv.join(',')}]'`);
 
-  const results = await db
-    .select({
-      id: ragDocuments.id,
-      textSnippet: ragDocuments.textSnippet,
-      meta: ragDocuments.meta,
-      // Using cosine distance (<=>). Higher score is better, so invert distance.
-      score: sql<number>`1 - (${ragDocuments.embedding} <=> ${queryVector}::${vectorType})`,
-    })
-    .from(ragDocuments)
-    .orderBy(sql`${ragDocuments.embedding} <=> ${queryVector}::${vectorType}`)
-    .limit(limit);
+  // 2. Parallel Search: Vector + FTS
+  // We fetch more than topK for each to allow for better fusion
+  const fetchCount = limit * 2;
+
+  const [vectorResults, ftsResults] = await Promise.all([
+    // Vector Search (HNSW)
+    db
+      .select({
+        id: ragDocuments.id,
+        textSnippet: ragDocuments.textSnippet,
+        meta: ragDocuments.meta,
+        score: sql<number>`1 - (${ragDocuments.embedding} <=> ${queryVector}::${vectorType})`,
+      })
+      .from(ragDocuments)
+      .orderBy(sql`${ragDocuments.embedding} <=> ${queryVector}::${vectorType}`)
+      .limit(fetchCount),
+
+    // Full-Text Search (BM25 style)
+    db
+      .select({
+        id: ragDocuments.id,
+        textSnippet: ragDocuments.textSnippet,
+        meta: ragDocuments.meta,
+        // Using websearch_to_tsquery for better user query handling
+        rank: sql<number>`ts_rank_cd(to_tsvector('english', ${ragDocuments.textSnippet}), websearch_to_tsquery('english', ${query}))`,
+      })
+      .from(ragDocuments)
+      .where(sql`to_tsvector('english', ${ragDocuments.textSnippet}) @@ websearch_to_tsquery('english', ${query})`)
+      .orderBy(sql`ts_rank_cd(to_tsvector('english', ${ragDocuments.textSnippet}), websearch_to_tsquery('english', ${query})) DESC`)
+      .limit(fetchCount),
+  ]);
+
+  // 3. Reciprocal Rank Fusion (RRF)
+  // Constant k (usually 60) avoids division by zero and dampens the impact of high ranks
+  const K = 60;
+
+  interface BaseSearchResult {
+    id: string;
+    textSnippet: string;
+    meta: Meta;
+  }
+  interface VectorResult extends BaseSearchResult {
+    score: number;
+  }
+  interface FtsResult extends BaseSearchResult {
+    rank: number;
+  }
+
+  const scoreMap = new Map<
+    string,
+    {
+      doc: BaseSearchResult;
+      rrfScore: number;
+      vectorScore?: number;
+      ftsScore?: number;
+    }
+  >();
+
+  // Helper to add results to map
+  const processResults = (results: (VectorResult | FtsResult)[], weight: number, isVector: boolean) => {
+    results.forEach((r, index) => {
+      const rank = index + 1;
+      const current = scoreMap.get(r.id) || {
+        doc: { id: r.id, textSnippet: r.textSnippet, meta: r.meta },
+        rrfScore: 0,
+      };
+
+      current.rrfScore += weight * (1 / (K + rank));
+      if (isVector && 'score' in r) {
+        current.vectorScore = r.score;
+      } else if (!isVector && 'rank' in r) {
+        current.ftsScore = r.rank;
+      }
+
+      scoreMap.set(r.id, current);
+    });
+  };
+
+  processResults(vectorResults as VectorResult[], 1.0, true);
+  processResults(ftsResults as FtsResult[], 1.0, false);
+
+  // 4. Sort and Format final results
+  const sortedMatches = Array.from(scoreMap.values())
+    .sort((a, b) => b.rrfScore - a.rrfScore)
+    .slice(0, limit)
+    .map((item) => ({
+      id: item.doc.id,
+      score: item.rrfScore, // Return RRF score as the main score
+      textSnippet: item.doc.textSnippet,
+      meta: {
+        ...(item.doc.meta as Meta),
+        _vectorScore: item.vectorScore,
+        _ftsScore: item.ftsScore,
+      },
+    }));
 
   return {
-    matches: results.map((r) => ({
-      id: r.id,
-      score: Number(r.score),
-      textSnippet: r.textSnippet,
-      meta: r.meta as Meta,
-    })),
+    matches: sortedMatches,
   };
 }

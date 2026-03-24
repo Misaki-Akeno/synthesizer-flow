@@ -1,0 +1,1 @@
+CREATE INDEX "rag_documents_fts_idx" ON "rag_documents" USING gin (to_tsvector('english', "text_snippet"));

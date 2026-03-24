@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.8 (2026-02-27)
+
+### RAG & Search Enhancements
+
+- **Hybrid Search Index**: Implemented a hybrid RAG retrieval system combining HNSW (vector search) and BM25-style keyword search (PostgreSQL Full-Text Search).
+- **Reciprocal Rank Fusion (RRF)**: Integrated the RRF algorithm to intelligently merge results from vector similarity and text relevance, improving retrieval accuracy for both semantic and exact-match queries.
+- **Database Schema Update**: Added a GIN index on the `text_snippet` column to support high-performance full-text searches.
+- **Enhanced Debugging**: Updated RAG search results to include internal vector and FTS scores in metadata for easier performance tuning.
+
 ## 0.8.7 (2026-02-26)
 
 ### Security & Access Control

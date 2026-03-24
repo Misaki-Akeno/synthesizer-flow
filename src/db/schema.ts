@@ -118,6 +118,11 @@ export const ragDocuments = pgTable(
       'hnsw',
       table.embedding.op('vector_cosine_ops')
     ),
+    // Full-text search index (GIN)
+    ftsIndex: index('rag_documents_fts_idx').using(
+      'gin',
+      sql`to_tsvector('english', ${table.textSnippet})`
+    ),
   })
 );
 
