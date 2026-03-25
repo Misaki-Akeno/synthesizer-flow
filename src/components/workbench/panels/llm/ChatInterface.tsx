@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings-store';
 import { useFlowStore } from '@/store/canvas-store';
-import { ChatMessage, ClientOperation, ToolCall } from '@/agent';
+import { ChatMessage, ClientOperation, ToolCall, ChatResponse } from '@/agent';
 import { getSystemPrompt } from '@/agent/prompts/system';
 import { chatWithAgent } from '@/agent/actions';
 import { saveCheckpoint } from '@/agent/checkpoint-actions';
@@ -157,6 +157,51 @@ export function ChatInterface() {
     });
   };
 
+  const handleFinalResponse = (response: ChatResponse, currentAssistantMessage: string) => {
+    // Handle Approval Requirement
+    if (response.approvalRequired) {
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const lastIndex = newMessages.length - 1;
+        newMessages[lastIndex] = {
+          role: 'assistant',
+          content: response.message.content || currentAssistantMessage || "Requires approval.",
+          approval: { status: 'pending' }
+        };
+        return newMessages;
+      });
+    } else {
+      // Normal Response final update
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const lastIndex = newMessages.length - 1;
+        newMessages[lastIndex] = {
+          ...response.message,
+          content: response.message.content || currentAssistantMessage,
+          toolCalls: response.hasToolUse ? response.toolCalls : undefined,
+        };
+        return newMessages;
+      });
+    }
+
+    // 如果有工具调用，可以显示额外信息
+    if (response.hasToolUse && response.toolCalls) {
+      console.log('AI使用了工具:', response.toolCalls);
+    }
+
+    // 执行客户端操作
+    if (response.clientOperations && response.clientOperations.length > 0) {
+      executeClientOperations(response.clientOperations);
+
+      // 立即从 store 获取真实节点数据并更新工具调用结果
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        response.toolCalls.forEach((toolCall: ToolCall) => {
+          enhanceToolResult(toolCall);
+        });
+      }
+    }
+  };
+
   const sendMessage = async (action?: 'approve' | 'reject', targetMessageIndex?: number) => {
     // If action is provided, we skip input check.
     // If normal send, we need input.
@@ -223,11 +268,9 @@ export function ChatInterface() {
       const currentEdgesSnapshot = useFlowStore.getState().edges;
 
       // Pass Thread ID and Action
-      const response = await chatWithAgent(
-        // Note: chatWithAgent expects FULL history in 'messages'.
-        // If action='approve', we are resuming. The history is already in Checkpoint (via threadId).
-        // For 'approve', we don't add a new user message.
-        action ? messages : [...messages, { role: 'user', content: input }],
+      const history: ChatMessage[] = action ? messages : [...messages, { role: 'user', content: input } as ChatMessage];
+      const stream = await chatWithAgent(
+        history,
         aiSettings,
         { nodes: currentNodes, edges: currentEdgesSnapshot },
         useTools,
@@ -235,61 +278,48 @@ export function ChatInterface() {
         action
       );
 
-      // Handle Approval Requirement
-      if (response.approvalRequired) {
-        // Add the assistant message asking for approval with pending status
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: response.message.content || "Requires approval.",
-            approval: { status: 'pending' }
-          },
-        ]);
-      } else {
-        // Normal Response
-        setMessages((prev) => [
-          ...prev,
-          {
-            ...response.message,
-            toolCalls: response.hasToolUse ? response.toolCalls : undefined,
-          },
-        ]);
+      if (!stream) {
+        throw new Error('Agent call failed to start');
       }
 
-      // 如果有工具调用，可以显示额外信息
-      if (response.hasToolUse && response.toolCalls) {
-        console.log('AI使用了工具:', response.toolCalls);
-      }
+      let currentAssistantMessage = "";
+      
+      // Pre-add an empty assistant message for streaming
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: "" }
+      ]);
 
-      // 执行客户端操作
-      if (response.clientOperations && response.clientOperations.length > 0) {
-        executeClientOperations(response.clientOperations);
-
-        // 立即从 store 获取真实节点数据并更新工具调用结果
-        if (response.toolCalls && response.toolCalls.length > 0) {
-          // ... (tool call enhancement logic same as before)
-          // (It is large, I should preserve it. I will try to use the existing block or copy it back.
-          // Since I am replacing the whole `sendMessage`, I must include it.)
-          // To save space/complexity in this turn, I will assume the enhancement logic is preserved or I need to copy it fully.
-          // I will copy it fully.
-          response.toolCalls.forEach((toolCall: ToolCall) => {
-            // ... (Full enhancement logic)
-            // For brevity in this thought trace, I will include the full code in the tool call.
-            // See ReplacementContent below.
-            enhanceToolResult(toolCall); // Refactored for clarity? No, I'll inline it to match style.
-          });
+      // Check if it's a generator/iterable
+      if (stream && typeof (stream as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function') {
+        const asyncIterable = stream as AsyncIterable<{ type: string; content?: string; response?: ChatResponse }>;
+        for await (const part of asyncIterable) {
+          if (part.type === 'chunk' && part.content) {
+            currentAssistantMessage += part.content;
+            setMessages((prev) => {
+              const newMessages = [...prev];
+              const lastIndex = newMessages.length - 1;
+              if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
+                newMessages[lastIndex] = { 
+                  ...newMessages[lastIndex], 
+                  content: currentAssistantMessage 
+                };
+              }
+              return newMessages;
+            });
+          } else if (part.type === 'done' && part.response) {
+            handleFinalResponse(part.response, currentAssistantMessage);
+          }
         }
-      }
-
-      // Since I cannot implement "enhanceToolCalls" easily without more changes, I will inline the logic again.
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        response.toolCalls.forEach((toolCall: ToolCall) => {
-          // ... [logic from original file lines 216-366] ...
-          // I will try to keep the original logic by just invoking a helper or pasting it.
-          // Given the size, I'll paste the essential parts.
-          enhanceToolResult(toolCall);
-        });
+      } else {
+        // Fallback for non-generator response (if any)
+        const response = stream as unknown as { type: string; response: ChatResponse } | ChatResponse;
+        // In case it's a direct ChatResponse or wrapped in {type:'done'}
+        if ('type' in response && response.type === 'done') {
+          handleFinalResponse(response.response, "");
+        } else {
+          handleFinalResponse(response as ChatResponse, "");
+        }
       }
 
     } catch (error) {

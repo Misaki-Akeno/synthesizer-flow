@@ -20,9 +20,9 @@ const sslConfig = env.DATABASE_URL.includes('localhost') || env.DATABASE_URL.inc
 
 const pool = globalForDb.conn ?? new Pool({
   connectionString: env.DATABASE_URL,
-  connectionTimeoutMillis: 10_000, // 降低超时时间以便快速失败
+  connectionTimeoutMillis: 30_000,
   idleTimeoutMillis: 30_000,
-  max: 10,
+  max: 20, // Keep 20 for concurrent load
   ssl: sslConfig,
 });
 
