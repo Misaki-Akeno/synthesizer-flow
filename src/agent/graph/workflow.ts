@@ -35,7 +35,7 @@ export function createGraph(tools: any[], checkpointer?: BaseCheckpointSaver) {
     const modelWithTools = model.bindTools(tools);
 
     // Get system prompt
-    const systemPrompt = getSystemPrompt(true);
+    const systemPrompt = getSystemPrompt();
     const systemMessage = new SystemMessage(systemPrompt);
 
     let messagesWithSystem = messages;

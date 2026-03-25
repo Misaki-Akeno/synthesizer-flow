@@ -57,45 +57,16 @@ export function ChatInterface() {
     edges: currentEdges
   } = useFlowStore();
 
-  // 是否启用工具功能
-  const [useTools, _setUseTools] = useState(true);
-
   // 当组件首次加载时，添加系统提示
   useEffect(() => {
     setMessages([
       {
         role: 'system',
-        content: getSystemPrompt(useTools),
+        content: getSystemPrompt(),
       },
     ]);
     // 仅首次加载
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ... (useTools effect remains same)
-  // 当 useTools 切换时，仅更新系统提示内容，不清空历史
-  useEffect(() => {
-    setMessages((prev) => {
-      if (!prev || prev.length === 0) {
-        return [
-          {
-            role: 'system',
-            content: getSystemPrompt(useTools),
-          },
-        ];
-      }
-      const first = prev[0];
-      if (first.role === 'system') {
-        const updated = [...prev];
-        updated[0] = { ...first, content: getSystemPrompt(useTools) };
-        return updated;
-      }
-      return [
-        { role: 'system', content: getSystemPrompt(useTools) },
-        ...prev,
-      ];
-    });
-  }, [useTools]);
 
   // 消息添加后自动滚动到底部
   useEffect(() => {
@@ -273,7 +244,6 @@ export function ChatInterface() {
         history,
         aiSettings,
         { nodes: currentNodes, edges: currentEdgesSnapshot },
-        useTools,
         threadId,
         action
       );
@@ -483,7 +453,7 @@ export function ChatInterface() {
     }
   };
 
-  // 新建对话：重置为仅包含当前 useTools 的系统提示
+  // 新建对话：重置为系统提示
   const resetConversation = async () => {
     // Auto-save if there are user/assistant messages
     const hasHistory = messages.some(m => m.role !== 'system');
@@ -512,7 +482,7 @@ export function ChatInterface() {
     setMessages([
       {
         role: 'system',
-        content: getSystemPrompt(useTools),
+        content: getSystemPrompt(),
       },
     ]);
     setInput('');

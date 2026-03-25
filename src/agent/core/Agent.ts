@@ -24,11 +24,10 @@ export class Agent {
     messages: ChatMessage[],
     settings: AISettings,
     initialState: GraphStateSnapshot,
-    useTools: boolean = true,
     threadId?: string,
     action?: 'approve' | 'reject'
   ): Promise<ChatResponse> {
-    const generator = this.streamMessage(messages, settings, initialState, useTools, threadId, action);
+    const generator = this.streamMessage(messages, settings, initialState, threadId, action);
     let finalResponse: ChatResponse | undefined;
 
     for await (const part of generator) {
@@ -48,7 +47,6 @@ export class Agent {
     messages: ChatMessage[],
     settings: AISettings,
     initialState: GraphStateSnapshot,
-    useTools: boolean = true,
     threadId?: string,
     action?: 'approve' | 'reject'
   ): AsyncGenerator<{ type: 'chunk'; content: string } | { type: 'done'; response: ChatResponse }> {
@@ -59,7 +57,6 @@ export class Agent {
     try {
       logger.info('Initializing Agent Stream Request', {
         model: settings.modelName,
-        useTools,
         threadId,
         action
       });
@@ -77,16 +74,9 @@ export class Agent {
 
       // Initialize Tool Executor and Graph
       const checkpointer = new DrizzleCheckpointer();
-      let graph: ReturnType<typeof createGraph>;
-      let executor: ToolExecutor | undefined;
-
-      if (useTools) {
-        executor = new ToolExecutor(initialState);
-        const tools = createTools(executor);
-        graph = createGraph(tools, checkpointer);
-      } else {
-        graph = createGraph([], checkpointer);
-      }
+      const executor = new ToolExecutor(initialState);
+      const tools = createTools(executor);
+      const graph = createGraph(tools, checkpointer);
 
       // Convert messages to LangChain format
       const inputs = messages.map((msg) => {

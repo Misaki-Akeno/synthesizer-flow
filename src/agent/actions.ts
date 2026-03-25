@@ -8,12 +8,11 @@ export async function* chatWithAgent(
   messages: ChatMessage[],
   settings: AISettings,
   initialState: GraphStateSnapshot,
-  useTools: boolean,
   threadId?: string,
   action?: 'approve' | 'reject'
 ) {
   const agent = Agent.getInstance();
-  const generator = agent.streamMessage(messages, settings, initialState, useTools, threadId, action);
+  const generator = agent.streamMessage(messages, settings, initialState, threadId, action);
 
   for await (const part of generator) {
     // Ensure the return value is serializable
