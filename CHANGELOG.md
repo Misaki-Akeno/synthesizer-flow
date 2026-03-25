@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.0 (2026-03-25)
+
+### AI Agent Streaming & Architecture
+
+- **Real-Time Streaming Output**: Implemented a streaming text output mechanism for the AI agent using React 19 / Next.js 15 Server Action (Async Generators) and LangGraph's `streamEvents`. This provides an interactive "typewriter" effect in the chat interface.
+- **Unified Tool-Calling Mode**: Removed the optional `useTools` mechanism. The AI agent now operates with tool-calling capabilities permanently enabled by default to ensure its ability to interact with the canvas and knowledge base.
+- **Enhanced RAG Prioritization**: Streamlined the system prompt to explicitly prioritize `rag_search` for technical queries and audio synthesis concepts, ensuring more accurate and authoritative expert advice.
+- **Refined System Prompt**: Refactored the core system prompt for better professional tone, concise interaction rules, and a focused task-based workflow.
+
+### Performance & Stability
+
+- **Database Connection Optimization**: Increased the PostgreSQL connection pool size and adjusted timeouts to better handle the high concurrent load from real-time streaming sessions and authentication checks.
+- **Robust Stream Handling**: Added fallback mechanisms and explicit type validation for asynchronous generators in the frontend to prevent UI errors during intermittent stream failures.
+
 ## 0.8.8 (2026-02-27)
 
 ### RAG & Search Enhancements
