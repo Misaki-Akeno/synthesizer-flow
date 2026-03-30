@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
     'langchain',
   ],
 
-  // Webpack配置（用于生产构建）
+  // Webpack配置（用于生产构建，如果回退到Webpack则生效）
   webpack: (config) => {
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
@@ -47,8 +47,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     resolveAlias: {
       '@': path.resolve(__dirname, 'src'),
+      // Turbopack 不支持 boolean 禁用，此处仅保留路径别名
+      // 如果出现模块缺失错误，需通过重定向到 empty 模块处理
     },
   },
+  // 暂不开启，修复与现有的 Route Segment Config (runtime, dynamic) 的冲突
+  // cacheComponents: true,
 };
 
 export default withNextIntl(nextConfig);
