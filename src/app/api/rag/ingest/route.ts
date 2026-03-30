@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { upsertDocuments } from '@/lib/rag/vectorStore';
 import { splitMarkdown } from '@/lib/rag/markdownSplitter';
 import { auth } from '@/lib/auth/auth';
+import { isAdmin } from '@/lib/auth/rbac';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
     }
 
     // 管理员检查
-    if (session.user.email !== 'cxf213@outlook.com') {
+    if (!isAdmin(session)) {
       return NextResponse.json({ error: 'Forbidden: Admin only' }, { status: 403 });
     }
 

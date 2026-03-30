@@ -18,11 +18,17 @@ export const authOptions = {
  */
 export const auth = () => getServerSession(authOptions);
 
-// 扩展会话类型，包含用户ID
+// 扩展会话类型，包含用户ID和角色
 declare module 'next-auth' {
   interface Session {
     user: {
       id: string;
+      role: string;
     } & DefaultSession['user'];
+  }
+
+  interface User {
+    id: string;
+    role: string;
   }
 }

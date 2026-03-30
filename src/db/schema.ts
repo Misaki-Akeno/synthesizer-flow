@@ -27,6 +27,7 @@ export const users = pgTable('users', {
   emailVerified: timestamp('email_verified', { mode: 'date' }),
   image: text('image'),
   settings: jsonb('settings'), // 用户设置
+  role: varchar('role', { length: 50 }).default('user').notNull(), // RBAC 角色: 'admin', 'user'
 });
 
 // 定义 accounts 表 (OAuth 认证需要)

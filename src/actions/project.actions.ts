@@ -6,8 +6,7 @@ import { projects, usersToProjects } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { revalidatePath } from 'next/cache';
-
-const ADMIN_EMAIL = 'cxf213@outlook.com';
+import { isAdmin } from '@/lib/auth/rbac';
 
 
 /**
@@ -126,7 +125,7 @@ export async function saveProject(
     }
 
     // 如果尝试保存为系统预设，必须是管理员
-    if (isPreset && session.user.email !== ADMIN_EMAIL) {
+    if (isPreset && !isAdmin(session)) {
         return { success: false, error: 'Forbidden: Admin only' };
     }
 
@@ -226,7 +225,7 @@ export async function deleteProjectAction(projectId: string) {
 
         if (link.length === 0) {
             // 额外检查是否是管理员试图删除预设
-            if (session.user.email === ADMIN_EMAIL) {
+            if (isAdmin(session)) {
                 const project = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
                 if (project.length > 0 && project[0].isPreset) {
                     // 管理员可以删除预设

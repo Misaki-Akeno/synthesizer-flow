@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.1 (2026-03-30)
+
+### Security & RBAC
+
+- **RBAC Framework Implementation**: Replaced hardcoded email checks with a robust Role-Based Access Control (RBAC) system. 
+- **Database Schema Update**: Added a `role` field to the `users` table to persist user permissions.
+- **NextAuth Integration**: Seamlessly integrated user roles into the authentication session, ensuring permissions are available both on the server and client.
+- **Centralized Permission Logic**: Introduced `src/lib/auth/rbac.ts` as a single source of truth for permission checks (`isAdmin`, `hasPermission`).
+- **Admin-Only Protection**: Migrated DevTools panel access, RAG ingestion/search endpoints, and system preset saving to the new `admin` role.
+
 ## 0.9.0 (2026-03-25)
 
 ### AI Agent Streaming & Architecture
@@ -27,7 +37,7 @@
 
 ### Security & Access Control
 
-- **Admin-Only Dev Panel**: Restricted the DevTools panel and its associated backend endpoints (RAG ingestion/search, system preset saving) to the administrator (`cxf213@outlook.com`).
+- **Admin-Only Dev Panel**: Restricted the DevTools panel and its associated backend endpoints (RAG ingestion/search, system preset saving) to the administrator.
 - **Backend Protection**: Added server-side validation to ensure only authorized users can perform sensitive developer operations.
 
 ### Bug Fixes

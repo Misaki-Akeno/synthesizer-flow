@@ -26,12 +26,14 @@ export const authConfig: AuthOptions = {
 
   // 回调函数
   callbacks: {
-    // 确保用户ID添加到会话中
+    // 确保用户ID和角色添加到会话中
     session({ session, user, token }) {
       if (session.user && user) {
         session.user.id = user.id;
+        session.user.role = (user as any).role || 'user'; // 从数据库注入角色
       } else if (session.user && token) {
         session.user.id = token.sub as string;
+        session.user.role = (token as any).role || 'user';
       }
       return session;
     },
@@ -39,6 +41,7 @@ export const authConfig: AuthOptions = {
     jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.role = (user as any).role;
       }
       return token;
     },
