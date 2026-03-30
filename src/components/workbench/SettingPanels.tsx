@@ -212,6 +212,7 @@ const AISettingsPanel = memo(({ settings, onUpdate }: AISettingsPanelProps) => {
           {t('apiKey.label')} <span className="text-red-500 ml-1">*</span>
         </label>
         <Input
+          type="password"
           placeholder={t('apiKey.placeholder')}
           spellCheck="false"
           autoComplete="new-password"
