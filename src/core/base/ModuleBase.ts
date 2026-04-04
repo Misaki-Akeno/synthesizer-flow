@@ -400,7 +400,7 @@ export abstract class ModuleBase {
       // 列表类型，确保值在选项中
       if (meta.options && meta.options.includes(value)) {
         this.parameters[paramKey].next(value);
-      } else {
+      } else if (value !== '') {
         console.warn(`Invalid option: ${value} for parameter ${paramKey}`);
       }
     } else if (meta.type === ParameterType.STRING && typeof value === 'string') {

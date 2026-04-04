@@ -1,6 +1,36 @@
 # Changelog
 
-## 0.9.0 (2026-03-25)
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.9.2] - 2026-03-30
+
+### Architecture & Framework Upgrade
+- **Next.js 16 Upgrade**: Upgraded core framework to Next.js 16.2.1, including mandatory async request API migration and middleware to proxy transition.
+- **React 19.2**: Updated React and React-dom to latest version 19.2.4.
+- **Turbopack by Default**: Switched to Turbopack as the default compiler for dev and build processes, with optimized configuration for Node.js module fallbacks.
+
+### Features & Fixes
+- **Auth Adapter Fix**: Updated `DrizzleAdapter` to support new `AdapterUser` requirements in `next-auth` upgrade, including the `role` field.
+- **SSR Store Safety**: Fixed a critical `TypeError` where `localStorage` was accessed during SSR in `settings-store.ts` by using `createJSONStorage` with an environment check.
+- **UI & DX Polish**: 
+  - Renamed `src/middleware.ts` to `src/proxy.ts` following Next.js 16 conventions.
+  - Suppressed redundant `Invalid option` warnings in `ModuleBase` during device enumeration.
+  - Improved `tsconfig.json` and `next.config.ts` compatibility with Next.js 16.
+
+## [0.9.1] - 2026-03-30
+
+### Security & RBAC
+
+- **RBAC Framework Implementation**: Replaced hardcoded email checks with a robust Role-Based Access Control (RBAC) system. 
+- **Database Schema Update**: Added a `role` field to the `users` table to persist user permissions.
+- **NextAuth Integration**: Seamlessly integrated user roles into the authentication session, ensuring permissions are available both on the server and client.
+- **Centralized Permission Logic**: Introduced `src/lib/auth/rbac.ts` as a single source of truth for permission checks (`isAdmin`, `hasPermission`).
+- **Admin-Only Protection**: Migrated DevTools panel access, RAG ingestion/search endpoints, and system preset saving to the new `admin` role.
+
+## [0.9.0] - 2026-03-25
 
 ### AI Agent Streaming & Architecture
 
@@ -14,7 +44,7 @@
 - **Database Connection Optimization**: Increased the PostgreSQL connection pool size and adjusted timeouts to better handle the high concurrent load from real-time streaming sessions and authentication checks.
 - **Robust Stream Handling**: Added fallback mechanisms and explicit type validation for asynchronous generators in the frontend to prevent UI errors during intermittent stream failures.
 
-## 0.8.8 (2026-02-27)
+## [0.8.8] - 2026-02-27
 
 ### RAG & Search Enhancements
 
@@ -23,11 +53,11 @@
 - **Database Schema Update**: Added a GIN index on the `text_snippet` column to support high-performance full-text searches.
 - **Enhanced Debugging**: Updated RAG search results to include internal vector and FTS scores in metadata for easier performance tuning.
 
-## 0.8.7 (2026-02-26)
+## [0.8.7] - 2026-02-26
 
 ### Security & Access Control
 
-- **Admin-Only Dev Panel**: Restricted the DevTools panel and its associated backend endpoints (RAG ingestion/search, system preset saving) to the administrator (`cxf213@outlook.com`).
+- **Admin-Only Dev Panel**: Restricted the DevTools panel and its associated backend endpoints (RAG ingestion/search, system preset saving) to the administrator.
 - **Backend Protection**: Added server-side validation to ensure only authorized users can perform sensitive developer operations.
 
 ### Bug Fixes
@@ -37,7 +67,7 @@
 - **Async Initialization**: Improved the `AudioModuleBase` initialization sequence to correctly buffer and replay pending audio inputs to their respective ports once the module is fully ready.
 - **Speaker Module Enhancement**: Upgraded the `Speaker` module with dual `AudioInputHandler` instances, providing robust multi-connection management for both left and right channels.
 
-## 0.8.6 (2026-02-25)
+## [0.8.6] - 2026-02-25
 
 ### Architecture & Infrastructure
 
@@ -53,7 +83,7 @@
 - **Deep Linking Tabs**: Sidebar Project Manager now accepts internal `projectTab` routing params, smoothly transitioning from the Welcome screen directly to the Built-in project presets.
 - **Project Manager Refinement**: Beautified the Project Manager panel interface and introduced robust caching capabilities for faster preset loading.
 
-## 0.8.5 (2026-01-24)
+## [0.8.5] - 2026-01-24
 
 ### Features
 
@@ -64,7 +94,7 @@
 - **UI Enhancements**:
   - **XY Pad**: Added `step` support for XY Pad parameters, allowing for quantized control of values.
 
-## 0.8.4 (2026-01-24)
+## [0.8.4] - 2026-01-24
 
 ### Features
 
@@ -80,7 +110,7 @@
 - **Parameter Controls**: Added support for `String` type parameters and `readonly` property in the UI, enabling better status display for modules like Calendar.
 - **Sequencer UI**: When the Agent (or any external source) updates the sequence, the UI immediately reflects the new notes.
 
-## 0.8.3 (2026-01-14)
+## [0.8.3] - 2026-01-14
 
 ### Features
 
@@ -96,7 +126,7 @@
   - Solved complex object serialization issues for LangChain message types.
 - **Robust Error Handling**: Improved logger robustness to prevent server-side UI rendering errors (`toast` on server).
 
-## 0.8.2 (2026-01-13)
+## [0.8.2] - 2026-01-13
 
 ### Features
 
@@ -112,7 +142,7 @@
 - **RAG System**: Fixed logic in `executor.ts` to improve tool reliability.
 - **UI**: Fixed alignment and rendering issues in the `XYPad` component.
 
-## 0.8.1 (2026-01-13)
+## [0.8.1] - 2026-01-13
 
 ### Features
 
@@ -128,7 +158,7 @@
 - **RAG System**: Fixed issues related to RAG document ingestion and vector storage (`1d29238`).
 - **UI**: Fixed project deletion bug in dev tools where name was used instead of ID.
 
-## 0.8.0 (2026-01-07)
+## [0.8.0] - 2026-01-07
 
 ### Architecture
 
@@ -139,13 +169,13 @@
   - Removed "langchain" from naming conventions for clarity.
   - Updated namespace to `src/agent`.
 
-## 0.7.9 (2025-12-21)
+## [0.7.9] - 2025-12-21
 
 ### Security
 
 - **React CVE Fix**: Fixed a major security vulnerability in the React dependency.
 
-## 0.7.8 (2025-11-24)
+## [0.7.8] - 2025-11-24
 
 ### Features
 
@@ -156,13 +186,13 @@
 
 - **DrizzleORM**: Refactored database migration strategy.
 
-## 0.7.7 (2025-11-10)
+## [0.7.7] - 2025-11-10
 
 ### Features
 
 - **Piano Input**: Added support for Aftertouch events.
 
-## 0.7.6 (2025-10-27)
+## [0.7.6] - 2025-10-27
 
 ### Features
 
@@ -204,7 +234,7 @@
 
 - **全面重写设置面板**: 使用新架构重构 `SettingPanels.tsx`
   - 减少60%的代码复杂度，提高可维护性
-  - 更安全的类型检查和状态管理
+  - 更安全的类型检查 and 状态管理
   - 优化的性能和用户体验
 
 ### 🛡️ 安全性与稳定性提升
@@ -215,7 +245,7 @@
 
 ## 0.7.4 (2025-05-26)
 
-模块组织架构更新，更可读；添加了设置页面以及其持久化功能；添加了右侧边栏。添加了LLM Chat的ui界面和对应的api端口，并进行了实现。
+模块组织架构更新，更可读；添加了设置页面以及其持久化功能；添加了右侧边栏。添加了LLM Chat的ui界面和对应的api端口 ，并进行了实现。
 
 ## 0.7.3 (2025-05-12)
 
@@ -395,17 +425,17 @@
 
 ### Features
 
-- **UI界面全面升级**: 实现VS Code风格的界面布局
+- **UI界面全面升级**: 实现 VS Code 风格的界面布局
   - 添加了可折叠侧边栏，支持多种功能面板切换
-  - 重新设计了Header组件，包含动态搜索栏功能
+  - 重新设计了 Header 组件，包含动态搜索栏功能
   - 创建了独立的布局组件系统(Sidebar, Header, SearchBar)
 
 ### Improvements
 
-- **开发工具优化**: 完全重构DevTools
+- **开发工具优化**: 完全重构 DevTools
   - 移除了悬浮窗模式，集成到侧边栏中
   - 优化了工具面板的组织和显示方式
-  - 改进了滚动条样式，采用VS Code风格半透明设计
+  - 改进了滚动条样式，采用 VS Code 风格半透明设计
 
 ### UI/UX Enhancements
 
@@ -417,17 +447,17 @@
 
 ### Features
 
-- **项目管理优化**: 完善项目管理与URL共享功能
-  - 改进项目存储结构，统一使用ProjectConfig格式
-  - 引入nanoid为项目生成简短唯一ID
-  - 实现通过URL参数分享和恢复项目状态
-  - 优化项目加载流程，支持通过ID直接加载
+- **项目管理优化**: 完善项目管理与 URL 共享功能
+  - 改进项目存储结构，统一使用 ProjectConfig 格式
+  - 引入 nanoid 为项目生成简短唯一 ID
+  - 实现通过 URL 参数分享和恢复项目状态
+  - 优化项目加载流程，支持通过 ID 直接加载
   - 添加音频上下文重置功能，确保项目切换时音频资源正确释放
 
 ### Improvements
 
 - 简化预设数据格式，统一内置预设和用户项目的数据结构
-- 优化URL处理逻辑，防止URL反复跳转
+- 优化 URL 处理逻辑，防止 URL 反复跳转
 - 提升项目切换体验，避免上一个项目的音频继续播放
 
 ## 0.6.5 (2025-04-18)
@@ -435,17 +465,17 @@
 ### Features
 
 - **项目持久化**: 添加项目保存和加载功能
-  - 实现`SerializationManager`类，提供模块和画布的序列化/反序列化功能
-  - 使用Zustand的persist中间件实现本地存储
-  - 添加项目管理UI界面，支持保存、加载、导出和导入项目
-  - 支持Base64格式的画布数据导入导出
-  - URL安全的Base64转换，确保序列化数据可用于URL参数
+  - 实现 `SerializationManager` 类，提供模块和画布的序列化/反序列化功能
+  - 使用 Zustand 的 persist 中间件实现本地存储
+  - 添加项目管理 UI 界面，支持保存、加载、导出和导入项目
+  - 支持 Base64 格式的画布数据导入导出
+  - URL 安全的 Base64 转换，确保序列化数据可用于 URL 参数
 
 ### Bug Fixes
 
-- 修复`ModuleInitManager`中模块注册逻辑，优化模块初始化流程
-- 减少`AdvancedOscillatorModule`中的冗余日志输出
-- 修复`MIDIInputModule`中无效设备ID处理逻辑
+- 修复 `ModuleInitManager` 中模块注册逻辑，优化模块初始化流程
+- 减少 `AdvancedOscillatorModule` 中的冗余日志输出
+- 修复 `MIDIInputModule` 中无效设备 ID 处理逻辑
 
 ## 0.6.4 (2025-04-18)
 
@@ -460,13 +490,6 @@
   - 优化右键菜单集成
   - 改进模块添加和删除流程
   - 支持通过双击快速添加模块到画布
-
-### Core Architecture Updates
-
-- 添加新的模块生命周期管理：
-  - 集成`ModuleInitManager`用于处理节点的删除和资源释放
-  - 改进`ModuleManager`中的节点删除功能
-  - 支持更高效的模块创建和销毁流程
 
 ## 0.6.2 (2025-04-14)
 
@@ -529,7 +552,7 @@
 
 - Added new "复音合成器测试" (Polyphonic Synthesizer Test) preset
 
-## 0.6.0 (2023-11-12)
+## 0.6.0 (2025-04-10)
 
 ### Features
 

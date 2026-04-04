@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { createModuleLogger } from '@/lib/logger';
 
 const logger = createModuleLogger('Settings');
@@ -128,6 +128,16 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: 'synthesizerflow-settings',
+      storage: createJSONStorage(() => {
+        if (typeof window !== 'undefined') {
+          return localStorage;
+        }
+        return {
+          getItem: () => null,
+          setItem: () => {},
+          removeItem: () => {},
+        };
+      }),
       // 安全的数据恢复
       onRehydrateStorage: () => {
         return (state, error) => {

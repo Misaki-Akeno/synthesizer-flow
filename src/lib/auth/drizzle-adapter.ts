@@ -36,6 +36,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
         emailVerified: user.emailVerified,
         name: user.name || null,
         image: user.image || null,
+        role: user.role as any,
       };
     },
 
@@ -52,6 +53,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
         emailVerified: user.emailVerified,
         name: user.name || null,
         image: user.image || null,
+        role: user.role as any,
       };
     },
 
@@ -71,6 +73,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
         emailVerified: user.emailVerified,
         name: user.name || null,
         image: user.image || null,
+        role: user.role as any,
       };
     },
 
@@ -104,6 +107,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
         emailVerified: user.emailVerified,
         name: user.name || null,
         image: user.image || null,
+        role: user.role as any,
       };
     },
 
@@ -128,6 +132,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
         emailVerified: user.emailVerified,
         name: user.name || null,
         image: user.image || null,
+        role: user.role as any,
       };
     },
 
@@ -227,6 +232,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
           emailVerified: user.emailVerified,
           name: user.name || null,
           image: user.image || null,
+          role: user.role as any,
         },
       };
     },

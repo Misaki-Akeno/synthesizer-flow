@@ -10,6 +10,7 @@ import { NavUser } from '@/components/workbench/NavUser';
 import { Button } from '@/components/ui/shadcn/button';
 import { Code, Cpu, FileText, Settings, HelpCircle } from 'lucide-react';
 import { useSession } from 'next-auth/react';
+import { isAdmin } from '@/lib/auth/rbac';
 import {
   Tooltip,
   TooltipContent,
@@ -44,11 +45,11 @@ export function Sidebar({ className }: SidebarProps) {
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
-  const isAdmin = session?.user?.email === 'cxf213@outlook.com';
+  const isUserAdmin = isAdmin(session);
 
   useEffect(() => {
     // 如果不是管理员，且当前面板是开发工具，则重置
-    if (!isAdmin && activePanelFromUrl === 'dev-tools') {
+    if (!isUserAdmin && activePanelFromUrl === 'dev-tools') {
       const params = new URLSearchParams(searchParams);
       params.delete('panel');
       router.replace(`?${params.toString()}`);
@@ -56,7 +57,7 @@ export function Sidebar({ className }: SidebarProps) {
     }
     // 当 URL 中的 panel 参数变化时，更新 activePanel
     setActivePanel(activePanelFromUrl);
-  }, [activePanelFromUrl, projectTabFromUrl, isAdmin, router, searchParams]);
+  }, [activePanelFromUrl, projectTabFromUrl, isUserAdmin, router, searchParams]);
 
   const togglePanel = (panel: PanelType) => {
     const newPanel = activePanel === panel ? null : panel;
@@ -91,7 +92,7 @@ export function Sidebar({ className }: SidebarProps) {
                 tooltip="模块浏览器"
                 onClick={() => togglePanel('module-browser')}
               />
-              {isAdmin && (
+              {isUserAdmin && (
                 <ActivityBarButton
                   icon={<Code size={20} />}
                   active={activePanel === 'dev-tools'}
@@ -128,7 +129,7 @@ export function Sidebar({ className }: SidebarProps) {
                 {activePanel === 'module-browser' && (
                   <ModuleBrowser onClose={() => togglePanel(null)} />
                 )}
-                {activePanel === 'dev-tools' && isAdmin && (
+                {activePanel === 'dev-tools' && isUserAdmin && (
                   <DevTools onClose={() => togglePanel(null)} />
                 )}
               </div>
