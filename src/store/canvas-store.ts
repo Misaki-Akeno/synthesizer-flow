@@ -115,15 +115,10 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
 
     updateModuleParameter: (nodeId, paramKey, value) => {
-      set({
-        nodes: get().nodes.map((node) => {
-          if (node.id === nodeId && node.data?.module) {
-            node.data.module.updateParameter(paramKey, value);
-            return { ...node }; // 触发React更新
-          }
-          return node;
-        }),
-      });
+      const node = get().nodes.find((n) => n.id === nodeId);
+      if (node?.data?.module) {
+        node.data.module.updateParameter(paramKey, value);
+      }
     },
 
     // 添加新节点

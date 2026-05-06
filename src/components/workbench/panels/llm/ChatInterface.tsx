@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAISettings, useIsAIConfigured } from '@/store/settings-store';
 import { useFlowStore } from '@/store/canvas-store';
+import { useShallow } from 'zustand/react/shallow';
 import { ChatMessage, ClientOperation, ToolCall, ChatResponse } from '@/agent';
 import { getSystemPrompt } from '@/agent/prompts/system';
 import { chatWithAgent } from '@/agent/actions';
@@ -47,7 +48,7 @@ export function ChatInterface() {
   const aiSettings = useAISettings();
   const isAIConfigured = useIsAIConfigured();
 
-  // 获取Store操作方法
+  // 精确订阅：只选取所需方法和 edges，避免 nodes 参数更新导致的无关重渲染
   const {
     addNode,
     deleteNode,
@@ -55,7 +56,14 @@ export function ChatInterface() {
     onConnect,
     onEdgesChange,
     edges: currentEdges
-  } = useFlowStore();
+  } = useFlowStore(useShallow((s) => ({
+    addNode: s.addNode,
+    deleteNode: s.deleteNode,
+    updateModuleParameter: s.updateModuleParameter,
+    onConnect: s.onConnect,
+    onEdgesChange: s.onEdgesChange,
+    edges: s.edges,
+  })));
 
   // 当组件首次加载时，添加系统提示
   useEffect(() => {
@@ -204,6 +212,8 @@ export function ChatInterface() {
     }
 
     setIsLoading(true);
+    // 标记是否已预插入占位符消息，以便 catch 中正确替换而非 append
+    let assistantPlaceholderAdded = false;
 
     try {
       // 捕获当前状态快照 (sanitize to remove non-serializable data)
@@ -255,10 +265,8 @@ export function ChatInterface() {
       let currentAssistantMessage = "";
       
       // Pre-add an empty assistant message for streaming
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: "" }
-      ]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: "" }]);
+      assistantPlaceholderAdded = true;
 
       // Check if it's a generator/iterable
       if (stream && typeof (stream as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function') {
@@ -295,13 +303,20 @@ export function ChatInterface() {
     } catch (error) {
       console.error('聊天请求失败:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: `抱歉，请求处理过程中出现了错误: ${errorMessage}`,
-        },
-      ]);
+      const errorContent = `抱歉，请求处理过程中出现了错误: ${errorMessage}`;
+      if (assistantPlaceholderAdded) {
+        // 替换流中途失败留下的空占位符，而非 append 新消息
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const lastIndex = newMessages.length - 1;
+          if (lastIndex >= 0 && newMessages[lastIndex].role === 'assistant') {
+            newMessages[lastIndex] = { role: 'assistant', content: errorContent };
+          }
+          return newMessages;
+        });
+      } else {
+        setMessages((prev) => [...prev, { role: 'assistant', content: errorContent }]);
+      }
     } finally {
       setIsLoading(false);
     }

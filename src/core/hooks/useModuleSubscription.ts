@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { BehaviorSubject } from 'rxjs';
+import { throttleTime } from 'rxjs/operators';
 import { ModuleBase, ModuleInterface, PortType } from '../base/ModuleBase';
+
+// UI 刷新率上限：输出端口（如 LFO signal）可能以 60fps 推送值，
+// 但 React 侧只需 ~10fps 显示即可。音频处理链路直接订阅 BehaviorSubject，不受此影响。
+const UI_OUTPUT_THROTTLE_MS = 100;
 
 /**
  * 自定义Hook，用于订阅模块数据并返回当前值，主要用于UI
@@ -62,14 +67,16 @@ export function useModuleSubscription(module: ModuleBase | undefined) {
     });
     setInputPortTypes(initialInputTypes);
 
-    // 订阅输出端口变化
+    // 订阅输出端口变化（限流：UI 不需要跟随音频帧率更新）
     Object.entries(module.outputPorts).forEach(([key, subject]) => {
       const portSubject = subject as BehaviorSubject<ModuleInterface>;
       initialOutputTypes[key] = module.getOutputPortType(key);
 
-      subscriptions[`output_${key}`] = portSubject.subscribe((value) => {
-        setOutputPortValues((prev) => ({ ...prev, [key]: value }));
-      });
+      subscriptions[`output_${key}`] = portSubject
+        .pipe(throttleTime(UI_OUTPUT_THROTTLE_MS, undefined, { leading: true, trailing: true }))
+        .subscribe((value) => {
+          setOutputPortValues((prev) => ({ ...prev, [key]: value }));
+        });
     });
     setOutputPortTypes(initialOutputTypes);
 
