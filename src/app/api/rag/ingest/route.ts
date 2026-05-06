@@ -83,7 +83,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, ...res });
   } catch (e) {
     console.error('[RAG][ingest] error:', e);
-    const err = e instanceof Error ? { message: e.message, stack: e.stack } : { message: String(e) };
-    return NextResponse.json({ error: err.message, detail: process.env.NODE_ENV === 'development' ? err.stack : undefined }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

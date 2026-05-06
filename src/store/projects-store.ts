@@ -178,7 +178,7 @@ export const useProjectStore = create<ProjectPersistState>()(
             projectIdToUpdate = currentProject.id;
           }
 
-          const result = await saveProject(name, dataToSave, projectIdToUpdate);
+          const result = await saveProject(name, dataToSave, projectIdToUpdate, false, description);
 
           if (result.success && result.projectId) {
             // 保存成功，更新当前项目状态（包括 data，这里保持 string 格式以便本地缓存）
@@ -213,7 +213,7 @@ export const useProjectStore = create<ProjectPersistState>()(
         }
       },
 
-      saveAsPreset: async (name: string, _description?: string) => {
+      saveAsPreset: async (name: string, description?: string) => {
         try {
           logger.info(`保存为预设: "${name}"`);
           set({ isLoading: true });
@@ -229,7 +229,7 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           // 强制新建，不检查ID更新（为了简单，总算创建新预设）
           // 传入 isPreset = true
-          const result = await saveProject(name, dataToSave, undefined, true);
+          const result = await saveProject(name, dataToSave, undefined, true, description);
 
           if (result.success && result.projectId) {
             await get().fetchProjects();

@@ -50,6 +50,13 @@
       "when": 1774854627329,
       "tag": "0006_silky_rachel_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1746518400000,
+      "tag": "0007_add_missing_indexes",
+      "breakpoints": true
     }
   ]
 }

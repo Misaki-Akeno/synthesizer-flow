@@ -2,6 +2,9 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { ToolExecutor } from './executor';
 
+export const UNSAFE_TOOL_NAMES = ['delete_module', 'disconnect_modules'] as const;
+export type UnsafeToolName = typeof UNSAFE_TOOL_NAMES[number];
+
 // 定义 Schema
 const getCanvasModulesSchema = z.object({});
 const getModuleDetailsSchema = z.object({

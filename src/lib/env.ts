@@ -46,8 +46,10 @@ function parseEnv() {
 
   try {
     return envSchema.parse(env);
-  } catch (_error) {
-    // 捕获所有验证失败的环境变量
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`环境变量配置错误：${error.message}`);
+    }
     throw new Error('环境变量配置错误，请检查.env文件');
   }
 }

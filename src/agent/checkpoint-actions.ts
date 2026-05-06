@@ -2,7 +2,7 @@
 
 import { db } from '@/db/client';
 import { checkpoints, NewCheckpoint } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { ChatMessage, GraphStateSnapshot } from './core/types';
 import { nanoid } from 'nanoid';
@@ -93,7 +93,7 @@ export async function deleteCheckpoint(id: string, userId: string) {
     try {
         await db
             .delete(checkpoints)
-            .where(eq(checkpoints.id, id) && eq(checkpoints.userId, userId)); // Ensure ownership
+            .where(and(eq(checkpoints.id, id), eq(checkpoints.userId, userId)));
         revalidatePath('/');
         return { success: true };
     } catch (error) {
@@ -107,7 +107,7 @@ export async function updateCheckpointTitle(id: string, userId: string, title: s
         await db
             .update(checkpoints)
             .set({ title })
-            .where(eq(checkpoints.id, id) && eq(checkpoints.userId, userId));
+            .where(and(eq(checkpoints.id, id), eq(checkpoints.userId, userId)));
         revalidatePath('/');
         return { success: true };
     } catch (error) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Slider } from '@/components/ui/shadcn/slider';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Input } from '@/components/ui/shadcn/input';
@@ -73,13 +73,11 @@ export const NumberParameterControl = ({
     setInputValue(typeof value === 'number' ? value.toFixed(2) : '0.00');
   }, [value]);
 
-  const [, setIsFocused] = useState(false);
-
   // 处理滑块值变化
-  const handleSliderChange = (newValue: number[]) => {
+  const handleSliderChange = useCallback((newValue: number[]) => {
     updateParameter(paramKey, newValue[0]);
     setInputValue(newValue[0].toFixed(2));
-  };
+  }, [paramKey, updateParameter]);
 
   // 处理输入框值变化
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,7 +85,7 @@ export const NumberParameterControl = ({
   };
 
   // 处理输入框失焦和回车事件
-  const handleInputCommit = () => {
+  const handleInputCommit = useCallback(() => {
     const parsed = parseFloat(inputValue);
     if (!isNaN(parsed)) {
       const clampedValue = Math.min(Math.max(parsed, min), max);
@@ -96,15 +94,14 @@ export const NumberParameterControl = ({
     } else {
       setInputValue(value.toFixed(2));
     }
-    setIsFocused(false);
-  };
+  }, [inputValue, min, max, paramKey, updateParameter, value]);
 
   // 处理键盘事件
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleInputCommit();
     }
-  };
+  }, [handleInputCommit]);
 
   // 创建参数标签组件
   const labelComponent = <ParamLabel label={label} description={description} />;
@@ -120,7 +117,6 @@ export const NumberParameterControl = ({
             onChange={handleInputChange}
             onBlur={handleInputCommit}
             onKeyDown={handleKeyDown}
-            onFocus={() => setIsFocused(true)}
             className="h-6 text-xs px-2 py-0.5 leading-tight"
           />
         </div>

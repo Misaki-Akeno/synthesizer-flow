@@ -11,6 +11,7 @@ import {
   jsonb,
   vector,
   boolean,
+  check,
 } from 'drizzle-orm/pg-core';
 import { InferSelectModel, InferInsertModel, sql } from 'drizzle-orm';
 
@@ -134,11 +135,15 @@ export type NewRagDocument = InferInsertModel<typeof ragDocuments>;
 export const projects = pgTable('projects', {
   id: varchar('id', { length: 255 }).notNull().primaryKey(),
   name: text('name').notNull(),
+  description: text('description'),
   data: jsonb('data').notNull(), // 存储 canvas JSON 数据
   isPreset: boolean('is_preset').default(false).notNull(), // 是否为内置预设
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
-});
+}, (table) => ({
+  updatedAtIdx: index('projects_updated_at_idx').on(table.updatedAt),
+  isPresetIdx: index('projects_is_preset_idx').on(table.isPreset),
+}));
 
 // 定义 users_to_projects 表 (多对多关联)
 export const usersToProjects = pgTable(
@@ -150,13 +155,13 @@ export const usersToProjects = pgTable(
     projectId: varchar('project_id', { length: 255 })
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    // 可以添加角色字段，例如 'owner', 'editor', 'viewer'
     role: varchar('role', { length: 50 }).default('owner').notNull(),
   },
   (t) => ({
     pk: primaryKey(t.userId, t.projectId),
     userIdIdx: index('users_to_projects_user_id_idx').on(t.userId),
     projectIdIdx: index('users_to_projects_project_id_idx').on(t.projectId),
+    roleCheck: check('users_to_projects_role_check', sql`role IN ('owner', 'editor', 'viewer')`),
   })
 );
 
@@ -176,7 +181,10 @@ export const checkpoints = pgTable('checkpoints', {
   messages: jsonb('messages').notNull(), // Chat history
   graphState: jsonb('graph_state').notNull(), // Nodes and edges snapshot
   createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-});
+}, (table) => ({
+  userIdIdx: index('checkpoints_user_id_idx').on(table.userId),
+  createdAtIdx: index('checkpoints_created_at_idx').on(table.createdAt),
+}));
 
 export type Checkpoint = InferSelectModel<typeof checkpoints>;
 export type NewCheckpoint = InferInsertModel<typeof checkpoints>;

@@ -10,7 +10,7 @@ import { RunnableConfig } from "@langchain/core/runnables";
 import { load } from "@langchain/core/load";
 import { db } from "@/db/client";
 import { langgraphCheckpoints, langgraphWrites } from "@/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, lt, desc } from "drizzle-orm";
 
 export class DrizzleCheckpointer extends BaseCheckpointSaver {
     constructor() {
@@ -148,7 +148,7 @@ export class DrizzleCheckpointer extends BaseCheckpointSaver {
                     idx,
                     channel: write[0],
                     value: write[1] === undefined ? null : JSON.parse(valueJson),
-                });
+                }).onConflictDoNothing();
             }
         });
     }
@@ -173,20 +173,19 @@ export class DrizzleCheckpointer extends BaseCheckpointSaver {
             return;
         }
 
-        const query = db
+        const rows = await db
             .select()
             .from(langgraphCheckpoints)
-            .where(eq(langgraphCheckpoints.thread_id, thread_id))
+            .where(
+                before?.configurable?.checkpoint_id
+                    ? and(
+                          eq(langgraphCheckpoints.thread_id, thread_id),
+                          lt(langgraphCheckpoints.checkpoint_id, before.configurable.checkpoint_id)
+                      )
+                    : eq(langgraphCheckpoints.thread_id, thread_id)
+            )
             .orderBy(desc(langgraphCheckpoints.checkpoint_id))
             .limit(limit);
-
-        if (before && before.configurable?.checkpoint_id) {
-            // Simple string comparison for before... might fail if IDs assume complex ordering
-            // But for standard usage where we just want "latest", this list logic is secondary.
-            // We leave it basic for now.
-        }
-
-        const rows = await query;
 
         for (const row of rows) {
             yield {

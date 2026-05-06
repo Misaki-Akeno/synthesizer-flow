@@ -7,8 +7,7 @@ import { RunnableConfig } from '@langchain/core/runnables';
 import { AgentState } from './state';
 import { getSystemPrompt } from '../prompts/system';
 import { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
-
-const UNSAFE_TOOL_NAMES = ['delete_module', 'disconnect_modules'];
+import { UNSAFE_TOOL_NAMES } from '../tools/definitions';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createGraph(tools: any[], checkpointer?: BaseCheckpointSaver) {
