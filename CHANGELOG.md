@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2026-05-07
+
+### Security
+
+- **Dependency Audit**: Resolved all 3 HIGH severity vulnerabilities (down from 19 total to 12).
+  - `next` → `^16.2.4` (was `^16.2.1`): fixes HIGH CVE via `postcss`.
+  - `drizzle-orm` → `^0.45.2` (was `^0.42.0`): fixes HIGH CVE ([GHSA-gpj5-g38j-94v9](https://github.com/advisories/GHSA-gpj5-g38j-94v9)).
+  - `next-intl` → `^4.11.0` (was `^4.8.3`): fixes MODERATE open redirect ([GHSA-8f24-v5vv-gm5j](https://github.com/advisories/GHSA-8f24-v5vv-gm5j), requires `>=4.9.1`).
+  - `drizzle-kit` → `^0.31.10` (was `^0.31.9`): patch update.
+  - Added `overrides` to pin transitive dependencies: `vite ^7.3.2` (fixes 3 HIGH CVEs), `langsmith ^0.6.1` (fixes MODERATE prototype pollution and token leak), `postcss ^8.5.10` (fixes MODERATE regex ReDoS).
+
+### Performance
+
+- **LFO / Audio Parameter Stream**: Throttled output port subscriptions in `useModuleSubscription` to `~10 fps` (100 ms) for the UI layer. Audio processing subscriptions bypass this hook and remain at full rate, so modulation quality is unaffected. Eliminates ~60 redundant React re-renders per second per active LFO node.
+- **Canvas Store**: Removed redundant `nodes.map` + `set()` call from `updateModuleParameter`. Parameter values propagate to UI via RxJS `BehaviorSubject` directly, making the Zustand state update unnecessary. Eliminates cascading re-renders during slider drag.
+- **ChatInterface**: Switched from `useFlowStore()` (full-store subscription) to `useShallow` selector, preventing re-renders caused by unrelated node state changes.
+
+### Bug Fixes
+
+- **Stream Error Recovery**: Fixed a UI regression where a streaming error mid-response would leave an empty assistant message bubble stranded alongside the error message. The error now replaces the placeholder in-place.
+- **Server Action HOF**: Removed `'use server'` directive from `withAuth.ts` (it is a Higher-Order Function, not a Server Action itself), fixing a Turbopack build failure requiring all module exports to be `async`.
+- **Agent Permissions**: Fixed `RAG_SEARCH` API endpoint incorrectly using `isAdmin()` instead of `hasPermission(session, PERMISSIONS.RAG_SEARCH)`, which blocked regular users from accessing the feature despite the RBAC configuration granting them access.
+- **Drizzle `and()` Bug**: Fixed `deleteCheckpoint` and `updateCheckpointTitle` in `checkpoint-actions.ts` using JS `&&` instead of drizzle-orm's `and()`, causing the `id` filter to be silently ignored (only `userId` was applied).
+- **Database Indexes**: Added missing indexes (`checkpoints.user_id`, `checkpoints.created_at`, `projects.updated_at`, `projects.is_preset`) and a `CHECK` constraint on `users_to_projects.role`.
+
+### Developer Experience
+
+- **`withAuth` HOF**: Introduced `src/lib/auth/withAuth.ts` to eliminate repeated auth-check boilerplate across Server Actions.
+- **`UNSAFE_TOOL_NAMES`**: Exported constant from `definitions.ts` as the single source of truth; `workflow.ts` now imports it instead of redefining the array.
+- **`package.json`**: Added `engines.node: ">=18.17.0"` to document the minimum Node.js requirement.
+
 ## [0.9.2] - 2026-03-30
 
 ### Architecture & Framework Upgrade
