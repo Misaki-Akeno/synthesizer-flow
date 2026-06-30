@@ -1,9 +1,5 @@
 import { memo, useState } from 'react';
-import {
-  ModuleBase,
-  ParameterType,
-  PortType,
-} from '@/core/base/ModuleBase';
+import { ModuleBase, ParameterType, PortType } from '@/core/base/ModuleBase';
 import { useFlowStore } from '@/store/canvas-store';
 import { useModuleSubscription } from '@/core/hooks/useModuleSubscription';
 import React from 'react';
@@ -52,6 +48,13 @@ interface CustomUIComponentProps {
     [key: string]: unknown;
   };
 }
+
+type CustomUIRenderProps = CustomUIComponentProps & {
+  label?: string;
+  module?: ModuleBase;
+  paramValues: Record<string, number | boolean | string>;
+  onParamChange: (paramKey: string, value: number | boolean | string) => void;
+};
 
 const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
   const { module: moduleInstance } = data;
@@ -113,8 +116,9 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
 
     // 类型断言为字符串类型的键
     const componentType = type as keyof typeof CustomUIComponents;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const CustomComponent = CustomUIComponents[componentType] as any;
+    const CustomComponent = CustomUIComponents[
+      componentType
+    ] as React.ComponentType<CustomUIRenderProps>;
 
     // 处理参数更改的回调函数
     const handleParamChange = (
@@ -127,14 +131,26 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     // 增强 props，自动注入 step
     const enhancedProps = { ...(props as CustomUIComponentProps) };
     if (componentType === 'XYPad' && moduleInstance) {
-      if (enhancedProps.xParam && enhancedProps.xParam.paramKey && !enhancedProps.xParam.step) {
-        const meta = moduleInstance.getParameterMeta(enhancedProps.xParam.paramKey);
+      if (
+        enhancedProps.xParam &&
+        enhancedProps.xParam.paramKey &&
+        !enhancedProps.xParam.step
+      ) {
+        const meta = moduleInstance.getParameterMeta(
+          enhancedProps.xParam.paramKey
+        );
         if (meta && meta.step) {
           enhancedProps.xParam.step = meta.step;
         }
       }
-      if (enhancedProps.yParam && enhancedProps.yParam.paramKey && !enhancedProps.yParam.step) {
-        const meta = moduleInstance.getParameterMeta(enhancedProps.yParam.paramKey);
+      if (
+        enhancedProps.yParam &&
+        enhancedProps.yParam.paramKey &&
+        !enhancedProps.yParam.step
+      ) {
+        const meta = moduleInstance.getParameterMeta(
+          enhancedProps.yParam.paramKey
+        );
         if (meta && meta.step) {
           enhancedProps.yParam.step = meta.step;
         }
@@ -145,22 +161,6 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     return (
       <div className="custom-ui-container">
         <CustomComponent
-          label={''}
-          onClick={function (): void {
-            throw new Error('Function not implemented.');
-          }}
-          xParam={{
-            paramKey: 'x',
-            label: 'X',
-            min: 0,
-            max: 1,
-          }}
-          yParam={{
-            paramKey: 'y',
-            label: 'Y',
-            min: 0,
-            max: 1,
-          }}
           module={moduleInstance}
           paramValues={paramValues}
           onParamChange={handleParamChange}
@@ -235,8 +235,9 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
 
   return (
     <div
-      className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${!moduleEnabled ? 'opacity-50' : ''
-        }`}
+      className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${
+        !moduleEnabled ? 'opacity-50' : ''
+      }`}
     >
       {/* 模块标题栏 */}
       <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center node-drag-handle cursor-move">

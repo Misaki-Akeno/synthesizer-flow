@@ -50,7 +50,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -71,11 +71,6 @@ export function Header({ className }: HeaderProps) {
   const [devNoticeOpen, setDevNoticeOpen] = useState(false);
   const [devNoticeTitle, setDevNoticeTitle] = useState('');
   const [devNoticeDescription, setDevNoticeDescription] = useState('');
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const toggleRightPanel = (panel: string) => {
     const currentPanel = searchParams.get('auxPanel');
@@ -118,8 +113,7 @@ export function Header({ className }: HeaderProps) {
         </div>
 
         {/* 桌面视图的菜单栏 - 使用Menubar组件 */}
-        {mounted ? (
-          <Menubar className="hidden lg:flex border-none bg-transparent">
+        <Menubar className="hidden lg:flex border-none bg-transparent">
             {/* 文件菜单 */}
             <MenubarMenu>
               <MenubarTrigger className="font-medium text-xs">
@@ -345,15 +339,11 @@ export function Header({ className }: HeaderProps) {
                 </MenubarItem>
               </MenubarContent>
             </MenubarMenu>
-          </Menubar>
-        ) : (
-          <div className="hidden lg:flex h-9 items-center gap-1 p-1" />
-        )}
+        </Menubar>
 
         {/* 移动视图的折叠菜单 */}
         <div className="lg:hidden">
-          {mounted && (
-            <DropdownMenu>
+          <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
                   <Menu className="h-4 w-4" />
@@ -420,8 +410,7 @@ export function Header({ className }: HeaderProps) {
                   <span>设置</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          </DropdownMenu>
         </div>
       </div>
 

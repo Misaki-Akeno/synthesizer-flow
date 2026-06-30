@@ -40,12 +40,14 @@ export function Sidebar({ className }: SidebarProps) {
   const searchParams = useSearchParams();
   const { data: session } = useSession();
   const activePanelFromUrl = searchParams.get('panel') as PanelType;
-  const projectTabFromUrl = searchParams.get('projectTab');
-  const [activePanel, setActivePanel] = useState<PanelType>(activePanelFromUrl);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   const isUserAdmin = isAdmin(session);
+  const activePanel =
+    !isUserAdmin && activePanelFromUrl === 'dev-tools'
+      ? null
+      : activePanelFromUrl;
 
   useEffect(() => {
     // 如果不是管理员，且当前面板是开发工具，则重置
@@ -55,13 +57,10 @@ export function Sidebar({ className }: SidebarProps) {
       router.replace(`?${params.toString()}`);
       return;
     }
-    // 当 URL 中的 panel 参数变化时，更新 activePanel
-    setActivePanel(activePanelFromUrl);
-  }, [activePanelFromUrl, projectTabFromUrl, isUserAdmin, router, searchParams]);
+  }, [activePanelFromUrl, isUserAdmin, router, searchParams]);
 
   const togglePanel = (panel: PanelType) => {
     const newPanel = activePanel === panel ? null : panel;
-    setActivePanel(newPanel);
 
     const params = new URLSearchParams(searchParams);
     if (newPanel) {

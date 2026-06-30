@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { ModuleBase } from '@/core/base/ModuleBase';
 
@@ -42,8 +42,6 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   onNoteOff,
   onAftertouch,
 }) => {
-  // 创建音符布局
-  const [keys, setKeys] = useState<NoteKey[]>([]);
   // 追踪鼠标/触摸状态
   const [isPointerDown, setIsPointerDown] = useState(false);
   const [touchedKeys, setTouchedKeys] = useState<Set<number>>(new Set());
@@ -52,7 +50,7 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
   const AFTERTOUCH_THROTTLE_MS = 16; // 约60fps
 
   // 根据起始音符和数量生成键盘布局
-  useEffect(() => {
+  const keys = useMemo<NoteKey[]>(() => {
     const noteNames = [
       'C',
       'C#',
@@ -69,19 +67,15 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
     ];
     const blackKeyIndices = [1, 3, 6, 8, 10]; // C#, D#, F#, G#, A# 的索引
 
-    const newKeys: NoteKey[] = [];
-
-    for (let i = 0; i < noteCount; i++) {
+    return Array.from({ length: noteCount }, (_, i) => {
       const note = startNote + i;
       const nameIndex = note % 12;
       const octave = Math.floor(note / 12) - 1; // MIDI标准，C4是中央C (MIDI音符60)
       const name = `${noteNames[nameIndex]}${octave}`;
       const isBlack = blackKeyIndices.includes(nameIndex);
 
-      newKeys.push({ note, name, isBlack });
-    }
-
-    setKeys(newKeys);
+      return { note, name, isBlack };
+    });
   }, [startNote, noteCount]);
 
   // 计算白键数量(用于布局)
@@ -243,24 +237,15 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
     };
   }, [onNoteOff, touchedKeys]);
 
-  // 更新UI以反映当前的活跃音符
-  useEffect(() => {
-    if (activeNotes) {
-      // 只保留本键盘范围内的音符
-      const validNotes = activeNotes.filter(
-        (note) => note >= startNote && note < startNote + noteCount
-      );
-
-      // 如果外部活跃音符集合与当前触摸键集合不一致，更新触摸键集合
-      const currentTouchedNotes = Array.from(touchedKeys);
-      if (
-        JSON.stringify(validNotes.sort()) !==
-        JSON.stringify(currentTouchedNotes.sort())
-      ) {
-        setTouchedKeys(new Set(validNotes));
-      }
-    }
-  }, [activeNotes, startNote, noteCount, touchedKeys]);
+  const externallyActiveNotes = useMemo(
+    () =>
+      new Set(
+        activeNotes.filter(
+          (note) => note >= startNote && note < startNote + noteCount
+        )
+      ),
+    [activeNotes, startNote, noteCount]
+  );
 
   return (
     <div
@@ -276,7 +261,7 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
           .filter((key) => !key.isBlack)
           .map((key, _index) => {
             const isActive =
-              activeNotes.includes(key.note) || touchedKeys.has(key.note);
+              externallyActiveNotes.has(key.note) || touchedKeys.has(key.note);
             return (
               <div
                 key={key.note}
@@ -308,7 +293,7 @@ const PianoKeyboard: React.FC<PianoKeyboardProps> = ({
           .filter((key) => key.isBlack)
           .map((key) => {
             const isActive =
-              activeNotes.includes(key.note) || touchedKeys.has(key.note);
+              externallyActiveNotes.has(key.note) || touchedKeys.has(key.note);
             return (
               <div
                 key={key.note}

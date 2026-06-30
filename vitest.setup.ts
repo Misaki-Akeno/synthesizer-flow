@@ -1,6 +1,36 @@
 import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
 
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+
+  return {
+    clear: vi.fn(() => {
+      store = {};
+    }),
+    getItem: vi.fn((key: string) => store[key] ?? null),
+    key: vi.fn((index: number) => Object.keys(store)[index] ?? null),
+    removeItem: vi.fn((key: string) => {
+      delete store[key];
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = String(value);
+    }),
+    get length() {
+      return Object.keys(store).length;
+    },
+  };
+})();
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+  configurable: true,
+});
+Object.defineProperty(globalThis, 'localStorage', {
+  value: localStorageMock,
+  configurable: true,
+});
+
 // 模拟 Tone.js
 vi.mock('tone', () => {
   return {

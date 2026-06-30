@@ -1,22 +1,15 @@
 'use client';
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useContextMenu } from './hooks/useContextMenu';
 
 export const ContextMenu: React.FC = () => {
   const { isOpen, position, items, hideMenu } = useContextMenu();
   const menuRef = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
-
-  // 处理SSR兼容性
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
 
   useEffect(() => {
-    if (!isOpen || !mounted) return;
+    if (!isOpen) return;
 
     // 确保菜单在视口内
     const adjustPosition = () => {
@@ -41,9 +34,9 @@ export const ContextMenu: React.FC = () => {
     };
 
     setTimeout(adjustPosition, 0);
-  }, [isOpen, position, mounted]);
+  }, [isOpen, position]);
 
-  if (!isOpen || !mounted) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
     <div

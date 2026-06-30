@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useReactFlow, ReactFlowProvider } from '@xyflow/react';
 import { useFlowStore } from '@/store/canvas-store';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { moduleMetadataMap } from '@/core/modules/index';
+import { useSearchParams } from 'next/navigation';
 
 // 模块类型定义
 export interface ModuleTypeInfo {
@@ -87,9 +88,16 @@ export function ModuleBrowser({ onClose }: ModuleBrowserProps) {
 
 // 内部组件，使用 ReactFlow 上下文
 function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const searchParams = useSearchParams();
+  const moduleSearchParam = searchParams.get('moduleSearch') ?? '';
+  const [searchQuery, setSearchQuery] = useState(moduleSearchParam);
   const reactFlowInstance = useReactFlow();
   const addNode = useFlowStore((state) => state.addNode);
+  const nodeCount = useFlowStore((state) => state.nodes.length);
+
+  useEffect(() => {
+    setSearchQuery(moduleSearchParam);
+  }, [moduleSearchParam]);
 
   // 筛选模块
   const filterModules = (modules: ModuleTypeInfo[]) => {
@@ -111,9 +119,10 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
     const centerX = window.innerWidth / 2 / zoom - x / zoom;
     const centerY = window.innerHeight / 2 / zoom - y / zoom;
 
-    // 添加到画布中心位置附近（有一定随机偏移）
-    const offsetX = (Math.random() - 0.5) * 200;
-    const offsetY = (Math.random() - 0.5) * 200;
+    // 添加到画布中心位置附近（确定性偏移，避免新模块完全重叠）
+    const offsetStep = (nodeCount % 7) - 3;
+    const offsetX = offsetStep * 32;
+    const offsetY = Math.floor(nodeCount / 7) * 32;
 
     // 添加节点
     addNode(moduleType, moduleLabel, {

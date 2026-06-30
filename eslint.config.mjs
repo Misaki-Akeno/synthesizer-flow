@@ -1,27 +1,27 @@
-// eslint.config.mjs
-import { dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { FlatCompat } from '@eslint/eslintrc';
+import nextCoreWebVitals from 'eslint-config-next/core-web-vitals';
+import prettierConfig from 'eslint-config-prettier';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+const typescriptConfig = nextCoreWebVitals.find(
+  (config) => config.name === 'next/typescript'
+);
 
 const eslintConfig = [
-  ...compat.extends('next/core-web-vitals', 'next/typescript'),
-  ...compat.extends('prettier'),
   {
-    // 新增规则配置
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off',
+    },
+  },
+  ...nextCoreWebVitals,
+  prettierConfig,
+  {
+    plugins: typescriptConfig?.plugins,
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
-          argsIgnorePattern: '^_', // 忽略以下划线开头的函数参数
-          varsIgnorePattern: '^_', // 忽略以下划线开头的变量
-          caughtErrorsIgnorePattern: '^_', // 可选：忽略 catch 的错误变量
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
         },
       ],
     },

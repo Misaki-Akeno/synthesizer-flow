@@ -42,18 +42,23 @@
             "apiKey": {
                 "label": "API Key",
                 "placeholder": "Enter your API key",
+                "placeholderSaved": "Key saved; leave blank to keep using it",
                 "errorEmpty": "API Key cannot be empty",
-                "description": "Your API key will be safely stored locally"
+                "description": "Your API key is encrypted and stored on the server",
+                "descriptionSaved": "A server-side key is saved. Enter and save a new key to replace it"
             },
             "apiEndpoint": {
                 "label": "API Endpoint (Optional)",
                 "placeholder": "https://api.example.com/v1",
                 "description": "If you use a custom API endpoint, specify it here"
-            }
+            },
+            "save": "Save AI Settings",
+            "saving": "Saving..."
         },
         "toast": {
             "generalUpdated": "General settings updated",
             "aiUpdated": "AI settings updated",
+            "aiSaveFailed": "Failed to save AI settings",
             "languageUpdated": "Language changed"
         }
     }

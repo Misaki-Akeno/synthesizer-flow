@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
 import { Plus, Trash2, Play, Square } from 'lucide-react';
@@ -27,45 +27,35 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
     bpmParam,
     runningParam,
 }) => {
-    // 本地状态
-    const [steps, setSteps] = useState<SequenceStep[]>([]);
-
     const serializedSeq = paramValues[sequenceParam] as string;
 
-    // 从参数加载序列
-    useEffect(() => {
+    const defaultSteps = useMemo<SequenceStep[]>(
+        () => [
+            { note: "C4", velocity: 0.8, duration: "4n" },
+            { note: "E4", velocity: 0.8, duration: "4n" },
+            { note: "G4", velocity: 0.8, duration: "4n" },
+            { note: "C5", velocity: 0.8, duration: "4n" },
+        ],
+        []
+    );
+
+    // 从参数派生序列，避免本地 state 和模块参数双向同步
+    const steps = useMemo<SequenceStep[]>(() => {
         try {
             if (serializedSeq) {
                 const parsed = JSON.parse(serializedSeq);
                 if (Array.isArray(parsed)) {
-                    setSteps(prev => {
-                        // 防止循环更新：如果内容一致则不更新
-                        if (JSON.stringify(prev) === JSON.stringify(parsed)) {
-                            return prev;
-                        }
-                        return parsed;
-                    });
+                    return parsed;
                 }
-            } else {
-                // 默认初始值
-                const initialSteps = [
-                    { note: "C4", velocity: 0.8, duration: "4n" },
-                    { note: "E4", velocity: 0.8, duration: "4n" },
-                    { note: "G4", velocity: 0.8, duration: "4n" },
-                    { note: "C5", velocity: 0.8, duration: "4n" },
-                ];
-                setSteps(initialSteps);
-                // 立即保存默认值
-                onParamChange(sequenceParam, JSON.stringify(initialSteps));
             }
         } catch (e) {
             console.error("Failed to parse sequence", e);
         }
-    }, [serializedSeq, sequenceParam, onParamChange]);
+        return defaultSteps;
+    }, [defaultSteps, serializedSeq]);
 
-    // 当 updateSteps 被调用时，更新本地状态并同步到参数
+    // 更新模块参数，父级参数变化后会重新派生 steps
     const updateSteps = (newSteps: SequenceStep[]) => {
-        setSteps(newSteps);
         onParamChange(sequenceParam, JSON.stringify(newSteps));
     };
 

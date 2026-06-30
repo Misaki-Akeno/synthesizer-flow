@@ -762,7 +762,15 @@ export abstract class ModuleBase {
     }
 
     const connections = this.outputConnections.get(outputPortName);
-    connections?.push({ targetModule, targetPort: targetPortName });
+    const alreadyConnected = connections?.some(
+      (conn) =>
+        conn.targetModule.id === targetModule.id &&
+        conn.targetPort === targetPortName
+    );
+
+    if (!alreadyConnected) {
+      connections?.push({ targetModule, targetPort: targetPortName });
+    }
   }
 
   /**
@@ -790,14 +798,16 @@ export abstract class ModuleBase {
     // 更新输出连接记录
     const connections = this.outputConnections.get(outputPortName);
     if (connections) {
-      const index = connections.findIndex(
+      const remainingConnections = connections.filter(
         (conn) =>
-          conn.targetModule.id === targetModule.id &&
-          conn.targetPort === targetPortName
+          conn.targetModule.id !== targetModule.id ||
+          conn.targetPort !== targetPortName
       );
 
-      if (index !== -1) {
-        connections.splice(index, 1);
+      if (remainingConnections.length > 0) {
+        this.outputConnections.set(outputPortName, remainingConnections);
+      } else {
+        this.outputConnections.delete(outputPortName);
       }
     }
   }

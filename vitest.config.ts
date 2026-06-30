@@ -12,6 +12,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: 'server-only',
+        replacement: resolve(__dirname, 'vitest.server-only.ts'),
+      },
+      {
         find: '@',
         replacement: resolve(__dirname, 'src'),
       },

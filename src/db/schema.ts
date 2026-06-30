@@ -14,11 +14,11 @@ import {
   check,
 } from 'drizzle-orm/pg-core';
 import { InferSelectModel, InferInsertModel, sql } from 'drizzle-orm';
+import { resolveRagVectorDimension } from '../lib/rag/vectorDimension';
 
-const RAG_VECTOR_DIM =
-  Number(process.env.RAG_EMBEDDINGS_DIM) && Number.isFinite(Number(process.env.RAG_EMBEDDINGS_DIM))
-    ? Number(process.env.RAG_EMBEDDINGS_DIM)
-    : 1536;
+const RAG_VECTOR_DIM = resolveRagVectorDimension(
+  process.env.RAG_EMBEDDINGS_DIM
+);
 
 // 定义 users 表，符合 NextAuth 需求
 export const users = pgTable('users', {

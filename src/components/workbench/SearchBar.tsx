@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/shadcn/input';
 import { Button } from '@/components/ui/shadcn/button';
 import { cn } from '@/lib/utils';
 import { usePersistStore } from '@/store/projects-store';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface SearchBarProps {
   className?: string;
@@ -14,13 +15,16 @@ interface SearchBarProps {
 export function SearchBar({ className }: SearchBarProps) {
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const { currentProject } = usePersistStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   // 激活搜索
   const activateSearch = () => {
     setIsSearchActive(true);
     setTimeout(() => {
-      document.getElementById('search-input')?.focus();
+      searchInputRef.current?.focus();
     }, 100);
   };
 
@@ -34,15 +38,22 @@ export function SearchBar({ className }: SearchBarProps) {
   // 处理搜索
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // 执行搜索逻辑
-    console.log('Searching for:', searchQuery);
+    const query = searchQuery.trim();
+    if (!query) {
+      return;
+    }
+
+    const params = new URLSearchParams(searchParams);
+    params.set('panel', 'module-browser');
+    params.set('moduleSearch', query);
+    router.replace(`?${params.toString()}`);
   };
 
   // 处理按键事件
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setSearchQuery('');
-      deactivateSearch();
+      setIsSearchActive(false);
     }
   };
 
@@ -59,6 +70,7 @@ export function SearchBar({ className }: SearchBarProps) {
         <form onSubmit={handleSearch} className="w-full relative">
           <Input
             id="search-input"
+            ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onBlur={deactivateSearch}

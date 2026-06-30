@@ -56,11 +56,11 @@ const XYPad: React.FC<XYPadProps> = ({
       ? (paramValues[yParam.paramKey] as number)
       : yParam.min;
 
-  // 当前点的位置
-  const [position, setPosition] = useState({
+  // 当前点的位置由参数值派生，避免和外部参数产生双状态同步问题
+  const position = {
     x: normalizeValue(xValue, xParam.min, xParam.max, width),
     y: normalizeValue(yValue, yParam.min, yParam.max, height, true),
-  });
+  };
 
   // 是否正在拖动
   const [isDragging, setIsDragging] = useState(false);
@@ -128,8 +128,6 @@ const XYPad: React.FC<XYPadProps> = ({
       const x = Math.max(0, Math.min(width, (relativeX / safeRectWidth) * width));
       const y = Math.max(0, Math.min(height, (relativeY / safeRectHeight) * height));
 
-      setPosition({ x, y });
-
       // 更新参数值
       const newXValue = denormalizeValue(x, xParam.min, xParam.max, width, xParam.step);
       const newYValue = denormalizeValue(
@@ -184,7 +182,7 @@ const XYPad: React.FC<XYPadProps> = ({
 
   const handleMouseUp = React.useCallback(() => {
     setIsDragging(false);
-  }, []);
+  }, [setIsDragging]);
 
   useEffect(() => {
     // 添加事件监听
@@ -201,23 +199,6 @@ const XYPad: React.FC<XYPadProps> = ({
       window.removeEventListener('touchend', handleMouseUp);
     };
   }, [isDragging, handleMouseMove, handleTouchMove, handleMouseUp]);
-
-  // 当参数值外部更改时，更新点的位置
-  useEffect(() => {
-    setPosition({
-      x: normalizeValue(xValue, xParam.min, xParam.max, width),
-      y: normalizeValue(yValue, yParam.min, yParam.max, height, true),
-    });
-  }, [
-    xValue,
-    yValue,
-    xParam.min,
-    xParam.max,
-    yParam.min,
-    yParam.max,
-    width,
-    height,
-  ]);
 
   return (
     <div className="xypad-container my-2">

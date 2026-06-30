@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import type { KeyboardEvent } from 'react';
 import { ParameterType, ModuleBase } from '@/core/base/ModuleBase';
 import { useModuleSubscription } from '@/core/hooks/useModuleSubscription';
@@ -45,21 +45,12 @@ export function ModulePropertiesPanel({
 
   const { paramValues } = useModuleSubscription(moduleInstance);
 
-  const [displayName, setDisplayName] = useState<string>(
-    selectedNode?.data?.label || moduleInstance?.name || ''
-  );
-
-  useEffect(() => {
-    setDisplayName(selectedNode?.data?.label || moduleInstance?.name || '');
-  }, [moduleInstance, selectedNode]);
-
   const commitRename = useCallback(
     (value: string) => {
       if (!selectedNode) return;
 
       const trimmed = value.trim();
       if (!trimmed) {
-        setDisplayName(selectedNode.data?.label || moduleInstance?.name || '');
         return;
       }
 
@@ -68,26 +59,8 @@ export function ModulePropertiesPanel({
       }
 
       renameNode(selectedNode.id, trimmed);
-      setDisplayName(trimmed);
     },
-    [moduleInstance, renameNode, selectedNode]
-  );
-
-  const handleNameInputKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        commitRename(event.currentTarget.value);
-        event.currentTarget.blur();
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        setDisplayName(
-          selectedNode?.data?.label || moduleInstance?.name || ''
-        );
-        event.currentTarget.blur();
-      }
-    },
-    [commitRename, moduleInstance, selectedNode]
+    [renameNode, selectedNode]
   );
 
   if (!selectedNode || !moduleInstance) {
@@ -168,12 +141,10 @@ export function ModulePropertiesPanel({
           <div className="text-xs text-muted-foreground uppercase tracking-wide">
             模块名称
           </div>
-          <Input
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            onBlur={(event) => commitRename(event.target.value)}
-            onKeyDown={handleNameInputKeyDown}
-            placeholder="输入模块显示名"
+          <ModuleNameInput
+            key={selectedNode.id}
+            initialName={selectedNode.data?.label || moduleInstance.name || ''}
+            onCommit={commitRename}
           />
         </div>
         <div className="text-xs text-muted-foreground">
@@ -232,6 +203,41 @@ export function ModulePropertiesPanel({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ModuleNameInput({
+  initialName,
+  onCommit,
+}: {
+  initialName: string;
+  onCommit: (value: string) => void;
+}) {
+  const [displayName, setDisplayName] = useState(initialName);
+
+  const handleNameInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        onCommit(event.currentTarget.value);
+        event.currentTarget.blur();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        setDisplayName(initialName);
+        event.currentTarget.blur();
+      }
+    },
+    [initialName, onCommit]
+  );
+
+  return (
+    <Input
+      value={displayName}
+      onChange={(event) => setDisplayName(event.target.value)}
+      onBlur={(event) => onCommit(event.target.value)}
+      onKeyDown={handleNameInputKeyDown}
+      placeholder="输入模块显示名"
+    />
   );
 }
 

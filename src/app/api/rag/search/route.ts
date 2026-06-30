@@ -1,9 +1,18 @@
 import { NextResponse } from 'next/server';
 import { searchDocuments } from '@/lib/rag/vectorStore';
+import { normalizeTopK } from '@/lib/rag/searchParams';
 import { auth } from '@/lib/auth/auth';
 import { hasPermission, PERMISSIONS } from '@/lib/auth/rbac';
 
 export const runtime = 'nodejs';
+
+async function readJsonBody(req: Request): Promise<unknown> {
+  try {
+    return await req.json();
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: Request) {
   try {
@@ -17,11 +26,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const body = await req.json();
-    const query: string = body?.query;
-    const rawTopK = parseInt(body?.topK, 10);
-    const topK: number = Number.isFinite(rawTopK) ? Math.max(1, Math.min(rawTopK, 20)) : 5;
-    if (!query || typeof query !== 'string') {
+    const body = await readJsonBody(req);
+    if (body === null) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
+
+    const bodyRecord = body as Record<string, unknown>;
+    const query =
+      typeof bodyRecord.query === 'string' ? bodyRecord.query.trim() : '';
+    const topK = normalizeTopK(bodyRecord.topK);
+    if (!query) {
       return NextResponse.json({ error: 'query is required' }, { status: 400 });
     }
 
@@ -29,6 +43,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, ...res });
   } catch (e) {
     console.error('[RAG][search] error:', e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
