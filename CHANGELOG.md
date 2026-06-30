@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2026-06-30
+
+### Reliability
+
+- **Project Persistence**: Hardened project Server Actions with authenticated access checks, owner/editor write enforcement, owner-only delete behavior, preset handling, project ID validation, and serialized canvas validation before writes.
+- **Canvas Import**: Added safer node ID generation and import validation so unknown module types, invalid edges, and duplicate single-value input bindings do not corrupt the active module graph.
+- **Agent Checkpoints**: Moved checkpoint ownership checks fully server-side, validated restorable messages and graph state before saving, and fixed checkpoint title/delete/update flows to use the authenticated session.
+- **LangGraph Persistence**: Updated pending write persistence to upsert repeated writes instead of silently ignoring newer values for the same checkpoint/task/index tuple.
+
+### AI & RAG
+
+- **Server AI Settings**: Added authenticated AI settings actions and server-side fallback handling for model configuration, including support for server-held API keys without exposing them to the client.
+- **Chat Restore**: Added checkpoint restore helpers that convert saved graph snapshots back into importable canvas data and restore chat history safely.
+- **RAG APIs**: Added stricter request parsing, malformed JSON handling, `topK` normalization, vector dimension safeguards, and route-level tests for ingest/search behavior.
+
+### UI & Performance
+
+- **Workbench Rendering**: Reduced unnecessary React Flow and chat panel re-renders through narrower store subscriptions and more predictable client operation handling.
+- **Audio Controls**: Improved resilience across oscilloscope, keyboard, sequencer, and XY pad controls during runtime updates.
+- **Connection Validation**: Added reusable connection validation helpers and tests to keep UI connection feedback aligned with module graph constraints.
+
+### Testing
+
+- Added focused Vitest coverage across project actions, checkpoint actions, agent actions/tools, Drizzle adapter/checkpointer, RAG utilities, vector store behavior, canvas/project stores, persistence storage, workbench components, and chat checkpoint helpers.
+
 ## [0.9.3] - 2026-05-07
 
 ### Security
