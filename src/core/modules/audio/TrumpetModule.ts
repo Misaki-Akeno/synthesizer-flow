@@ -5,6 +5,8 @@ import {
   ParameterType,
   PortType,
 } from '@/core/base/ModuleBase';
+import { MidiActiveNote, MidiFrame } from '@/core/midi/types';
+import { isMidiFrame, legacyArraysToMidiFrame } from '@/core/midi/utils';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -137,6 +139,10 @@ export class TrumpetModule extends AudioModuleBase {
     };
 
     const inputPorts = {
+      midi: {
+        type: PortType.MIDI,
+        value: null,
+      },
       notes: {
         type: PortType.ARRAY,
         value: [],
@@ -246,10 +252,18 @@ export class TrumpetModule extends AudioModuleBase {
   }
 
   private setupInputBindings(): void {
+    const midiSubscription = this.inputPorts['midi'].subscribe((value: any) => {
+      if (isMidiFrame(value)) {
+        this.handleMidiFrame(value);
+      }
+    });
+
     const notesSubscription = this.inputPorts['notes'].subscribe((value: any) => {
       if (Array.isArray(value)) {
         const velocities = this.inputPorts['velocities'].getValue();
-        this.handleNoteInput(value, Array.isArray(velocities) ? velocities : []);
+        this.handleMidiFrame(
+          legacyArraysToMidiFrame(value, Array.isArray(velocities) ? velocities : [], this.id)
+        );
       }
     });
 
@@ -258,7 +272,7 @@ export class TrumpetModule extends AudioModuleBase {
         if (Array.isArray(value)) {
           const notes = this.inputPorts['notes'].getValue();
           if (Array.isArray(notes)) {
-            this.handleNoteInput(notes, value);
+            this.handleMidiFrame(legacyArraysToMidiFrame(notes, value, this.id));
           }
         }
       }
@@ -274,6 +288,7 @@ export class TrumpetModule extends AudioModuleBase {
     );
 
     this.addInternalSubscriptions([
+      midiSubscription,
       notesSubscription,
       velocitySubscription,
       expressionSubscription,
@@ -371,29 +386,37 @@ export class TrumpetModule extends AudioModuleBase {
     ]);
   }
 
-  private handleNoteInput(notes: any[], velocities: any[]): void {
+  private handleMidiFrame(frame: MidiFrame): void {
     if (!this.monoSynth) return;
 
-    let targetNote: number | null = null;
-    let velocity = 0.85;
-
-    for (let index = notes.length - 1; index >= 0; index -= 1) {
-      const noteValue = notes[index];
-      if (typeof noteValue === 'number') {
-        targetNote = noteValue;
-        const velocityRaw = velocities[index];
-        velocity =
-          typeof velocityRaw === 'number' ? clamp(velocityRaw, 0, 1) : 0.85;
-        break;
-      }
-    }
-
-    if (targetNote === null) {
+    const targetNote = frame.activeNotes[frame.activeNotes.length - 1];
+    if (!targetNote) {
       this.releaseAllNotes();
       return;
     }
 
-    this.triggerAttack(targetNote, velocity);
+    this.triggerMidiAttack(targetNote);
+  }
+
+  private triggerMidiAttack(activeNote: MidiActiveNote): void {
+    this.triggerAttack(activeNote.midi + activeNote.pitchBend * 48, activeNote.velocity);
+
+    if (this.expressionGain) {
+      this.applyParameterRamp(
+        this.expressionGain.gain,
+        clamp(0.5 + activeNote.pressure * 1.5, 0, 2),
+        0.03
+      );
+    }
+
+    if (this.brightnessFilter) {
+      const brightness = clamp(
+        (this.getParameterValue('brightness') as number) * 0.65 + activeNote.timbre * 0.55,
+        0,
+        1
+      );
+      this.applyParameterRamp(this.brightnessFilter.frequency, this.getBrightnessFrequency(brightness), 0.04);
+    }
   }
 
   private triggerAttack(note: number, velocity: number): void {

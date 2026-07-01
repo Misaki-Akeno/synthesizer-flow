@@ -2,13 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { SidebarProvider } from '@/components/ui/shadcn/sidebar';
-import { TooltipProvider } from '@/components/ui/shadcn/tooltip';
 import { Button } from '@/components/ui/shadcn/button';
 import { X } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ChatInterface } from '@/components/workbench/panels/llm/ChatInterface';
 import { ModulePropertiesPanel } from '@/components/workbench/panels/ModulePropertiesPanel';
+import {
+  WorkbenchPanel,
+  WorkbenchPanelBody,
+  WorkbenchPanelHeader,
+} from '@/components/layout/WorkbenchPanel';
 
 interface AuxiliarySidebarProps {
   className?: string;
@@ -43,36 +46,27 @@ export function AuxiliarySidebar({ className }: AuxiliarySidebarProps) {
   if (!activePanel) return null;
 
   return (
-    <TooltipProvider>
-      <SidebarProvider>
-        <div className={cn('flex h-full', className)}>
-          {/* 右侧面板内容 - 保持 #FAFAFA 背景 */}
-          <div className="w-full h-full bg-[#FAFAFA] dark:bg-gray-900 flex flex-col">
-            <div className="flex items-center justify-between p-3 border-b">
-              <h3 className="text-sm font-medium">
-                {activePanel === 'properties' && '属性面板'}
-                {activePanel === 'llm_chat' && 'Chat'}
-              </h3>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={closePanel}
-              >
-                <X size={16} />
-              </Button>
-            </div>
-
-            <div className="flex-1 overflow-auto p-4">
-              {/* 根据活动面板类型显示不同内容 */}
-              {activePanel === 'properties' && (
-                <ModulePropertiesPanel onRequestClose={closePanel} />
-              )}
-              {activePanel === 'llm_chat' && <ChatInterface />}
-            </div>
-          </div>
-        </div>
-      </SidebarProvider>
-    </TooltipProvider>
+    <WorkbenchPanel className={cn('border-l', className)}>
+      <WorkbenchPanelHeader
+        title={activePanel === 'properties' ? '属性面板' : 'Chat'}
+        actions={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={closePanel}
+            aria-label="Close side panel"
+          >
+            <X size={15} />
+          </Button>
+        }
+      />
+      <WorkbenchPanelBody className="overflow-auto p-4">
+        {activePanel === 'properties' && (
+          <ModulePropertiesPanel onRequestClose={closePanel} />
+        )}
+        {activePanel === 'llm_chat' && <ChatInterface />}
+      </WorkbenchPanelBody>
+    </WorkbenchPanel>
   );
 }

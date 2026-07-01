@@ -36,11 +36,40 @@ vi.mock('tone', () => {
   return {
     // 在此添加 Tone.js 的模拟实现
     start: vi.fn(),
+    context: {
+      state: 'running',
+      dispose: vi.fn(),
+    },
     Transport: {
       start: vi.fn(),
       stop: vi.fn(),
       bpm: { value: 120 },
+      state: 'started',
     },
+    Draw: {
+      schedule: vi.fn((callback: () => void) => callback()),
+    },
+    Time: vi.fn().mockImplementation((value: number | string) => ({
+      toSeconds: () => {
+        if (typeof value === 'number') return value;
+        if (value === '4n') return 0.5;
+        if (value === '8n') return 0.25;
+        return 0.5;
+      },
+    })),
+    Part: vi.fn().mockImplementation(() => ({
+      start: vi.fn().mockReturnThis(),
+      dispose: vi.fn(),
+      loop: false,
+      loopEnd: 0,
+    })),
+    Frequency: vi.fn().mockImplementation((value: number | string) => ({
+      toMidi: () => (typeof value === 'number' ? value : 60),
+      toFrequency: () =>
+        typeof value === 'number'
+          ? 440 * Math.pow(2, (value - 69) / 12)
+          : 261.63,
+    })),
     Oscillator: vi.fn().mockImplementation(() => ({
       set: vi.fn(),
       start: vi.fn(),

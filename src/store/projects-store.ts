@@ -34,6 +34,10 @@ export interface ProjectConfig {
   isBuiltIn?: boolean; // 标记是否为内置预设
 }
 
+export interface FetchProjectsOptions {
+  force?: boolean;
+}
+
 // ======== 项目管理 Store 接口 ========
 
 export interface ProjectPersistState {
@@ -46,9 +50,13 @@ export interface ProjectPersistState {
 
   // 状态标志
   isLoading: boolean;
+  isProjectListLoading: boolean;
+  hasHydratedProjects: boolean;
+  projectsLastFetchedAt: string | null;
 
   // 动作
-  fetchProjects: () => Promise<void>;
+  fetchProjects: (options?: FetchProjectsOptions) => Promise<void>;
+  markProjectsHydrated: () => void;
 
   // 获取所有可用项目（包括内置预设和用户项目）
   getAllProjects: () => ProjectConfig[];
@@ -87,6 +95,8 @@ function isLocalImportedProject(project: ProjectConfig): boolean {
   return project.id.startsWith('imported_');
 }
 
+const PROJECT_LIST_CACHE_TTL_MS = 60_000;
+
 // ======== 项目管理 Zustand Store ========
 
 export const useProjectStore = create<ProjectPersistState>()(
@@ -97,9 +107,33 @@ export const useProjectStore = create<ProjectPersistState>()(
       builtInProjects: [],
       currentProject: null,
       isLoading: false,
+      isProjectListLoading: false,
+      hasHydratedProjects: false,
+      projectsLastFetchedAt: null,
 
-      fetchProjects: async () => {
-        set({ isLoading: true });
+      markProjectsHydrated: () => {
+        set({ hasHydratedProjects: true });
+      },
+
+      fetchProjects: async (options = {}) => {
+        const { force = false } = options;
+        const { projectsLastFetchedAt, isProjectListLoading } = get();
+        const lastFetchedTime = projectsLastFetchedAt
+          ? new Date(projectsLastFetchedAt).getTime()
+          : 0;
+        const hasFreshCache =
+          Number.isFinite(lastFetchedTime) &&
+          Date.now() - lastFetchedTime < PROJECT_LIST_CACHE_TTL_MS;
+
+        if (!force && hasFreshCache) {
+          return;
+        }
+
+        if (isProjectListLoading) {
+          return;
+        }
+
+        set({ isLoading: true, isProjectListLoading: true });
         try {
           const [userRes, presetRes] = await Promise.all([
             getUserProjects(),
@@ -153,7 +187,11 @@ export const useProjectStore = create<ProjectPersistState>()(
         } catch (error) {
           logger.error('获取项目列表异常', error);
         } finally {
-          set({ isLoading: false });
+          set({
+            isLoading: false,
+            isProjectListLoading: false,
+            projectsLastFetchedAt: new Date().toISOString(),
+          });
         }
       },
 
@@ -199,14 +237,20 @@ export const useProjectStore = create<ProjectPersistState>()(
             projectIdToUpdate = currentProject.id;
           }
 
-          const result = await saveProject(name, dataToSave, projectIdToUpdate, false, description);
+          const result = await saveProject(
+            name,
+            dataToSave,
+            projectIdToUpdate,
+            false,
+            description
+          );
 
           if (result.success && result.projectId) {
             // 保存成功，更新当前项目状态（包括 data，这里保持 string 格式以便本地缓存）
             const now = new Date().toISOString();
 
             // 重新获取列表以确保同步
-            await get().fetchProjects();
+            await get().fetchProjects({ force: true });
 
             // 更新 currentProject
             const newProjectConfig: ProjectConfig = {
@@ -251,10 +295,16 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           // 强制新建，不检查ID更新（为了简单，总算创建新预设）
           // 传入 isPreset = true
-          const result = await saveProject(name, dataToSave, undefined, true, description);
+          const result = await saveProject(
+            name,
+            dataToSave,
+            undefined,
+            true,
+            description
+          );
 
           if (result.success && result.projectId) {
-            await get().fetchProjects();
+            await get().fetchProjects({ force: true });
             logger.success(`预设"${name}"保存成功`);
             return true;
           } else {
@@ -394,7 +444,7 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           const result = await deleteProjectAction(projectId);
           if (result.success) {
-            await get().fetchProjects(); // 刷新列表
+            await get().fetchProjects({ force: true }); // 刷新列表
 
             const { currentProject } = get();
             if (currentProject?.id === projectId) {
@@ -496,6 +546,7 @@ export const useProjectStore = create<ProjectPersistState>()(
         currentProject: state.currentProject,
         userProjects: state.userProjects,
         builtInProjects: state.builtInProjects,
+        projectsLastFetchedAt: state.projectsLastFetchedAt,
       }),
       storage: createJSONStorage(() =>
         getBrowserStorage(() => window.localStorage)
@@ -503,6 +554,7 @@ export const useProjectStore = create<ProjectPersistState>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           logger.info('本地缓存已恢复');
+          state.markProjectsHydrated();
           // 移除 state.fetchProjects()，由 UI 组件 (ProjectManager) 通过 useEffect 触发
 
           // 注意：自动恢复逻辑已下放至 Canvas 组件，以便与 URL 参数协调

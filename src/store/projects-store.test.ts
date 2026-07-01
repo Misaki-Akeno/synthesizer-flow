@@ -3,7 +3,11 @@ import { moduleManager } from '@/core/services/ModuleManager';
 import { moduleInitManager } from '@/core/services/ModuleInitManager';
 import { useFlowStore } from './canvas-store';
 import { useProjectStore } from './projects-store';
-import { getBuiltInPresets, getUserProjects, saveProject } from '@/actions/project.actions';
+import {
+  getBuiltInPresets,
+  getUserProjects,
+  saveProject,
+} from '@/actions/project.actions';
 
 vi.mock('@/actions/project.actions', () => ({
   deleteProjectAction: vi.fn(),
@@ -43,6 +47,9 @@ function resetStores(): void {
     builtInProjects: [],
     currentProject: null,
     isLoading: false,
+    isProjectListLoading: false,
+    hasHydratedProjects: true,
+    projectsLastFetchedAt: null,
   });
 }
 
@@ -53,6 +60,27 @@ describe('project store', () => {
     mockGetUserProjects.mockResolvedValue({ success: true, data: [] });
     mockSaveProject.mockResolvedValue({ success: true, projectId: 'saved-1' });
     resetStores();
+  });
+
+  it('caches empty project list fetches and allows forced refresh', async () => {
+    await useProjectStore.getState().fetchProjects();
+
+    expect(mockGetUserProjects).toHaveBeenCalledTimes(1);
+    expect(mockGetBuiltInPresets).toHaveBeenCalledTimes(1);
+    expect(useProjectStore.getState().projectsLastFetchedAt).toEqual(
+      expect.any(String)
+    );
+    expect(useProjectStore.getState().isProjectListLoading).toBe(false);
+
+    await useProjectStore.getState().fetchProjects();
+
+    expect(mockGetUserProjects).toHaveBeenCalledTimes(1);
+    expect(mockGetBuiltInPresets).toHaveBeenCalledTimes(1);
+
+    await useProjectStore.getState().fetchProjects({ force: true });
+
+    expect(mockGetUserProjects).toHaveBeenCalledTimes(2);
+    expect(mockGetBuiltInPresets).toHaveBeenCalledTimes(2);
   });
 
   it('keeps project and canvas ids aligned when importing a project JSON file', async () => {

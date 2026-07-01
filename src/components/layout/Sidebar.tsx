@@ -75,8 +75,8 @@ export function Sidebar({ className }: SidebarProps) {
     <TooltipProvider>
       <SidebarProvider>
         <div className={cn('flex h-full', className)}>
-          {/* 左侧图标栏 - 使用纯白背景，固定 48px 宽度 */}
-          <div className="w-[48px] flex flex-col border-r bg-white dark:bg-gray-900">
+          {/* 左侧图标栏 */}
+          <div className="flex w-[48px] flex-col border-r bg-card">
             {/* 顶部图标 - 触发侧面板的选项 */}
             <div className="flex flex-col">
               <ActivityBarButton
@@ -118,9 +118,9 @@ export function Sidebar({ className }: SidebarProps) {
               />
             </div>
           </div>
-          {/* 右侧面板内容 - 保持 #FAFAFA 背景 */}
+          {/* 左侧工作台面板 */}
           {activePanel && (
-            <div className="w-[320px] border-r bg-[#FAFAFA] dark:bg-gray-900 flex flex-col">
+            <div className="flex w-[360px] flex-col border-r bg-background">
               <div className="flex-1 overflow-hidden">
                 {activePanel === 'project-manager' && (
                   <ProjectManager onClose={() => togglePanel(null)} />
@@ -221,9 +221,9 @@ function ActivityBarButton({
           variant="ghost"
           size="icon"
           className={cn(
-            'w-full h-12 rounded-none relative flex items-center justify-center',
+            'relative flex h-12 w-full items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
             active &&
-            'bg-accent text-accent-foreground before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-primary'
+            'bg-chart-5/10 text-foreground before:absolute before:bottom-2 before:left-0 before:top-2 before:w-px before:bg-chart-5'
           )}
           onClick={onClick}
         >
@@ -251,7 +251,7 @@ function MenuBarButton({ icon, tooltip, onClick }: MenuBarButtonProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="w-full h-12 rounded-none flex items-center justify-center"
+          className="flex h-12 w-full items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={onClick}
         >
           {icon}

@@ -7,6 +7,8 @@ import {
   PortType,
 } from '@/core/base/ModuleBase';
 import keyboardEventListener from '@/lib/KeyboardEventListener';
+import { MidiActiveNote, MidiEvent } from '@/core/midi/types';
+import { createMidiFrame, midiFrameToLegacyArrays } from '@/core/midi/utils';
 
 /**
  * 检查是否在浏览器环境中运行
@@ -26,8 +28,7 @@ export class KeyboardInputModule extends AudioModuleBase {
     iconType: 'Music',
   };
 
-  // 使用 Map 存储每个活动音符及其力度
-  private activeNoteVelocities: Map<number, number> = new Map();
+  private activeNotes: Map<string, MidiActiveNote> = new Map();
 
   // 环境信息
   private isServerSide: boolean = !isBrowser;
@@ -104,6 +105,10 @@ export class KeyboardInputModule extends AudioModuleBase {
 
     // 定义输出端口
     const outputPorts = {
+      midi: {
+        type: PortType.MIDI,
+        value: createMidiFrame(),
+      },
       // 添加复音输出端口
       activeNotes: {
         type: PortType.ARRAY,
@@ -280,7 +285,7 @@ export class KeyboardInputModule extends AudioModuleBase {
         // 获取所有通过键盘激活的音符，并释放它们
         const keysToRelease = Array.from(
           Object.values(this.keyToNoteMap)
-        ).filter((note) => this.activeNoteVelocities.has(note));
+        ).filter((note) => this.activeNotes.has(this.getNoteId(note)));
 
         keysToRelease.forEach((note) => this.handleNoteOff(note));
       }
@@ -321,11 +326,21 @@ export class KeyboardInputModule extends AudioModuleBase {
     const sensitivity = this.getParameterValue('velocitySensitivity') as number;
     const scaledVelocity = Math.max(0, Math.min(1, velocity * sensitivity));
 
-    // 添加到活跃音符 Map 中，存储音符和对应的力度
-    this.activeNoteVelocities.set(transposedNote, scaledVelocity);
+    const noteId = this.getNoteId(transposedNote);
+    this.activeNotes.set(noteId, {
+      id: noteId,
+      midi: transposedNote,
+      velocity: scaledVelocity,
+      pitchBend: 0,
+      pressure: 0,
+      timbre: 0,
+      source: this.id,
+    });
 
     // 更新输出端口
-    this.updateOutputPorts();
+    this.updateOutputPorts([
+      { type: 'noteOn', noteId, midi: transposedNote, velocity: scaledVelocity },
+    ]);
   }
 
   /**
@@ -339,11 +354,11 @@ export class KeyboardInputModule extends AudioModuleBase {
     const transpose = this.getParameterValue('transpose') as number;
     const transposedNote = Math.max(0, Math.min(127, note + transpose));
 
-    // 从活跃音符 Map 中移除
-    this.activeNoteVelocities.delete(transposedNote);
+    const noteId = this.getNoteId(transposedNote);
+    this.activeNotes.delete(noteId);
 
     // 更新输出端口
-    this.updateOutputPorts();
+    this.updateOutputPorts([{ type: 'noteOff', noteId, midi: transposedNote }]);
   }
 
   /**
@@ -359,32 +374,32 @@ export class KeyboardInputModule extends AudioModuleBase {
     const transposedNote = Math.max(0, Math.min(127, note + transpose));
 
     // 只有在音符已激活的情况下才更新力度
-    if (this.activeNoteVelocities.has(transposedNote)) {
+    const noteId = this.getNoteId(transposedNote);
+    if (this.activeNotes.has(noteId)) {
       // 应用力度灵敏度
       const sensitivity = this.getParameterValue(
         'velocitySensitivity'
       ) as number;
       const scaledVelocity = Math.max(0, Math.min(1, velocity * sensitivity));
 
-      // 更新力度值
-      this.activeNoteVelocities.set(transposedNote, scaledVelocity);
+      const activeNote = this.activeNotes.get(noteId)!;
+      activeNote.pressure = scaledVelocity;
+      activeNote.velocity = scaledVelocity;
 
       // 更新输出端口
-      this.updateOutputPorts();
+      this.updateOutputPorts([{ type: 'pressure', noteId, value: scaledVelocity }]);
     }
   }
 
   /**
    * 更新输出端口的值
    */
-  private updateOutputPorts(): void {
-    // 从 Map 中提取音符和力度数组
-    const notesArray = Array.from(this.activeNoteVelocities.keys());
-    const velocitiesArray = Array.from(this.activeNoteVelocities.values());
-
-    // 更新复音输出端口
-    this.outputPorts['activeNotes'].next(notesArray);
-    this.outputPorts['activeVelocities'].next(velocitiesArray);
+  private updateOutputPorts(events: MidiEvent[] = []): void {
+    const frame = createMidiFrame(Array.from(this.activeNotes.values()), events);
+    this.outputPorts['midi'].next(frame);
+    const legacy = midiFrameToLegacyArrays(frame);
+    this.outputPorts['activeNotes'].next(legacy.notes);
+    this.outputPorts['activeVelocities'].next(legacy.velocities);
   }
 
   /**
@@ -393,8 +408,8 @@ export class KeyboardInputModule extends AudioModuleBase {
   protected onEnabledStateChanged(enabled: boolean): void {
     if (!enabled) {
       // 如果模块被禁用，重置所有状态
-      this.activeNoteVelocities.clear(); // 清空 Map
-      this.updateOutputPorts();
+      this.activeNotes.clear();
+      this.updateOutputPorts([{ type: 'allNotesOff' }]);
     }
   }
 
@@ -410,7 +425,7 @@ export class KeyboardInputModule extends AudioModuleBase {
         height: 120,
         startNote: this.keyboardStartNote,
         noteCount: this.keyboardNoteCount,
-        activeNotes: Array.from(this.activeNoteVelocities.keys()),
+        activeNotes: Array.from(this.activeNotes.values()).map((note) => note.midi),
         onNoteOn: (note: number, velocity: number) =>
           this.handleNoteOn(note, velocity),
         onNoteOff: (note: number) => this.handleNoteOff(note),
@@ -430,9 +445,13 @@ export class KeyboardInputModule extends AudioModuleBase {
     }
 
     // 重置所有状态
-    this.activeNoteVelocities.clear();
+    this.activeNotes.clear();
 
     console.debug(`[${this.moduleType}Module ${this.id}] 释放资源`);
     super.dispose();
+  }
+
+  private getNoteId(note: number): string {
+    return `${this.id}_${note}`;
   }
 }

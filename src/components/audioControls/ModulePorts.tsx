@@ -23,7 +23,15 @@ export const InputPort = ({
 
   // 确定显示的值
   const displayValue = () => {
-    if (portType === PortType.ARRAY && Array.isArray(value)) {
+    if (
+      portType === PortType.MIDI &&
+      value &&
+      typeof value === 'object' &&
+      'activeNotes' in value &&
+      Array.isArray((value as { activeNotes?: unknown }).activeNotes)
+    ) {
+      return `MIDI ${(value as { activeNotes: unknown[] }).activeNotes.length}`;
+    } else if (portType === PortType.ARRAY && Array.isArray(value)) {
       // 如果是数组类型，显示前几个数字
       const numbers = value.filter((v) => typeof v === 'number');
       if (numbers.length > 0) {
@@ -94,7 +102,15 @@ export const OutputPort = ({
 
   // 确定显示的值
   const displayValue = () => {
-    if (portType === PortType.ARRAY && Array.isArray(value)) {
+    if (
+      portType === PortType.MIDI &&
+      value &&
+      typeof value === 'object' &&
+      'activeNotes' in value &&
+      Array.isArray((value as { activeNotes?: unknown }).activeNotes)
+    ) {
+      return `MIDI ${(value as { activeNotes: unknown[] }).activeNotes.length}`;
+    } else if (portType === PortType.ARRAY && Array.isArray(value)) {
       // 如果是数组类型，显示前几个数字
       const numbers = value.filter((v) => typeof v === 'number');
       if (numbers.length > 0) {

@@ -4,6 +4,7 @@ import { moduleClassMap } from '../modules/index';
 import { SerializedNode, SerializedEdge } from '../types/SerializationTypes';
 import { createModuleLogger } from '@/lib/logger';
 import { createModuleId } from '@/core/utils/nodeId';
+import { legacyStepsToMidiClip, normalizeMidiClip } from '@/core/midi/utils';
 
 // 创建模块管理器的专用日志记录器
 const logger = createModuleLogger('ModuleManager');
@@ -317,7 +318,8 @@ export class ModuleManager {
 
       // 应用序列化中定义的参数
       if (data.parameters) {
-        Object.entries(data.parameters).forEach(([key, value]) => {
+        const parameters = this.migrateSerializedParameters(type, data.parameters);
+        Object.entries(parameters).forEach(([key, value]) => {
           moduleInstance.updateParameter(key, value);
         });
       }
@@ -350,6 +352,30 @@ export class ModuleManager {
     }));
 
     return { nodes, edges };
+  }
+
+  private migrateSerializedParameters(
+    type: string,
+    parameters: Record<string, unknown>
+  ): Record<string, number | boolean | string> {
+    if (type.toLowerCase() !== 'sequencer') {
+      return parameters as Record<string, number | boolean | string>;
+    }
+
+    const migrated = { ...parameters };
+    if (typeof migrated.clip !== 'string' && typeof migrated.sequence === 'string') {
+      try {
+        const legacySteps = JSON.parse(migrated.sequence);
+        if (Array.isArray(legacySteps)) {
+          migrated.clip = JSON.stringify(legacyStepsToMidiClip(legacySteps));
+        }
+      } catch {
+        migrated.clip = JSON.stringify(normalizeMidiClip(undefined));
+      }
+    }
+
+    delete migrated.sequence;
+    return migrated as Record<string, number | boolean | string>;
   }
 
   // 添加一个公共方法，专门用于建立所有边的绑定关系

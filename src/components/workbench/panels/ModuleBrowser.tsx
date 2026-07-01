@@ -18,11 +18,12 @@ import {
   Sliders,
   Music,
   Speaker,
-  PanelRight,
+  PanelLeftClose,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { moduleMetadataMap } from '@/core/modules/index';
 import { useSearchParams } from 'next/navigation';
+import { WorkbenchPanelHeader } from '@/components/layout/WorkbenchPanel';
 
 // 模块类型定义
 export interface ModuleTypeInfo {
@@ -148,19 +149,21 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
   };
 
   return (
-    <div className="w-full h-full flex flex-col">
-      {/* 标题栏 */}
-      <div className="flex items-center justify-between p-2 border-b">
-        <h2 className="text-sm font-medium pl-1">模块浏览器</h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          className="h-7 w-7"
-        >
-          <PanelRight size={15} />
-        </Button>
-      </div>
+    <div className="flex h-full w-full flex-col bg-background text-foreground">
+      <WorkbenchPanelHeader
+        title="模块浏览器"
+        actions={
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            aria-label="Close module browser"
+          >
+            <PanelLeftClose size={15} />
+          </Button>
+        }
+      />
 
       {/* 搜索栏 */}
       <div className="p-2 border-b">

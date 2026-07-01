@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { moduleManager } from '@/core/services/ModuleManager';
 import { moduleInitManager } from '@/core/services/ModuleInitManager';
+import { parseMidiClipJson } from '@/core/midi/utils';
 import { useFlowStore } from './canvas-store';
 
 function resetCanvasStore(): void {
@@ -185,6 +186,44 @@ describe('canvas store import', () => {
     expect(
       moduleManager.getModule('number-b')?.getOutputConnections('output')
     ).toHaveLength(0);
+  });
+
+  it('migrates legacy sequencer sequence data into MidiClip parameters', () => {
+    const canvas = JSON.stringify({
+      version: '1.0',
+      timestamp: Date.now(),
+      nodes: [
+        {
+          id: 'sequencer',
+          position: { x: 0, y: 0 },
+          data: {
+            type: 'sequencer',
+            label: 'Legacy Sequencer',
+            parameters: {
+              sequence: JSON.stringify([
+                { note: 'C4', velocity: 0.8, duration: '4n' },
+                { note: 'E4', velocity: 0.6, duration: '8n' },
+              ]),
+            },
+          },
+        },
+      ],
+      edges: [],
+    });
+
+    const imported = useFlowStore.getState().importCanvasFromJson(canvas);
+
+    expect(imported).toBe(true);
+    const sequencer = moduleManager.getModule('sequencer');
+    const clipValue = sequencer?.getParameterValue('clip');
+    expect(typeof clipValue).toBe('string');
+    expect(parseMidiClipJson(clipValue as string).notes).toMatchObject([
+      { midi: 60, startTick: 0, durationTicks: 480, velocity: 0.8 },
+      { midi: 64, startTick: 480, durationTicks: 240, velocity: 0.6 },
+    ]);
+    const exported = JSON.parse(useFlowStore.getState().exportCanvasToJson());
+    expect(exported.nodes[0].data.parameters).not.toHaveProperty('sequence');
+    expect(exported.nodes[0].data.parameters).toHaveProperty('clip');
   });
 });
 

@@ -6,6 +6,7 @@ export enum PortType {
   NUMBER = 'number',
   AUDIO = 'audio',
   ARRAY = 'array', // 新增：用于传输数组数据（如复音MIDI数据）
+  MIDI = 'midi', // MIDI/MPE事件帧
 }
 
 // 参数类型枚举
@@ -55,6 +56,7 @@ export const PORT_COLORS = {
   [PortType.NUMBER]: '#1D4ED8', // 数字端口为蓝色
   [PortType.AUDIO]: '#047857', // 音频端口为绿色
   [PortType.ARRAY]: '#9333EA', // 数组端口为紫色
+  [PortType.MIDI]: '#D97706', // MIDI端口为琥珀色
 };
 
 // 模块抽象类
