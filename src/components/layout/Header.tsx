@@ -60,6 +60,7 @@ import {
   DialogTitle,
 } from '@/components/ui/shadcn/dialog';
 import { Button } from '@/components/ui/shadcn/button';
+import { useFlowStore } from '@/store/canvas-store';
 
 interface HeaderProps {
   className?: string;
@@ -71,6 +72,10 @@ export function Header({ className }: HeaderProps) {
   const [devNoticeOpen, setDevNoticeOpen] = useState(false);
   const [devNoticeTitle, setDevNoticeTitle] = useState('');
   const [devNoticeDescription, setDevNoticeDescription] = useState('');
+  const undo = useFlowStore((state) => state.undo);
+  const redo = useFlowStore((state) => state.redo);
+  const canUndo = useFlowStore((state) => state.canUndo);
+  const canRedo = useFlowStore((state) => state.canRedo);
 
   const toggleRightPanel = (panel: string) => {
     const currentPanel = searchParams.get('auxPanel');
@@ -183,7 +188,8 @@ export function Header({ className }: HeaderProps) {
               </MenubarTrigger>
               <MenubarContent className="min-w-[12rem]">
                 <MenubarItem
-                  onClick={() => handleMenuItemClick('撤销', '撤销上一步操作')}
+                  disabled={!canUndo}
+                  onClick={undo}
                 >
                   <Undo2 className="mr-2 h-4 w-4" />
                   <span>撤销</span>
@@ -192,7 +198,8 @@ export function Header({ className }: HeaderProps) {
                   </div>
                 </MenubarItem>
                 <MenubarItem
-                  onClick={() => handleMenuItemClick('重做', '重做上一步操作')}
+                  disabled={!canRedo}
+                  onClick={redo}
                 >
                   <Redo2 className="mr-2 h-4 w-4" />
                   <span>重做</span>
@@ -375,12 +382,18 @@ export function Header({ className }: HeaderProps) {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() =>
-                    handleMenuItemClick('撤销/重做', '撤销或重做操作')
-                  }
+                  disabled={!canUndo}
+                  onClick={undo}
                 >
                   <Undo2 className="mr-2 h-4 w-4" />
-                  <span>撤销/重做</span>
+                  <span>撤销</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canRedo}
+                  onClick={redo}
+                >
+                  <Redo2 className="mr-2 h-4 w-4" />
+                  <span>重做</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => toggleRightPanel('properties')}>

@@ -11,6 +11,12 @@ function resetCanvasStore(): void {
     nodes: [],
     edges: [],
     currentProjectId: '',
+    canUndo: false,
+    canRedo: false,
+    history: {
+      past: [],
+      future: [],
+    },
   });
 }
 
@@ -318,5 +324,161 @@ describe('canvas store connections', () => {
     expect(
       moduleManager.getModule('number-b')?.getOutputConnections('output')
     ).toHaveLength(0);
+  });
+});
+
+describe('canvas store history', () => {
+  beforeEach(() => {
+    resetCanvasStore();
+  });
+
+  it('undoes and redoes node creation', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+
+    expect(useFlowStore.getState().nodes.map((node) => node.id)).toEqual([
+      'number',
+    ]);
+    expect(useFlowStore.getState().canUndo).toBe(true);
+
+    useFlowStore.getState().undo();
+
+    expect(useFlowStore.getState().nodes).toEqual([]);
+    expect(moduleManager.getModule('number')).toBeUndefined();
+    expect(useFlowStore.getState().canRedo).toBe(true);
+
+    useFlowStore.getState().redo();
+
+    expect(useFlowStore.getState().nodes.map((node) => node.id)).toEqual([
+      'number',
+    ]);
+    expect(moduleManager.getModule('number')).toBeDefined();
+  });
+
+  it('restores a deleted node and its connection bindings', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    useFlowStore
+      .getState()
+      .addNode('calculator', 'Calculator', { x: 200, y: 0 }, 'calculator');
+
+    moduleManager.getModule('number')?.updateParameter('value', 7);
+    useFlowStore.getState().onConnect({
+      source: 'number',
+      target: 'calculator',
+      sourceHandle: 'output',
+      targetHandle: 'a',
+    });
+
+    useFlowStore.getState().deleteNode('number');
+
+    expect(useFlowStore.getState().nodes.map((node) => node.id)).toEqual([
+      'calculator',
+    ]);
+    expect(moduleManager.getModule('number')).toBeUndefined();
+
+    useFlowStore.getState().undo();
+
+    expect(useFlowStore.getState().nodes.map((node) => node.id).sort()).toEqual(
+      ['calculator', 'number']
+    );
+    expect(useFlowStore.getState().edges).toHaveLength(1);
+    expect(moduleManager.getModule('calculator')?.getInputValue('a')).toBe(7);
+    expect(
+      moduleManager.getModule('number')?.getOutputConnections('output')
+    ).toHaveLength(1);
+  });
+
+  it('undoes and redoes module parameter updates', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+
+    useFlowStore.getState().updateModuleParameter('number', 'value', 42);
+
+    expect(moduleManager.getModule('number')?.getParameterValue('value')).toBe(
+      42
+    );
+
+    useFlowStore.getState().undo();
+
+    expect(moduleManager.getModule('number')?.getParameterValue('value')).toBe(
+      120
+    );
+
+    useFlowStore.getState().redo();
+
+    expect(moduleManager.getModule('number')?.getParameterValue('value')).toBe(
+      42
+    );
+  });
+
+  it('undoes replacement connections on single-value input ports', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number A', { x: 0, y: 0 }, 'number-a');
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number B', { x: 0, y: 100 }, 'number-b');
+    useFlowStore
+      .getState()
+      .addNode('calculator', 'Calculator', { x: 200, y: 0 }, 'calculator');
+
+    moduleManager.getModule('number-a')?.updateParameter('value', 7);
+    moduleManager.getModule('number-b')?.updateParameter('value', 11);
+
+    useFlowStore.getState().onConnect({
+      source: 'number-a',
+      target: 'calculator',
+      sourceHandle: 'output',
+      targetHandle: 'a',
+    });
+    useFlowStore.getState().onConnect({
+      source: 'number-b',
+      target: 'calculator',
+      sourceHandle: 'output',
+      targetHandle: 'a',
+    });
+
+    expect(moduleManager.getModule('calculator')?.getInputValue('a')).toBe(11);
+
+    useFlowStore.getState().undo();
+
+    expect(useFlowStore.getState().edges).toEqual([
+      expect.objectContaining({
+        source: 'number-a',
+        target: 'calculator',
+        sourceHandle: 'output',
+        targetHandle: 'a',
+      }),
+    ]);
+    expect(moduleManager.getModule('calculator')?.getInputValue('a')).toBe(7);
+    expect(
+      moduleManager.getModule('number-a')?.getOutputConnections('output')
+    ).toHaveLength(1);
+    expect(
+      moduleManager.getModule('number-b')?.getOutputConnections('output')
+    ).toHaveLength(0);
+  });
+
+  it('clears history when importing a project', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+
+    const canvas = JSON.stringify({
+      version: '1.0',
+      timestamp: Date.now(),
+      nodes: [],
+      edges: [],
+    });
+
+    const imported = useFlowStore.getState().importCanvasFromJson(canvas);
+
+    expect(imported).toBe(true);
+    expect(useFlowStore.getState().canUndo).toBe(false);
+    expect(useFlowStore.getState().canRedo).toBe(false);
   });
 });

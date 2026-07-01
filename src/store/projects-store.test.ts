@@ -41,6 +41,12 @@ function resetStores(): void {
     nodes: [],
     edges: [],
     currentProjectId: '',
+    canUndo: false,
+    canRedo: false,
+    history: {
+      past: [],
+      future: [],
+    },
   });
   useProjectStore.setState({
     userProjects: [],

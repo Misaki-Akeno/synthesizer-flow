@@ -27,6 +27,20 @@ interface CanvasProps {
   onAutoLoad?: () => void;
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return (
+    target.isContentEditable ||
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    tagName === 'select'
+  );
+}
+
 // 内部Canvas组件，包含实际的ReactFlow
 const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
@@ -107,6 +121,42 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
 
     router.replace(`${newPathname}?${params.toString()}`, { scroll: false });
   }, [currentProject, router, pathname, searchParams]);
+
+  useEffect(() => {
+    const handleUndoRedoShortcut = (event: KeyboardEvent) => {
+      if (event.repeat || isEditableTarget(event.target)) {
+        return;
+      }
+
+      const isModifierPressed = event.metaKey || event.ctrlKey;
+      if (!isModifierPressed) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const shouldUndo = key === 'z' && !event.shiftKey;
+      const shouldRedo =
+        (key === 'z' && event.shiftKey) || (key === 'y' && !event.shiftKey);
+
+      if (!shouldUndo && !shouldRedo) {
+        return;
+      }
+
+      event.preventDefault();
+      const { undo, redo } = useFlowStore.getState();
+
+      if (shouldRedo) {
+        redo();
+      } else {
+        undo();
+      }
+    };
+
+    window.addEventListener('keydown', handleUndoRedoShortcut);
+    return () => {
+      window.removeEventListener('keydown', handleUndoRedoShortcut);
+    };
+  }, []);
 
   // 验证连接是否有效的函数
   const isValidConnection: IsValidConnection = (params) => {

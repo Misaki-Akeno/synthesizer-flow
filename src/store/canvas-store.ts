@@ -28,6 +28,7 @@ import { createNodeId } from '@/core/utils/nodeId';
 
 // 创建Store专用日志记录器
 const logger = createModuleLogger('FlowStore');
+const MAX_HISTORY_SIZE = 100;
 
 // --------------------------------
 //        Reactflow管理部分
@@ -36,10 +37,18 @@ interface FlowState {
   nodes: FlowNode[];
   edges: Edge[];
   currentProjectId: string; // 修改：预设ID改为项目ID
+  canUndo: boolean;
+  canRedo: boolean;
+  history: {
+    past: SerializedCanvas[];
+    future: SerializedCanvas[];
+  };
   setCurrentProjectId: (projectId: string) => void;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
+  undo: () => void;
+  redo: () => void;
   updateModuleParameter: (
     nodeId: string,
     paramKey: string,
@@ -179,23 +188,136 @@ function restoreEdgeBindings(edges: Edge[]): void {
   });
 }
 
+function createCanvasSnapshot(nodes: FlowNode[], edges: Edge[]): SerializedCanvas {
+  return serializationManager.serializeCanvas(nodes, edges);
+}
+
+function cloneCanvasSnapshot(snapshot: SerializedCanvas): SerializedCanvas {
+  return JSON.parse(JSON.stringify(snapshot)) as SerializedCanvas;
+}
+
+function getComparableSnapshot(snapshot: SerializedCanvas): string {
+  return JSON.stringify({
+    nodes: snapshot.nodes,
+    edges: snapshot.edges,
+  });
+}
+
+function areCanvasSnapshotsEqual(
+  left: SerializedCanvas,
+  right: SerializedCanvas
+): boolean {
+  return getComparableSnapshot(left) === getComparableSnapshot(right);
+}
+
+function getHistoryState(past: SerializedCanvas[], future: SerializedCanvas[]) {
+  return {
+    history: { past, future },
+    canUndo: past.length > 0,
+    canRedo: future.length > 0,
+  };
+}
+
 export const useFlowStore = create<FlowState>((set, get) => {
   // 设置节点获取函数
   moduleManager.setNodesGetter(() => get().nodes);
+  const draggingNodeIds = new Set<string>();
+
+  const applyCanvasSnapshot = (snapshot: SerializedCanvas) => {
+    // 撤销/重做会完整重建模块实例，确保模块注册表、参数和连接状态一致。
+    moduleManager.disposeAllModules();
+    moduleInitManager.reset();
+
+    const { nodes, edges } = serializationManager.deserializeCanvas(snapshot);
+    const bindableEdges = filterBindableEdges(nodes, edges);
+
+    set({
+      nodes,
+      edges: bindableEdges,
+    });
+
+    moduleInitManager.onAllModulesReady(() => {
+      moduleManager.setupAllEdgeBindings(bindableEdges);
+    });
+  };
+
+  const recordHistory = () => {
+    const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
+    const { past } = get().history;
+    const lastSnapshot = past[past.length - 1];
+
+    if (lastSnapshot && areCanvasSnapshotsEqual(lastSnapshot, currentSnapshot)) {
+      set(getHistoryState(past, []));
+      return;
+    }
+
+    const nextPast = [...past, cloneCanvasSnapshot(currentSnapshot)].slice(
+      -MAX_HISTORY_SIZE
+    );
+
+    set(getHistoryState(nextPast, []));
+  };
+
+  const shouldRecordNodeChanges = (changes: NodeChange[]) => {
+    return changes.some((change) => {
+      if (change.type === 'select' || change.type === 'dimensions') {
+        return false;
+      }
+
+      if (change.type !== 'position') {
+        return true;
+      }
+
+      if ('dragging' in change && change.dragging) {
+        if (draggingNodeIds.has(change.id)) {
+          return false;
+        }
+
+        draggingNodeIds.add(change.id);
+        return true;
+      }
+
+      return !('dragging' in change);
+    });
+  };
+
+  const finishNodeDragTracking = (changes: NodeChange[]) => {
+    changes.forEach((change) => {
+      if (
+        change.type === 'position' &&
+        'dragging' in change &&
+        change.dragging === false
+      ) {
+        draggingNodeIds.delete(change.id);
+      }
+    });
+  };
 
   return {
     nodes: initialNodes,
     edges: initialEdges,
     currentProjectId: '', // 初始为空，由Canvas组件加载第一个项目
+    canUndo: false,
+    canRedo: false,
+    history: {
+      past: [],
+      future: [],
+    },
 
     setCurrentProjectId: (projectId) => {
       set({ currentProjectId: projectId });
     },
 
     onNodesChange: (changes) => {
+      if (shouldRecordNodeChanges(changes)) {
+        recordHistory();
+      }
+
       set({
         nodes: applyNodeChanges(changes, get().nodes) as FlowNode[],
       });
+
+      finishNodeDragTracking(changes);
     },
 
     onEdgesChange: (changes) => {
@@ -213,6 +335,10 @@ export const useFlowStore = create<FlowState>((set, get) => {
         .filter((change) => change.type === 'remove')
         .map((change) => get().edges.find((edge) => edge.id === change.id))
         .filter((edge): edge is Edge => edge !== undefined);
+
+      if (edgesToRemove.length > 0) {
+        recordHistory();
+      }
 
       // 只对要删除的边解除绑定
       edgesToRemove.forEach((edge) => {
@@ -265,6 +391,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
         return;
       }
 
+      recordHistory();
+
       set({
         edges: addEdge(
           connection,
@@ -276,9 +404,58 @@ export const useFlowStore = create<FlowState>((set, get) => {
       });
     },
 
+    undo: () => {
+      const { past, future } = get().history;
+      const previousSnapshot = past[past.length - 1];
+
+      if (!previousSnapshot) {
+        return;
+      }
+
+      const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
+      const nextPast = past.slice(0, -1);
+      const nextFuture = [
+        cloneCanvasSnapshot(currentSnapshot),
+        ...future,
+      ].slice(0, MAX_HISTORY_SIZE);
+
+      applyCanvasSnapshot(previousSnapshot);
+      set(getHistoryState(nextPast, nextFuture));
+    },
+
+    redo: () => {
+      const { past, future } = get().history;
+      const nextSnapshot = future[0];
+
+      if (!nextSnapshot) {
+        return;
+      }
+
+      const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
+      const nextPast = [...past, cloneCanvasSnapshot(currentSnapshot)].slice(
+        -MAX_HISTORY_SIZE
+      );
+      const nextFuture = future.slice(1);
+
+      applyCanvasSnapshot(nextSnapshot);
+      set(getHistoryState(nextPast, nextFuture));
+    },
+
     updateModuleParameter: (nodeId, paramKey, value) => {
       const node = get().nodes.find((n) => n.id === nodeId);
       if (node?.data?.module) {
+        const parameter = node.data.module.parameters[paramKey];
+        if (!parameter) {
+          node.data.module.updateParameter(paramKey, value);
+          return;
+        }
+
+        const previousValue = parameter.getValue();
+        if (previousValue === value) {
+          return;
+        }
+
+        recordHistory();
         node.data.module.updateParameter(paramKey, value);
       }
     },
@@ -292,6 +469,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
     ) => {
       const nodeId = id || createNodeId(get().nodes.map((node) => node.id));
       const newNode = moduleManager.createNode(nodeId, type, label, position);
+
+      recordHistory();
 
       set({
         nodes: [...get().nodes, newNode],
@@ -330,6 +509,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
         return;
       }
 
+      recordHistory();
+
       set({
         edges: [
           ...existingEdges.filter(
@@ -345,6 +526,13 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
     // 删除节点及相连的边
     deleteNode: (nodeId) => {
+      const node = get().nodes.find((n) => n.id === nodeId);
+      if (!node) {
+        return;
+      }
+
+      recordHistory();
+
       // 1. 找到与该节点相连的所有边
       const connectedEdges = get().edges.filter(
         (edge) => edge.source === nodeId || edge.target === nodeId
@@ -356,7 +544,6 @@ export const useFlowStore = create<FlowState>((set, get) => {
       });
 
       // 3. 释放节点资源
-      const node = get().nodes.find((n) => n.id === nodeId);
       if (node?.data?.module) {
         moduleManager.disposeModule(nodeId);
 
@@ -378,6 +565,13 @@ export const useFlowStore = create<FlowState>((set, get) => {
       if (!trimmedLabel) {
         return;
       }
+
+      const node = get().nodes.find((currentNode) => currentNode.id === nodeId);
+      if (!node || node.data?.label === trimmedLabel) {
+        return;
+      }
+
+      recordHistory();
 
       set({
         nodes: get().nodes.map((node) => {
@@ -446,6 +640,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
           nodes,
           edges: bindableEdges,
           currentProjectId: projectId,
+          ...getHistoryState([], []),
         });
 
         // 初始化连接
@@ -528,6 +723,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
         };
 
         // 添加节点到画布
+        recordHistory();
+
         set({
           nodes: [...get().nodes, node],
         });
