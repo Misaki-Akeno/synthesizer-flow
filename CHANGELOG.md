@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.4] - 2026-06-30
 
+### Security
+
+- **Dependency Audit**: Applied non-breaking `npm audit fix` updates and targeted npm overrides for vulnerable transitive dependencies, resolving current Next.js, Vitest/Vite, Hono, `form-data`, `fast-uri`, `ws`, `esbuild`, and `uuid` advisories. `npm audit --audit-level=moderate` now reports 0 vulnerabilities.
+
 ### Reliability
 
 - **Project Persistence**: Hardened project Server Actions with authenticated access checks, owner/editor write enforcement, owner-only delete behavior, preset handling, project ID validation, and serialized canvas validation before writes.
