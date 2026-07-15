@@ -47,11 +47,21 @@ describe('AI settings actions', () => {
     expect(mockGetPublicAISettings).not.toHaveBeenCalled();
   });
 
+  it('rejects unsupported provider ids', async () => {
+    mockAuth.mockResolvedValue(session);
+
+    const result = await getAISettingsAction('unsupported' as never);
+
+    expect(result).toEqual({ success: false, error: 'Invalid provider' });
+    expect(mockGetPublicAISettings).not.toHaveBeenCalled();
+  });
+
   it('returns only public settings for authenticated users', async () => {
     mockAuth.mockResolvedValue(session);
     mockGetPublicAISettings.mockResolvedValue({
-      modelName: 'qwen',
-      apiEndpoint: 'https://example.com/v1',
+      providerId: 'modelscope',
+      modelName: 'Qwen/Qwen3.5-35B-A3B',
+      apiEndpoint: 'https://api-inference.modelscope.cn/v1',
       hasServerApiKey: true,
     });
 
@@ -60,19 +70,21 @@ describe('AI settings actions', () => {
     expect(result).toEqual({
       success: true,
       data: {
-        modelName: 'qwen',
-        apiEndpoint: 'https://example.com/v1',
+        providerId: 'modelscope',
+        modelName: 'Qwen/Qwen3.5-35B-A3B',
+        apiEndpoint: 'https://api-inference.modelscope.cn/v1',
         hasServerApiKey: true,
       },
     });
-    expect(mockGetPublicAISettings).toHaveBeenCalledWith('user-1');
+    expect(mockGetPublicAISettings).toHaveBeenCalledWith('user-1', undefined);
   });
 
   it('saves settings for the authenticated user only', async () => {
     mockAuth.mockResolvedValue(session);
     mockSaveAISettingsForUser.mockResolvedValue({
-      modelName: 'qwen-plus',
-      apiEndpoint: 'https://example.com/v1',
+      providerId: 'modelscope',
+      modelName: 'Qwen/Qwen3.5-35B-A3B',
+      apiEndpoint: 'https://api-inference.modelscope.cn/v1',
       hasServerApiKey: true,
     });
 

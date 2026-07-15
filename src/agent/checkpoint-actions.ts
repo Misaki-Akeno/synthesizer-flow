@@ -8,8 +8,8 @@ import { ChatMessage, GraphStateSnapshot } from './core/types';
 import { nanoid } from 'nanoid';
 import { auth } from '@/lib/auth/auth';
 import { resolveAISettingsForUser } from '@/lib/ai/server-settings';
+import { createAIChatModel } from '@/lib/ai/modelFactory';
 
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage } from '@langchain/core/messages';
 import type { AISettings } from '@/store/settings-store';
 
@@ -148,11 +148,9 @@ async function generateTitle(
   }
 
   try {
-    const model = new ChatOpenAI({
-      apiKey: settings.apiKey,
-      configuration: { baseURL: settings.apiEndpoint },
-      modelName: settings.modelName,
+    const model = await createAIChatModel(settings, {
       temperature: 0,
+      streaming: false,
     });
 
     const conversation = messages

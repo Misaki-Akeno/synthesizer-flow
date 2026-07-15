@@ -1,4 +1,11 @@
+import {
+  DEFAULT_AI_PROVIDER_ID,
+  getAIProvider,
+  type AIProviderId,
+} from './providers';
+
 export interface AIModelSettings {
+  providerId: AIProviderId;
   modelName: string;
   apiKey: string;
   apiEndpoint: string;
@@ -6,8 +13,9 @@ export interface AIModelSettings {
 }
 
 export const DEFAULT_AI_SETTINGS: AIModelSettings = {
-  modelName: 'qwen-turbo-2025-04-28',
+  providerId: DEFAULT_AI_PROVIDER_ID,
+  modelName: getAIProvider(DEFAULT_AI_PROVIDER_ID).defaultModel,
   apiKey: '',
-  apiEndpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  apiEndpoint: getAIProvider(DEFAULT_AI_PROVIDER_ID).apiEndpoint,
   hasServerApiKey: false,
 } as const;

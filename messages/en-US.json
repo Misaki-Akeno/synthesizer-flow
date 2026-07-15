@@ -32,32 +32,60 @@
       "gridSize": "Grid Size: {size}px"
     },
     "ai": {
-      "title": "AI Model Settings",
-      "description": "Configure AI model connections to enhance application features",
+      "eyebrow": "Agent signal routing",
+      "title": "Model providers",
+      "description": "Choose a model service and keep an independent connection profile. The Agent runtime adapts automatically.",
+      "provider": {
+        "label": "Choose a provider",
+        "description": "Model and key settings are preserved per provider",
+        "loading": "Loading profile"
+      },
+      "providers": {
+        "modelscope": "Free open-model inference",
+        "deepseek": "Reasoning and chat models",
+        "openai": "Native OpenAI models",
+        "anthropic": "Native Claude API",
+        "google": "Native Gemini API",
+        "openrouter": "Multi-model routing",
+        "custom": "Custom compatible endpoint"
+      },
+      "profiles": {
+        "balanced": "Balanced",
+        "fast": "Fast",
+        "capable": "Capable"
+      },
+      "status": {
+        "connected": "Key connected",
+        "notConnected": "Awaiting connection"
+      },
       "modelName": {
         "label": "Model Name",
-        "placeholder": "e.g., gpt-4, claude-3",
-        "description": "Specify the AI model name to use"
+        "placeholder": "Enter a model ID",
+        "description": "Choose a recommended model or enter any model ID supported by the provider",
+        "custom": "Use another model…"
       },
       "apiKey": {
         "label": "API Key",
         "placeholder": "Enter your API key",
         "placeholderSaved": "Key saved; leave blank to keep using it",
-        "errorEmpty": "API Key cannot be empty",
         "description": "Your API key is encrypted and stored on the server",
-        "descriptionSaved": "A server-side key is saved. Enter and save a new key to replace it"
+        "descriptionSaved": "The server-side key is ready; enter a new key to replace it",
+        "getKey": "Get API key",
+        "remove": "Remove key"
       },
       "apiEndpoint": {
-        "label": "API Endpoint (Optional)",
+        "label": "Compatible API Endpoint",
         "placeholder": "https://api.example.com/v1",
-        "description": "If you use a custom API endpoint, specify it here"
+        "description": "Enter a service URL compatible with the OpenAI Chat Completions format"
       },
+      "securityNote": "Keys use AES-GCM encryption and are decrypted only on the server",
       "save": "Save AI Settings",
       "saving": "Saving..."
     },
     "toast": {
       "generalUpdated": "General settings updated",
       "aiUpdated": "AI settings updated",
+      "aiKeyRemoved": "API key removed",
       "aiSaveFailed": "Failed to save AI settings",
       "languageUpdated": "Language changed"
     }

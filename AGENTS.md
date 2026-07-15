@@ -305,6 +305,9 @@ npx vitest run src/path/to/file.test.ts
 ### Architecture
 
 - **Agent.ts**: Singleton agent instance managing LLM interactions
+- **Provider Registry**: `src/lib/ai/providers.ts` defines supported providers, endpoints, and curated models
+- **Model Factory**: `src/lib/ai/modelFactory.ts` creates provider-specific LangChain models behind `BaseChatModel`
+- **Provider Settings**: Versioned per-provider profiles are stored in the existing `users.settings` JSON field; no dedicated provider table is required
 - **LangGraph Workflow**: Multi-step agent workflow with tool calling
 - **Tools**: Type-safe tool definitions for module operations
 - **Checkpointer**: Database-backed state persistence for conversations

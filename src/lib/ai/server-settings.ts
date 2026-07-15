@@ -11,6 +11,13 @@ import { db } from '@/db/client';
 import { users } from '@/db/schema';
 import { DEFAULT_AI_SETTINGS, AIModelSettings } from './defaults';
 import { env } from '@/lib/env';
+import {
+  AI_PROVIDER_IDS,
+  getAIProvider,
+  inferAIProviderId,
+  isAIProviderId,
+  type AIProviderId,
+} from './providers';
 
 interface EncryptedSecret {
   version: 1;
@@ -19,7 +26,7 @@ interface EncryptedSecret {
   ciphertext: string;
 }
 
-interface StoredAISettings {
+interface StoredAIProviderSettings {
   modelName?: string;
   apiEndpoint?: string;
   apiKey?: EncryptedSecret;
@@ -27,19 +34,28 @@ interface StoredAISettings {
 }
 
 type UserSettings = Record<string, unknown> & {
-  ai?: StoredAISettings;
+  ai?: unknown;
 };
 
+interface StoredAISettingsState {
+  version: 2;
+  activeProviderId: AIProviderId;
+  providers: Partial<Record<AIProviderId, StoredAIProviderSettings>>;
+}
+
 export interface PublicAISettings {
+  providerId: AIProviderId;
   modelName: string;
   apiEndpoint: string;
   hasServerApiKey: boolean;
 }
 
 export interface SaveAISettingsInput {
+  providerId?: AIProviderId;
   modelName?: string;
   apiEndpoint?: string;
   apiKey?: string;
+  clearApiKey?: boolean;
 }
 
 export class AISettingsValidationError extends Error {
@@ -101,9 +117,53 @@ function getUserSettings(value: unknown): UserSettings {
   return isRecord(value) ? (value as UserSettings) : {};
 }
 
-function getStoredAISettings(value: unknown): StoredAISettings {
-  if (!isRecord(value)) return {};
-  return isRecord(value.ai) ? (value.ai as StoredAISettings) : {};
+function getStoredAISettingsState(value: unknown): StoredAISettingsState {
+  const userSettings = getUserSettings(value);
+  const stored = userSettings.ai;
+
+  if (isRecord(stored) && stored.version === 2) {
+    const activeProviderId = isAIProviderId(stored.activeProviderId)
+      ? stored.activeProviderId
+      : DEFAULT_AI_SETTINGS.providerId;
+    const providers: StoredAISettingsState['providers'] = {};
+
+    if (isRecord(stored.providers)) {
+      for (const providerId of AI_PROVIDER_IDS) {
+        const providerSettings = stored.providers[providerId];
+        if (isRecord(providerSettings)) {
+          providers[providerId] = providerSettings;
+        }
+      }
+
+      // version 2 早期使用 qwen 作为提供商 ID；无数据库迁移地映射到 ModelScope。
+      const legacyQwenSettings = stored.providers.qwen;
+      if (!providers.modelscope && isRecord(legacyQwenSettings)) {
+        providers.modelscope = legacyQwenSettings;
+      }
+    }
+
+    return { version: 2, activeProviderId, providers };
+  }
+
+  // 兼容旧版的单连接结构，实际写入时自动升级为 version 2。
+  const legacy = isRecord(stored) ? stored : {};
+  const legacyEndpoint =
+    typeof legacy.apiEndpoint === 'string' ? legacy.apiEndpoint : undefined;
+  const activeProviderId = inferAIProviderId(legacyEndpoint);
+  return {
+    version: 2,
+    activeProviderId,
+    providers: {
+      [activeProviderId]: {
+        modelName:
+          typeof legacy.modelName === 'string' ? legacy.modelName : undefined,
+        apiEndpoint: legacyEndpoint,
+        apiKey: isEncryptedSecret(legacy.apiKey) ? legacy.apiKey : undefined,
+        updatedAt:
+          typeof legacy.updatedAt === 'string' ? legacy.updatedAt : undefined,
+      },
+    },
+  };
 }
 
 function normalizeOptionalText(value: string | undefined): string | undefined {
@@ -133,6 +193,41 @@ function normalizeOptionalEndpoint(
   return trimmed;
 }
 
+function resolveProviderEndpoint(
+  providerId: AIProviderId,
+  inputEndpoint: string | undefined,
+  existingEndpoint: string | undefined
+): string {
+  const provider = getAIProvider(providerId);
+  if (!provider.allowsCustomEndpoint) {
+    return provider.apiEndpoint;
+  }
+
+  const endpoint = normalizeOptionalEndpoint(inputEndpoint ?? existingEndpoint);
+  if (!endpoint) {
+    throw new AISettingsValidationError(
+      'apiEndpoint is required for custom providers'
+    );
+  }
+  return endpoint;
+}
+
+function toPublicAISettings(
+  state: StoredAISettingsState,
+  providerId: AIProviderId = state.activeProviderId
+): PublicAISettings {
+  const provider = getAIProvider(providerId);
+  const stored = state.providers[providerId];
+  return {
+    providerId,
+    modelName: stored?.modelName || provider.defaultModel,
+    apiEndpoint: provider.allowsCustomEndpoint
+      ? stored?.apiEndpoint || ''
+      : provider.apiEndpoint,
+    hasServerApiKey: isEncryptedSecret(stored?.apiKey),
+  };
+}
+
 async function getUserSettingsRow(userId: string) {
   const rows = await db
     .select({ settings: users.settings })
@@ -144,16 +239,12 @@ async function getUserSettingsRow(userId: string) {
 }
 
 export async function getPublicAISettings(
-  userId: string
+  userId: string,
+  providerId?: AIProviderId
 ): Promise<PublicAISettings> {
   const row = await getUserSettingsRow(userId);
-  const stored = getStoredAISettings(row?.settings);
-
-  return {
-    modelName: stored.modelName || DEFAULT_AI_SETTINGS.modelName,
-    apiEndpoint: stored.apiEndpoint || DEFAULT_AI_SETTINGS.apiEndpoint,
-    hasServerApiKey: isEncryptedSecret(stored.apiKey),
-  };
+  const state = getStoredAISettingsState(row?.settings);
+  return toPublicAISettings(state, providerId ?? state.activeProviderId);
 }
 
 export async function resolveAISettingsForUser(
@@ -161,13 +252,22 @@ export async function resolveAISettingsForUser(
   fallback?: AIModelSettings
 ): Promise<AIModelSettings> {
   const row = await getUserSettingsRow(userId);
-  const stored = getStoredAISettings(row?.settings);
-  const fallbackApiKey = fallback?.apiKey?.trim() || '';
+  const userSettings = getUserSettings(row?.settings);
+  const hasStoredAISettings = isRecord(userSettings.ai);
+  const state = getStoredAISettingsState(userSettings);
+  const providerId = hasStoredAISettings
+    ? state.activeProviderId
+    : fallback?.providerId || state.activeProviderId;
+  const provider = getAIProvider(providerId);
+  const stored = state.providers[providerId];
+  const matchingFallback =
+    fallback?.providerId === providerId ? fallback : undefined;
+  const fallbackApiKey = matchingFallback?.apiKey?.trim() || '';
 
   let apiKey = fallbackApiKey;
   let hasServerApiKey = false;
 
-  if (isEncryptedSecret(stored.apiKey)) {
+  if (isEncryptedSecret(stored?.apiKey)) {
     try {
       apiKey = decryptSecret(stored.apiKey);
       hasServerApiKey = true;
@@ -181,12 +281,12 @@ export async function resolveAISettingsForUser(
   }
 
   return {
+    providerId,
     modelName:
-      stored.modelName || fallback?.modelName || DEFAULT_AI_SETTINGS.modelName,
-    apiEndpoint:
-      stored.apiEndpoint ||
-      fallback?.apiEndpoint ||
-      DEFAULT_AI_SETTINGS.apiEndpoint,
+      stored?.modelName || matchingFallback?.modelName || provider.defaultModel,
+    apiEndpoint: provider.allowsCustomEndpoint
+      ? stored?.apiEndpoint || matchingFallback?.apiEndpoint || ''
+      : provider.apiEndpoint,
     apiKey,
     hasServerApiKey,
   };
@@ -196,23 +296,52 @@ export async function saveAISettingsForUser(
   userId: string,
   input: SaveAISettingsInput
 ): Promise<PublicAISettings> {
+  if (input.providerId !== undefined && !isAIProviderId(input.providerId)) {
+    throw new AISettingsValidationError('providerId is not supported');
+  }
+  if (input.providerId === 'custom' && input.apiEndpoint !== undefined) {
+    normalizeOptionalEndpoint(input.apiEndpoint);
+  }
   const modelName = normalizeOptionalText(input.modelName);
-  const apiEndpoint = normalizeOptionalEndpoint(input.apiEndpoint);
   const apiKey = normalizeOptionalText(input.apiKey);
   const row = await getUserSettingsRow(userId);
   const existingSettings = getUserSettings(row?.settings);
-  const existingAI = getStoredAISettings(existingSettings);
+  const existingAI = getStoredAISettingsState(existingSettings);
+  const providerId = input.providerId ?? existingAI.activeProviderId;
+  const provider = getAIProvider(providerId);
+  const existingProvider = existingAI.providers[providerId];
+  const apiEndpoint = resolveProviderEndpoint(
+    providerId,
+    input.apiEndpoint,
+    existingProvider?.apiEndpoint
+  );
 
-  const nextAI: StoredAISettings = {
-    ...existingAI,
-    modelName: modelName || existingAI.modelName,
-    apiEndpoint: apiEndpoint || existingAI.apiEndpoint,
+  const resolvedModelName = modelName || existingProvider?.modelName;
+  if (!resolvedModelName && !provider.defaultModel) {
+    throw new AISettingsValidationError('modelName is required');
+  }
+
+  const nextProvider: StoredAIProviderSettings = {
+    ...existingProvider,
+    modelName: resolvedModelName || provider.defaultModel,
+    apiEndpoint,
     updatedAt: new Date().toISOString(),
   };
 
   if (apiKey) {
-    nextAI.apiKey = encryptSecret(apiKey);
+    nextProvider.apiKey = encryptSecret(apiKey);
+  } else if (input.clearApiKey) {
+    delete nextProvider.apiKey;
   }
+
+  const nextAI: StoredAISettingsState = {
+    version: 2,
+    activeProviderId: providerId,
+    providers: {
+      ...existingAI.providers,
+      [providerId]: nextProvider,
+    },
+  };
 
   const nextSettings: UserSettings = {
     ...existingSettings,
@@ -221,12 +350,8 @@ export async function saveAISettingsForUser(
 
   await db
     .update(users)
-    .set({ settings: nextSettings })
+    .set({ settings: nextSettings, updatedAt: new Date() })
     .where(eq(users.id, userId));
 
-  return {
-    modelName: nextAI.modelName || DEFAULT_AI_SETTINGS.modelName,
-    apiEndpoint: nextAI.apiEndpoint || DEFAULT_AI_SETTINGS.apiEndpoint,
-    hasServerApiKey: Boolean(nextAI.apiKey),
-  };
+  return toPublicAISettings(nextAI);
 }

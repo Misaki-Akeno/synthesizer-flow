@@ -6,15 +6,20 @@ import {
   saveAISettingsForUser,
   SaveAISettingsInput,
 } from '@/lib/ai/server-settings';
+import type { AIProviderId } from '@/lib/ai/providers';
+import { isAIProviderId } from '@/lib/ai/providers';
 
-export async function getAISettingsAction() {
+export async function getAISettingsAction(providerId?: AIProviderId) {
   const session = await auth();
   if (!session?.user?.id) {
     return { success: false, error: 'Unauthorized' };
   }
+  if (providerId !== undefined && !isAIProviderId(providerId)) {
+    return { success: false, error: 'Invalid provider' };
+  }
 
   try {
-    const data = await getPublicAISettings(session.user.id);
+    const data = await getPublicAISettings(session.user.id, providerId);
     return { success: true, data };
   } catch (error) {
     console.error('Failed to get AI settings:', error);

@@ -40,6 +40,7 @@ const session = {
 };
 
 const settings: AISettings = {
+  providerId: 'custom',
   modelName: 'qwen',
   apiEndpoint: 'https://example.com/v1',
   apiKey: 'sk-test',

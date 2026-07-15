@@ -100,6 +100,7 @@ export function ChatInterface() {
       }
 
       updateAI({
+        providerId: result.data.providerId,
         modelName: result.data.modelName,
         apiEndpoint: result.data.apiEndpoint,
         apiKey: '',

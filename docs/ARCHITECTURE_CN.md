@@ -133,16 +133,24 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 
 1.  **Agent 入口 (`Agent.ts`)**:
     - 基于 LangChain/LangGraph 构建。
+    - 通过 `src/lib/ai/modelFactory.ts` 只依赖统一的 `BaseChatModel`，运行时可选择 ModelScope、DeepSeek、OpenAI、Anthropic、Google Gemini、OpenRouter 及自定义 OpenAI 兼容服务。
     - 提供了 `sendMessage` 接口，支持带状态的对话。
     - 内置 **Human-in-the-Loop (HIL)** 机制：检测到 `unsafe_tools` 标签的操作时，会暂停执行并在返回结果中标记 `approvalRequired`，等待用户确认 (`threadId` 关联上下文)。
 
-2.  **执行器 (`ToolExecutor` - `src/agent/tools/executor.ts`)**:
+2.  **提供商基础设施 (`src/lib/ai`)**:
+    - `providers.ts` 是提供商能力、固定端点和推荐模型的唯一注册表。
+    - ModelScope 使用其 API Inference 兼容端点接入 Qwen 3.5 开源模型；旧版百炼 Qwen 配置会自动归入 ModelScope 配置。
+    - `modelFactory.ts` 负责按提供商动态加载对应 LangChain 适配器，避免 Agent Graph 出现供应商分支。
+    - 用户设置使用 `version: 2` 的按提供商配置映射；旧版单连接设置会在读取时兼容、下次保存时升级，不新增数据库表或迁移。
+    - API Key 使用 AES-256-GCM 加密后保存在现有 `users.settings` JSON 字段中，切换提供商不会覆盖其他提供商的配置。
+
+3.  **执行器 (`ToolExecutor` - `src/agent/tools/executor.ts`)**:
     这是 Agent 系统最核心的创新点。由于服务端无法访问浏览器的 AudioContext，Executor 实现了一个 **"影子状态模式 (Shadow State Pattern)"**：
     - **初始化**: 每次请求时，接收前端传来的画布快照 (`GraphStateSnapshot`)，在内存中重建虚拟的 `nodes` 和 `edges`。
     - **模拟执行**: 当 LLM 调用 `add_module` 或 `connect_modules` 时，Executor 在虚拟状态上执行操作（如计算不重叠的坐标、验证端口兼容性）。
     - **指令记录**: 操作不仅仅是修改虚拟状态，更会被记录为 `ClientOperation` 指令（如 `ADD_MODULE`, `CONNECT_MODULES`）。
 
-3.  **顺序工具节点 (`SequentialToolNode`)**:
+4.  **顺序工具节点 (`SequentialToolNode`)**:
     - 为了解决 LLM 并行调用工具时产生的依赖问题（例如同时“添加模块A”和“连接模块A”，后者会因为A尚未存在而失败），系统强制工具按顺序执行。
     - 后一个工具能立即感知到前一个工具对"影子状态"的修改。
 

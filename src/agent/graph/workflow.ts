@@ -1,7 +1,7 @@
 import { SystemMessage } from '@langchain/core/messages';
 import { StateGraph, START, END } from '@langchain/langgraph';
 import { SequentialToolNode } from './sequentialToolNode';
-import { ChatOpenAI } from '@langchain/openai';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { RunnableConfig } from '@langchain/core/runnables';
 import { AgentState } from './state';
 import { getSystemPrompt } from '../prompts/system';
@@ -16,7 +16,11 @@ function isUnsafeToolName(name: string): name is UnsafeToolName {
   return (UNSAFE_TOOL_NAMES as readonly string[]).includes(name);
 }
 
-function isConfiguredModel(value: unknown): value is ChatOpenAI {
+type ToolBindableChatModel = BaseChatModel & {
+  bindTools: NonNullable<BaseChatModel['bindTools']>;
+};
+
+function isConfiguredModel(value: unknown): value is ToolBindableChatModel {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -25,7 +29,9 @@ function isConfiguredModel(value: unknown): value is ChatOpenAI {
   );
 }
 
-function getConfiguredModel(config?: RunnableConfig): ChatOpenAI | undefined {
+function getConfiguredModel(
+  config?: RunnableConfig
+): ToolBindableChatModel | undefined {
   const configurable = config?.configurable;
   if (
     typeof configurable !== 'object' ||

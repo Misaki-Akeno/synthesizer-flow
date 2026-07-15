@@ -1,4 +1,3 @@
-import { ChatOpenAI } from '@langchain/openai';
 import {
   HumanMessage,
   AIMessage,
@@ -13,6 +12,7 @@ import { createGraph } from '../graph/workflow';
 import { ToolExecutor } from '../tools/executor';
 import { createTools } from '../tools/definitions';
 import { DrizzleCheckpointer } from '../drizzleCheckpointer';
+import { createAIChatModel } from '@/lib/ai/modelFactory';
 
 const logger = createModuleLogger('Agent');
 
@@ -74,18 +74,14 @@ export class Agent {
 
     try {
       logger.info('Initializing Agent Stream Request', {
+        provider: settings.providerId,
         model: settings.modelName,
         threadId,
         action,
       });
 
-      // Initialize Model with streaming enabled
-      const model = new ChatOpenAI({
-        apiKey: settings.apiKey,
-        configuration: {
-          baseURL: settings.apiEndpoint,
-        },
-        modelName: settings.modelName,
+      // 通过统一工厂创建模型，Agent 不感知具体提供商 SDK。
+      const model = await createAIChatModel(settings, {
         temperature: 0,
         streaming: true,
       });

@@ -286,6 +286,7 @@ describe('checkpoint actions', () => {
   it('resolves title-generation settings for the authenticated user', async () => {
     mockAuth.mockResolvedValue(session);
     mockResolveAISettingsForUser.mockResolvedValue({
+      providerId: 'custom',
       modelName: 'qwen',
       apiEndpoint: 'https://example.com/v1',
       apiKey: '',
@@ -296,6 +297,7 @@ describe('checkpoint actions', () => {
       [{ role: 'user', content: 'hello' }],
       { nodes: [], edges: [] },
       {
+        providerId: 'custom',
         modelName: 'client-model',
         apiEndpoint: 'https://client.example/v1',
         apiKey: 'client-key',
@@ -303,6 +305,7 @@ describe('checkpoint actions', () => {
     );
 
     expect(mockResolveAISettingsForUser).toHaveBeenCalledWith('session-user', {
+      providerId: 'custom',
       modelName: 'client-model',
       apiEndpoint: 'https://client.example/v1',
       apiKey: 'client-key',

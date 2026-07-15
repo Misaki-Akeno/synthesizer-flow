@@ -102,6 +102,7 @@ describe('server AI settings', () => {
     const result = await getPublicAISettings('user-1');
 
     expect(result).toEqual({
+      providerId: 'custom',
       modelName: 'qwen-plus',
       apiEndpoint: 'https://example.com/v1',
       hasServerApiKey: true,
@@ -144,12 +145,14 @@ describe('server AI settings', () => {
     ];
 
     const result = await resolveAISettingsForUser('user-1', {
+      providerId: 'custom',
       modelName: 'fallback-model',
       apiEndpoint: 'https://fallback.example/v1',
       apiKey: 'sk-fallback',
     });
 
     expect(result).toEqual({
+      providerId: 'custom',
       modelName: 'server-model',
       apiEndpoint: 'https://server.example/v1',
       apiKey: 'sk-server',
@@ -164,6 +167,7 @@ describe('server AI settings', () => {
         {
           settings: {
             ai: {
+              apiEndpoint: 'https://fallback.example/v1',
               apiKey: {
                 ...encrypted,
                 authTag: encryptSecret('other-key').authTag,
@@ -175,6 +179,7 @@ describe('server AI settings', () => {
     ];
 
     const result = await resolveAISettingsForUser('user-1', {
+      providerId: 'custom',
       modelName: 'fallback-model',
       apiEndpoint: 'https://fallback.example/v1',
       apiKey: 'sk-fallback',
@@ -182,6 +187,55 @@ describe('server AI settings', () => {
 
     expect(result.apiKey).toBe('sk-fallback');
     expect(result.hasServerApiKey).toBe(false);
+  });
+
+  it('uses the request provider for users without saved AI settings', async () => {
+    mockDbState.selectResults = [[{ settings: null }]];
+
+    const result = await resolveAISettingsForUser('user-1', {
+      providerId: 'openai',
+      modelName: 'gpt-5.6-sol',
+      apiEndpoint: 'https://api.openai.com/v1',
+      apiKey: 'sk-request',
+    });
+
+    expect(result).toEqual({
+      providerId: 'openai',
+      modelName: 'gpt-5.6-sol',
+      apiEndpoint: 'https://api.openai.com/v1',
+      apiKey: 'sk-request',
+      hasServerApiKey: false,
+    });
+  });
+
+  it('does not mix fallback credentials from a different provider', async () => {
+    mockDbState.selectResults = [
+      [
+        {
+          settings: {
+            ai: {
+              version: 2,
+              activeProviderId: 'modelscope',
+              providers: {
+                modelscope: {
+                  modelName: 'Qwen/Qwen3.5-35B-A3B',
+                },
+              },
+            },
+          },
+        },
+      ],
+    ];
+
+    const result = await resolveAISettingsForUser('user-1', {
+      providerId: 'openai',
+      modelName: 'gpt-5.6-sol',
+      apiEndpoint: 'https://api.openai.com/v1',
+      apiKey: 'sk-openai',
+    });
+
+    expect(result.providerId).toBe('modelscope');
+    expect(result.apiKey).toBe('');
   });
 
   it('asks users to resave the API key when saved key decryption fails without fallback', async () => {
@@ -222,12 +276,14 @@ describe('server AI settings', () => {
     ];
 
     const result = await saveAISettingsForUser('user-1', {
+      providerId: 'custom',
       modelName: 'new-model',
       apiEndpoint: 'https://new.example/v1',
       apiKey: 'sk-new',
     });
 
     expect(result).toEqual({
+      providerId: 'custom',
       modelName: 'new-model',
       apiEndpoint: 'https://new.example/v1',
       hasServerApiKey: true,
@@ -238,16 +294,27 @@ describe('server AI settings', () => {
       settings: {
         theme?: string;
         ai?: {
-          modelName?: string;
-          apiEndpoint?: string;
-          apiKey?: unknown;
+          version?: number;
+          activeProviderId?: string;
+          providers?: Record<
+            string,
+            {
+              modelName?: string;
+              apiEndpoint?: string;
+              apiKey?: unknown;
+            }
+          >;
         };
       };
     };
 
     expect(savedSettings.settings.theme).toBe('dark');
-    expect(savedSettings.settings.ai?.modelName).toBe('new-model');
-    expect(savedSettings.settings.ai?.apiEndpoint).toBe(
+    expect(savedSettings.settings.ai?.version).toBe(2);
+    expect(savedSettings.settings.ai?.activeProviderId).toBe('custom');
+    expect(savedSettings.settings.ai?.providers?.custom?.modelName).toBe(
+      'new-model'
+    );
+    expect(savedSettings.settings.ai?.providers?.custom?.apiEndpoint).toBe(
       'https://new.example/v1'
     );
     expect(JSON.stringify(savedSettings)).not.toContain('sk-new');
@@ -259,6 +326,7 @@ describe('server AI settings', () => {
   it('rejects invalid API endpoints before reading or updating user settings', async () => {
     await expect(
       saveAISettingsForUser('user-1', {
+        providerId: 'custom',
         apiEndpoint: 'javascript:alert(1)',
       })
     ).rejects.toThrow(/apiEndpoint/);
@@ -279,6 +347,7 @@ describe('server AI settings', () => {
     ];
 
     await saveAISettingsForUser('user-1', {
+      providerId: 'custom',
       modelName: '  qwen-plus  ',
       apiEndpoint: '  https://example.com/v1  ',
       apiKey: '  sk-trimmed  ',
@@ -287,19 +356,77 @@ describe('server AI settings', () => {
     const savedSettings = mockDbState.updateSets[0] as {
       settings: {
         ai?: {
-          modelName?: string;
-          apiEndpoint?: string;
-          apiKey?: {
-            ciphertext: string;
-          };
+          providers?: Record<
+            string,
+            {
+              modelName?: string;
+              apiEndpoint?: string;
+              apiKey?: { ciphertext: string };
+            }
+          >;
         };
       };
     };
 
-    expect(savedSettings.settings.ai?.modelName).toBe('qwen-plus');
-    expect(savedSettings.settings.ai?.apiEndpoint).toBe(
+    expect(savedSettings.settings.ai?.providers?.custom?.modelName).toBe(
+      'qwen-plus'
+    );
+    expect(savedSettings.settings.ai?.providers?.custom?.apiEndpoint).toBe(
       'https://example.com/v1'
     );
     expect(JSON.stringify(savedSettings)).not.toContain('sk-trimmed');
+  });
+
+  it('switches the active provider without overwriting other provider profiles', async () => {
+    const qwenKey = encryptSecret('sk-qwen');
+    mockDbState.selectResults = [
+      [
+        {
+          settings: {
+            ai: {
+              version: 2,
+              activeProviderId: 'qwen',
+              providers: {
+                qwen: {
+                  modelName: 'qwen-max',
+                  apiKey: qwenKey,
+                },
+              },
+            },
+          },
+        },
+      ],
+    ];
+
+    const result = await saveAISettingsForUser('user-1', {
+      providerId: 'anthropic',
+      modelName: 'claude-haiku-4-5',
+      apiKey: 'sk-anthropic',
+    });
+
+    expect(result).toEqual({
+      providerId: 'anthropic',
+      modelName: 'claude-haiku-4-5',
+      apiEndpoint: 'https://api.anthropic.com',
+      hasServerApiKey: true,
+    });
+
+    const savedSettings = mockDbState.updateSets[0] as {
+      settings: {
+        ai: {
+          activeProviderId: string;
+          providers: Record<string, { modelName?: string; apiKey?: unknown }>;
+        };
+      };
+    };
+    expect(savedSettings.settings.ai.activeProviderId).toBe('anthropic');
+    expect(savedSettings.settings.ai.providers.modelscope).toEqual({
+      modelName: 'qwen-max',
+      apiKey: qwenKey,
+    });
+    expect(savedSettings.settings.ai.providers.anthropic.modelName).toBe(
+      'claude-haiku-4-5'
+    );
+    expect(JSON.stringify(savedSettings)).not.toContain('sk-anthropic');
   });
 });

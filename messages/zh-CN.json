@@ -32,32 +32,60 @@
       "gridSize": "网格大小: {size}px"
     },
     "ai": {
-      "title": "AI 模型设置",
-      "description": "配置AI模型连接以增强应用功能",
+      "eyebrow": "Agent 信号路由",
+      "title": "模型提供商",
+      "description": "选择模型服务并保存独立连接配置。Agent 运行时会自动适配各提供商。",
+      "provider": {
+        "label": "选择提供商",
+        "description": "每个提供商会独立保留模型和密钥配置",
+        "loading": "正在读取配置"
+      },
+      "providers": {
+        "modelscope": "开源模型免费推理",
+        "deepseek": "推理与通用对话",
+        "openai": "原生 OpenAI 模型",
+        "anthropic": "Claude 原生接口",
+        "google": "Gemini 原生接口",
+        "openrouter": "聚合模型路由",
+        "custom": "自定义兼容端点"
+      },
+      "profiles": {
+        "balanced": "均衡",
+        "fast": "快速",
+        "capable": "高性能"
+      },
+      "status": {
+        "connected": "密钥已连接",
+        "notConnected": "等待连接"
+      },
       "modelName": {
         "label": "模型名称",
-        "placeholder": "例如: gpt-4, claude-3",
-        "description": "指定要使用的AI模型名称"
+        "placeholder": "输入模型 ID",
+        "description": "可选择推荐模型，也可以输入提供商支持的其他模型 ID",
+        "custom": "使用其他模型…"
       },
       "apiKey": {
         "label": "API 密钥",
         "placeholder": "输入您的API密钥",
         "placeholderSaved": "已保存密钥；留空表示继续使用已保存密钥",
-        "errorEmpty": "API密钥不能为空",
         "description": "您的API密钥会加密保存在服务端",
-        "descriptionSaved": "已保存服务端密钥。输入新密钥并保存可替换它"
+        "descriptionSaved": "服务端密钥已就绪；输入新密钥可以替换它",
+        "getKey": "获取 API 密钥",
+        "remove": "移除密钥"
       },
       "apiEndpoint": {
-        "label": "API 端点（可选）",
+        "label": "兼容 API 端点",
         "placeholder": "https://api.example.com/v1",
-        "description": "如果您使用自定义API端点，请在此处指定"
+        "description": "填写支持 OpenAI Chat Completions 兼容格式的服务地址"
       },
+      "securityNote": "密钥使用 AES-GCM 加密，仅在服务端解密调用",
       "save": "保存 AI 设置",
       "saving": "保存中..."
     },
     "toast": {
       "generalUpdated": "设置已更新",
       "aiUpdated": "AI设置已更新",
+      "aiKeyRemoved": "API 密钥已移除",
       "aiSaveFailed": "AI设置保存失败",
       "languageUpdated": "语言已切换"
     }

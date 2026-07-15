@@ -66,7 +66,7 @@ Synthesizer Flow 是一个基于 Web 的模块化音频合成器应用，深度�
 ### 4.1 核心技术栈
 
 - **AI 框架**: LangChain (工具抽象), LangGraph (状态机编排)
-- **语言模型**: OpenAI SDK (支持 GPT-4o/GPT-3.5 及兼容 API)
+- **语言模型**: LangChain 多提供商适配层（ModelScope、DeepSeek、OpenAI、Anthropic、Google Gemini、OpenRouter 与自定义兼容 API）
 - **工具系统**: Zod (Schema 验证), DynamicStructuredTool (工具定义)
 - **状态管理**: LangGraph Annotation (消息流管理)
 - **数据持久化**: Drizzle ORM + PostgreSQL (Checkpoint 存储)

@@ -4,6 +4,11 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { createModuleLogger } from '@/lib/logger';
 import { DEFAULT_AI_SETTINGS, type AIModelSettings } from '@/lib/ai/defaults';
+import {
+  getAIProvider,
+  inferAIProviderId,
+  isAIProviderId,
+} from '@/lib/ai/providers';
 import { getBrowserStorage } from './persist-storage';
 
 const logger = createModuleLogger('Settings');
@@ -85,17 +90,24 @@ function safeAISettings(settings: unknown): AISettings {
   }
 
   const obj = settings as Record<string, unknown>;
+  const providerId = isAIProviderId(obj.providerId)
+    ? obj.providerId
+    : inferAIProviderId(
+        typeof obj.apiEndpoint === 'string' ? obj.apiEndpoint : undefined
+      );
+  const provider = getAIProvider(providerId);
 
   return {
+    providerId,
     modelName:
-      typeof obj.modelName === 'string'
+      typeof obj.modelName === 'string' && obj.modelName.trim()
         ? obj.modelName
-        : DEFAULT_AI_SETTINGS.modelName,
+        : provider.defaultModel,
     apiKey: DEFAULT_AI_SETTINGS.apiKey,
     apiEndpoint:
-      typeof obj.apiEndpoint === 'string'
+      provider.allowsCustomEndpoint && typeof obj.apiEndpoint === 'string'
         ? obj.apiEndpoint
-        : DEFAULT_AI_SETTINGS.apiEndpoint,
+        : provider.apiEndpoint,
     hasServerApiKey:
       typeof obj.hasServerApiKey === 'boolean'
         ? obj.hasServerApiKey
