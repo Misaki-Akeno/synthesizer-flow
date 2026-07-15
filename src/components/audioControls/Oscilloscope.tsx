@@ -29,7 +29,7 @@ const Oscilloscope: React.FC<OscilloscopeProps> = ({ moduleId }) => {
     ) as OscilloscopeModule | undefined;
 
     const dataRef = useRef<DataPoint[]>([]);
-    const startTimeRef = useRef<number>(Date.now());
+    const startTimeRef = useRef<number | null>(null);
 
     useEffect(() => {
         if (!moduleInstance) return;
@@ -40,6 +40,7 @@ const Oscilloscope: React.FC<OscilloscopeProps> = ({ moduleId }) => {
         const subscription = inputSubject.subscribe((value) => {
             if (typeof value === 'number') {
                 const now = Date.now();
+                startTimeRef.current ??= now;
                 const time = (now - startTimeRef.current) / 1000; // seconds
 
                 const newPoint = { time, value };

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -16,6 +16,8 @@ import { ContextMenu } from './contextMenu/ContextMenu';
 import { useFlowContextMenu } from './contextMenu/hooks/useFlowContextMenu';
 import { usePersistStore } from '@/store/projects-store';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { isValidModuleConnection } from './connectionValidation';
+import { useShallow } from 'zustand/react/shallow';
 
 const nodeTypes = {
   default: DefaultNode,
@@ -26,13 +28,36 @@ interface CanvasProps {
   onAutoLoad?: () => void;
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return (
+    target.isContentEditable ||
+    tagName === 'input' ||
+    tagName === 'textarea' ||
+    tagName === 'select'
+  );
+}
+
 // 内部Canvas组件，包含实际的ReactFlow
 const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
-    useFlowStore();
+    useFlowStore(
+      useShallow((state) => ({
+        nodes: state.nodes,
+        edges: state.edges,
+        onNodesChange: state.onNodesChange,
+        onEdgesChange: state.onEdgesChange,
+        onConnect: state.onConnect,
+        addNode: state.addNode,
+      }))
+    );
 
-  const { loadProject, currentProject } =
-    usePersistStore();
+  const loadProject = usePersistStore((state) => state.loadProject);
+  const currentProject = usePersistStore((state) => state.currentProject);
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -107,29 +132,47 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
     router.replace(`${newPathname}?${params.toString()}`, { scroll: false });
   }, [currentProject, router, pathname, searchParams]);
 
+  useEffect(() => {
+    const handleUndoRedoShortcut = (event: KeyboardEvent) => {
+      if (event.repeat || isEditableTarget(event.target)) {
+        return;
+      }
+
+      const isModifierPressed = event.metaKey || event.ctrlKey;
+      if (!isModifierPressed) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const shouldUndo = key === 'z' && !event.shiftKey;
+      const shouldRedo =
+        (key === 'z' && event.shiftKey) || (key === 'y' && !event.shiftKey);
+
+      if (!shouldUndo && !shouldRedo) {
+        return;
+      }
+
+      event.preventDefault();
+      const { undo, redo } = useFlowStore.getState();
+
+      if (shouldRedo) {
+        redo();
+      } else {
+        undo();
+      }
+    };
+
+    window.addEventListener('keydown', handleUndoRedoShortcut);
+    return () => {
+      window.removeEventListener('keydown', handleUndoRedoShortcut);
+    };
+  }, []);
+
   // 验证连接是否有效的函数
-  const isValidConnection: IsValidConnection = (params) => {
-    const { source, target, sourceHandle, targetHandle } = params;
-
-    const sourceNode = nodes.find((node) => node.id === source);
-    const targetNode = nodes.find((node) => node.id === target);
-
-    if (!sourceNode || !targetNode) return false;
-
-    const sourceModule = sourceNode.data?.module;
-    const targetModule = targetNode.data?.module;
-
-    if (!sourceModule || !targetModule) return false;
-
-    // 处理 sourceHandle 和 targetHandle 可能为 undefined 的情况
-    if (sourceHandle != null && targetHandle != null) {
-      const sourcePortType = sourceModule.getOutputPortType(sourceHandle);
-      const targetPortType = targetModule.getInputPortType(targetHandle);
-      return sourcePortType === targetPortType;
-    }
-
-    return false;
-  };
+  const isValidConnection: IsValidConnection = useCallback(
+    (params) => isValidModuleConnection(nodes, params),
+    [nodes]
+  );
 
   // 处理拖放事件
   const handleDrop = (event: React.DragEvent) => {
@@ -186,6 +229,9 @@ export default function Canvas({ projectId, onAutoLoad }: CanvasProps = {}) {
       style={{ width: '100%', height: '100%' }}
       onContextMenu={(e) => e.preventDefault()}
       className="h-full w-full"
+      data-testid="editor-canvas"
+      aria-label="合成器画布"
+      role="region"
     >
       <CanvasInner projectId={projectId} onAutoLoad={onAutoLoad} />
     </div>

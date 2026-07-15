@@ -1,9 +1,5 @@
 import { memo, useState } from 'react';
-import {
-  ModuleBase,
-  ParameterType,
-  PortType,
-} from '@/core/base/ModuleBase';
+import { ModuleBase, ParameterType, PortType } from '@/core/base/ModuleBase';
 import { useFlowStore } from '@/store/canvas-store';
 import { useModuleSubscription } from '@/core/hooks/useModuleSubscription';
 import React from 'react';
@@ -53,10 +49,25 @@ interface CustomUIComponentProps {
   };
 }
 
+type CustomUIRenderProps = CustomUIComponentProps & {
+  label?: string;
+  module?: ModuleBase;
+  paramValues: Record<string, number | boolean | string>;
+  onParamChange: (paramKey: string, value: number | boolean | string) => void;
+  onEditStart?: () => void;
+  onEditEnd?: () => void;
+};
+
 const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
   const { module: moduleInstance } = data;
   const updateModuleParameter = useFlowStore(
     (state) => state.updateModuleParameter
+  );
+  const beginHistoryTransaction = useFlowStore(
+    (state) => state.beginHistoryTransaction
+  );
+  const commitHistoryTransaction = useFlowStore(
+    (state) => state.commitHistoryTransaction
   );
 
   // 使用自定义Hook获取模块数据
@@ -113,8 +124,9 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
 
     // 类型断言为字符串类型的键
     const componentType = type as keyof typeof CustomUIComponents;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const CustomComponent = CustomUIComponents[componentType] as any;
+    const CustomComponent = CustomUIComponents[
+      componentType
+    ] as React.ComponentType<CustomUIRenderProps>;
 
     // 处理参数更改的回调函数
     const handleParamChange = (
@@ -127,14 +139,26 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     // 增强 props，自动注入 step
     const enhancedProps = { ...(props as CustomUIComponentProps) };
     if (componentType === 'XYPad' && moduleInstance) {
-      if (enhancedProps.xParam && enhancedProps.xParam.paramKey && !enhancedProps.xParam.step) {
-        const meta = moduleInstance.getParameterMeta(enhancedProps.xParam.paramKey);
+      if (
+        enhancedProps.xParam &&
+        enhancedProps.xParam.paramKey &&
+        !enhancedProps.xParam.step
+      ) {
+        const meta = moduleInstance.getParameterMeta(
+          enhancedProps.xParam.paramKey
+        );
         if (meta && meta.step) {
           enhancedProps.xParam.step = meta.step;
         }
       }
-      if (enhancedProps.yParam && enhancedProps.yParam.paramKey && !enhancedProps.yParam.step) {
-        const meta = moduleInstance.getParameterMeta(enhancedProps.yParam.paramKey);
+      if (
+        enhancedProps.yParam &&
+        enhancedProps.yParam.paramKey &&
+        !enhancedProps.yParam.step
+      ) {
+        const meta = moduleInstance.getParameterMeta(
+          enhancedProps.yParam.paramKey
+        );
         if (meta && meta.step) {
           enhancedProps.yParam.step = meta.step;
         }
@@ -145,25 +169,11 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     return (
       <div className="custom-ui-container">
         <CustomComponent
-          label={''}
-          onClick={function (): void {
-            throw new Error('Function not implemented.');
-          }}
-          xParam={{
-            paramKey: 'x',
-            label: 'X',
-            min: 0,
-            max: 1,
-          }}
-          yParam={{
-            paramKey: 'y',
-            label: 'Y',
-            min: 0,
-            max: 1,
-          }}
           module={moduleInstance}
           paramValues={paramValues}
           onParamChange={handleParamChange}
+          onEditStart={beginHistoryTransaction}
+          onEditEnd={commitHistoryTransaction}
           {...enhancedProps}
         />
       </div>
@@ -235,8 +245,11 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
 
   return (
     <div
-      className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${!moduleEnabled ? 'opacity-50' : ''
-        }`}
+      data-testid={`module-node-${id}`}
+      data-module-type={data.type}
+      className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${
+        !moduleEnabled ? 'opacity-50' : ''
+      }`}
     >
       {/* 模块标题栏 */}
       <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center node-drag-handle cursor-move">
@@ -276,6 +289,8 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
           label={param.label}
           description={param.describe}
           readonly={param.readonly}
+          onEditStart={beginHistoryTransaction}
+          onEditEnd={commitHistoryTransaction}
         />
       ))}
 
@@ -305,6 +320,8 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
                           label={param.label}
                           description={param.describe}
                           readonly={param.readonly}
+                          onEditStart={beginHistoryTransaction}
+                          onEditEnd={commitHistoryTransaction}
                         />
                       ))}
                     </div>

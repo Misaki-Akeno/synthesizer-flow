@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { useFlowStore } from './canvas-store';
 import { createModuleLogger } from '@/lib/logger';
 import {
@@ -16,6 +16,7 @@ import {
   getBuiltInPresets,
 } from '@/actions/project.actions';
 import { nanoid } from 'nanoid';
+import { getIndexedDbStorage } from './persist-storage';
 
 // 创建项目管理器专用日志记录器
 const logger = createModuleLogger('ProjectManager');
@@ -30,8 +31,21 @@ export interface ProjectConfig {
   lastModified: string; // 最后修改时间
   data?: string; // JSON 格式的画布数据 (列表模式下可能为空)
   tags?: string[]; // 项目标签
+  metadata?: Record<string, unknown>; // 封面、标签等开放扩展信息
+  schemaVersion?: number; // 服务端项目数据结构版本
+  revision?: number; // 服务端乐观并发版本
   isBuiltIn?: boolean; // 标记是否为内置预设
 }
+
+export interface FetchProjectsOptions {
+  force?: boolean;
+}
+
+export type ProjectListErrorCode =
+  | 'database-migration-required'
+  | 'user-projects-unavailable'
+  | 'built-in-projects-unavailable'
+  | 'projects-unavailable';
 
 // ======== 项目管理 Store 接口 ========
 
@@ -45,9 +59,14 @@ export interface ProjectPersistState {
 
   // 状态标志
   isLoading: boolean;
+  isProjectListLoading: boolean;
+  hasHydratedProjects: boolean;
+  projectsLastFetchedAt: string | null;
+  projectListError: ProjectListErrorCode | null;
 
   // 动作
-  fetchProjects: () => Promise<void>;
+  fetchProjects: (options?: FetchProjectsOptions) => Promise<void>;
+  markProjectsHydrated: () => void;
 
   // 获取所有可用项目（包括内置预设和用户项目）
   getAllProjects: () => ProjectConfig[];
@@ -82,6 +101,38 @@ const jsonUtils = {
   },
 };
 
+function isLocalImportedProject(project: ProjectConfig): boolean {
+  return project.id.startsWith('imported_');
+}
+
+const PROJECT_LIST_CACHE_TTL_MS = 60_000;
+const PROJECT_DATABASE_MIGRATION_REQUIRED =
+  'PROJECT_DATABASE_MIGRATION_REQUIRED';
+
+function resolveProjectListError(
+  userError: string | null,
+  presetError: string | null
+): ProjectListErrorCode | null {
+  if (
+    userError === PROJECT_DATABASE_MIGRATION_REQUIRED ||
+    presetError === PROJECT_DATABASE_MIGRATION_REQUIRED
+  ) {
+    return 'database-migration-required';
+  }
+
+  if (userError && presetError) {
+    return 'projects-unavailable';
+  }
+  if (userError) {
+    return 'user-projects-unavailable';
+  }
+  if (presetError) {
+    return 'built-in-projects-unavailable';
+  }
+
+  return null;
+}
+
 // ======== 项目管理 Zustand Store ========
 
 export const useProjectStore = create<ProjectPersistState>()(
@@ -92,23 +143,60 @@ export const useProjectStore = create<ProjectPersistState>()(
       builtInProjects: [],
       currentProject: null,
       isLoading: false,
+      isProjectListLoading: false,
+      hasHydratedProjects: false,
+      projectsLastFetchedAt: null,
+      projectListError: null,
 
-      fetchProjects: async () => {
-        set({ isLoading: true });
+      markProjectsHydrated: () => {
+        set({ hasHydratedProjects: true });
+      },
+
+      fetchProjects: async (options = {}) => {
+        const { force = false } = options;
+        const { projectsLastFetchedAt, isProjectListLoading } = get();
+        const lastFetchedTime = projectsLastFetchedAt
+          ? new Date(projectsLastFetchedAt).getTime()
+          : 0;
+        const hasFreshCache =
+          Number.isFinite(lastFetchedTime) &&
+          Date.now() - lastFetchedTime < PROJECT_LIST_CACHE_TTL_MS;
+
+        if (!force && hasFreshCache) {
+          return;
+        }
+
+        if (isProjectListLoading) {
+          return;
+        }
+
+        set({
+          isLoading: true,
+          isProjectListLoading: true,
+          projectListError: null,
+        });
         try {
           const [userRes, presetRes] = await Promise.all([
             getUserProjects(),
-            getBuiltInPresets()
+            getBuiltInPresets(),
           ]);
 
           if (userRes.success && userRes.data) {
             const mappedProjects: ProjectConfig[] = userRes.data.map((p) => ({
               id: p.id,
               name: p.name,
-              created: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
-              lastModified: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
+              description: p.description ?? undefined,
+              created: p.createdAt
+                ? new Date(p.createdAt).toISOString()
+                : new Date().toISOString(),
+              lastModified: p.updatedAt
+                ? new Date(p.updatedAt).toISOString()
+                : new Date().toISOString(),
+              metadata: p.metadata as Record<string, unknown>,
+              schemaVersion: p.schemaVersion,
+              revision: p.revision,
               data: undefined, // 列表不返回数据
-              isBuiltIn: false
+              isBuiltIn: false,
             }));
             set({ userProjects: mappedProjects });
           } else {
@@ -120,24 +208,56 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           if (presetRes.success && presetRes.data) {
             const mappedPresets: ProjectConfig[] = presetRes.data.map((p) => {
-              // DB 中 data 是 object (jsonb)，需要 stringify
-              const dataStr = typeof p.data === 'object' ? JSON.stringify(p.data) : String(p.data);
               return {
                 id: p.id,
                 name: p.name,
-                description: '系统预设', // 暂时硬编码
-                created: p.createdAt ? new Date(p.createdAt).toISOString() : new Date().toISOString(),
-                lastModified: p.updatedAt ? new Date(p.updatedAt).toISOString() : new Date().toISOString(),
-                data: jsonUtils.makeJsonUrlSafe(dataStr),
-                isBuiltIn: true
+                description: p.description ?? undefined,
+                created: p.createdAt
+                  ? new Date(p.createdAt).toISOString()
+                  : new Date().toISOString(),
+                lastModified: p.updatedAt
+                  ? new Date(p.updatedAt).toISOString()
+                  : new Date().toISOString(),
+                metadata: p.metadata as Record<string, unknown>,
+                schemaVersion: p.schemaVersion,
+                revision: p.revision,
+                data: undefined,
+                isBuiltIn: true,
               };
             });
             set({ builtInProjects: mappedPresets });
           }
+
+          const userError =
+            !userRes.success && userRes.error !== 'Unauthorized'
+              ? (userRes.error ?? 'Failed to fetch projects')
+              : null;
+          const presetError = !presetRes.success
+            ? (presetRes.error ?? 'Failed to fetch presets')
+            : null;
+          const projectListError = resolveProjectListError(
+            userError,
+            presetError
+          );
+
+          set({
+            projectListError,
+            // 失败结果不能进入成功缓存，否则用户会在 TTL 内持续看到伪空状态。
+            projectsLastFetchedAt: projectListError
+              ? null
+              : new Date().toISOString(),
+          });
         } catch (error) {
           logger.error('获取项目列表异常', error);
+          set({
+            projectListError: 'projects-unavailable',
+            projectsLastFetchedAt: null,
+          });
         } finally {
-          set({ isLoading: false });
+          set({
+            isLoading: false,
+            isProjectListLoading: false,
+          });
         }
       },
 
@@ -170,35 +290,52 @@ export const useProjectStore = create<ProjectPersistState>()(
           }
 
           const { currentProject } = get();
-          // 如果当前项目有ID且不是内置的，且名字没变（或者是显式保存），则更新
-          // 这里简化逻辑：如果名字和当前项目名字一样，就更新当前项目ID，否则新建
+          // 当前非预设项目始终按 ID 更新；改名不应隐式创建副本。
           let projectIdToUpdate: string | undefined = undefined;
 
-          if (currentProject && !currentProject.isBuiltIn && currentProject.name === name) {
+          if (
+            currentProject &&
+            !currentProject.isBuiltIn &&
+            !isLocalImportedProject(currentProject)
+          ) {
             projectIdToUpdate = currentProject.id;
           }
 
-          const result = await saveProject(name, dataToSave, projectIdToUpdate);
+          const result = await saveProject(name, dataToSave, {
+            projectId: projectIdToUpdate,
+            description,
+            expectedRevision: projectIdToUpdate
+              ? currentProject?.revision
+              : undefined,
+            metadata: currentProject?.metadata,
+          });
 
           if (result.success && result.projectId) {
             // 保存成功，更新当前项目状态（包括 data，这里保持 string 格式以便本地缓存）
             const now = new Date().toISOString();
 
             // 重新获取列表以确保同步
-            await get().fetchProjects();
+            await get().fetchProjects({ force: true });
 
             // 更新 currentProject
             const newProjectConfig: ProjectConfig = {
               id: result.projectId,
               name,
               description,
-              created: currentProject?.created || now,
+              created:
+                projectIdToUpdate && currentProject?.created
+                  ? currentProject.created
+                  : now,
               lastModified: now,
               data: canvasData, // 保持 string
-              isBuiltIn: false
+              metadata: currentProject?.metadata,
+              schemaVersion: currentProject?.schemaVersion ?? 1,
+              revision: result.revision,
+              isBuiltIn: false,
             };
 
             set({ currentProject: newProjectConfig });
+            useFlowStore.getState().setCurrentProjectId(result.projectId);
             logger.success(`项目"${name}"保存成功`);
             return true;
           } else {
@@ -213,7 +350,7 @@ export const useProjectStore = create<ProjectPersistState>()(
         }
       },
 
-      saveAsPreset: async (name: string, _description?: string) => {
+      saveAsPreset: async (name: string, description?: string) => {
         try {
           logger.info(`保存为预设: "${name}"`);
           set({ isLoading: true });
@@ -229,10 +366,13 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           // 强制新建，不检查ID更新（为了简单，总算创建新预设）
           // 传入 isPreset = true
-          const result = await saveProject(name, dataToSave, undefined, true);
+          const result = await saveProject(name, dataToSave, {
+            isPreset: true,
+            description,
+          });
 
           if (result.success && result.projectId) {
-            await get().fetchProjects();
+            await get().fetchProjects({ force: true });
             logger.success(`预设"${name}"保存成功`);
             return true;
           } else {
@@ -262,10 +402,21 @@ export const useProjectStore = create<ProjectPersistState>()(
                 projectConfig = {
                   id: res.data.id,
                   name: res.data.name,
-                  created: res.data.createdAt ? new Date(res.data.createdAt).toISOString() : new Date().toISOString(),
-                  lastModified: res.data.updatedAt ? new Date(res.data.updatedAt).toISOString() : new Date().toISOString(),
+                  description: res.data.description ?? undefined,
+                  created: res.data.createdAt
+                    ? new Date(res.data.createdAt).toISOString()
+                    : new Date().toISOString(),
+                  lastModified: res.data.updatedAt
+                    ? new Date(res.data.updatedAt).toISOString()
+                    : new Date().toISOString(),
                   isBuiltIn: res.data.isPreset,
-                  data: typeof res.data.data === 'object' ? JSON.stringify(res.data.data) : String(res.data.data)
+                  metadata: res.data.metadata as Record<string, unknown>,
+                  schemaVersion: res.data.schemaVersion,
+                  revision: res.data.revision,
+                  data:
+                    typeof res.data.data === 'object'
+                      ? JSON.stringify(res.data.data)
+                      : String(res.data.data),
                 };
               }
             }
@@ -284,19 +435,29 @@ export const useProjectStore = create<ProjectPersistState>()(
             }
           }
 
-          logger.info(`加载项目: "${projectConfig.name}" (ID: ${projectConfig.id})`);
+          logger.info(
+            `加载项目: "${projectConfig.name}" (ID: ${projectConfig.id})`
+          );
           set({ isLoading: true });
 
           // 如果没有数据（或者是用户项目，只有元数据），需要从 DB 获取
           let fullData = projectConfig.data;
 
-          if (!fullData && !projectConfig.isBuiltIn) {
+          if (!fullData) {
             // 从 DB 获取详情
             const result = await getProjectById(projectConfig.id);
             if (result.success && result.data) {
               // DB 返回的 data 是 jsonb (object)
               // store 需要 string
               fullData = JSON.stringify(result.data.data);
+              projectConfig = {
+                ...projectConfig,
+                description: result.data.description ?? undefined,
+                metadata: result.data.metadata as Record<string, unknown>,
+                schemaVersion: result.data.schemaVersion,
+                revision: result.data.revision,
+                lastModified: new Date(result.data.updatedAt).toISOString(),
+              };
             } else {
               logger.error('无法从服务器获取项目详情', result.error);
               set({ isLoading: false });
@@ -310,28 +471,12 @@ export const useProjectStore = create<ProjectPersistState>()(
             return false;
           }
 
-          // 资源清理逻辑
-          const currentNodes = useFlowStore.getState().nodes;
-          if (currentNodes.length > 0) {
-            const speakerNodes = currentNodes.filter(
-              (node) => node.data?.module?.moduleType === 'speaker'
-            );
-            speakerNodes.forEach((node) => {
-              if (node.data?.module?.dispose) {
-                try { node.data.module.dispose(); } catch (_e) { }
-              }
-            });
-            currentNodes.forEach((node) => {
-              if (node.data?.module?.dispose && node.data.module.moduleType !== 'speaker') {
-                try { node.data.module.dispose(); } catch (_e) { }
-              }
-            });
-            await new Promise((resolve) => setTimeout(resolve, 50));
-          }
-
           // 解析数据
           const jsonData = jsonUtils.restoreUrlSafeJson(fullData);
-          const parseResult = validateAndParseJson(jsonData, validateSerializedCanvas);
+          const parseResult = validateAndParseJson(
+            jsonData,
+            validateSerializedCanvas
+          );
 
           if (!parseResult.success) {
             logger.error('项目数据验证失败', parseResult.error);
@@ -339,14 +484,15 @@ export const useProjectStore = create<ProjectPersistState>()(
             return false;
           }
 
-          const success = useFlowStore.getState().importCanvasFromJson(jsonData);
+          const success = useFlowStore
+            .getState()
+            .importCanvasFromJson(jsonData, projectConfig.id);
 
           if (success) {
             set({
               currentProject: {
                 ...projectConfig,
                 data: jsonData, // 更新为完整数据
-                lastModified: new Date().toISOString(),
               },
             });
             logger.success(`项目"${projectConfig.name}"加载成功`);
@@ -370,18 +516,19 @@ export const useProjectStore = create<ProjectPersistState>()(
         try {
           // 检查是否是内置项目
           const { builtInProjects } = get();
-          if (builtInProjects.some(p => p.id === projectId)) {
+          if (builtInProjects.some((p) => p.id === projectId)) {
             logger.warn('无法删除内置项目');
             return false;
           }
 
           const result = await deleteProjectAction(projectId);
           if (result.success) {
-            await get().fetchProjects(); // 刷新列表
+            await get().fetchProjects({ force: true }); // 刷新列表
 
             const { currentProject } = get();
             if (currentProject?.id === projectId) {
               set({ currentProject: null });
+              useFlowStore.getState().setCurrentProjectId('');
             }
             logger.success('项目删除成功');
             return true;
@@ -404,8 +551,9 @@ export const useProjectStore = create<ProjectPersistState>()(
         if (currentProject) allProject.push(currentProject);
 
         // 优先匹配 ID，其次匹配 Name
-        const project = allProject.find(p => p.id === projectIdOrName) ||
-          allProject.find(p => p.name === projectIdOrName);
+        const project =
+          allProject.find((p) => p.id === projectIdOrName) ||
+          allProject.find((p) => p.name === projectIdOrName);
 
         if (!project) {
           logger.error(`找不到要导出的项目: "${projectIdOrName}"`);
@@ -436,24 +584,29 @@ export const useProjectStore = create<ProjectPersistState>()(
 
       importProjectFromJson: async (jsonData: string) => {
         try {
-          const parseResult = validateAndParseJson(jsonData, validateSerializedCanvas);
+          const parseResult = validateAndParseJson(
+            jsonData,
+            validateSerializedCanvas
+          );
           if (!parseResult.success) {
             logger.error('JSON数据验证失败', parseResult.error);
             return false;
           }
 
-          const success = useFlowStore.getState().importCanvasFromJson(jsonData);
-          if (success) {
-            const now = new Date().toISOString();
-            const importedProject: ProjectConfig = {
-              id: 'imported_' + nanoid(6),
-              name: `导入的项目`,
-              created: now,
-              lastModified: now,
-              data: jsonData,
-              isBuiltIn: false
-            };
+          const now = new Date().toISOString();
+          const importedProject: ProjectConfig = {
+            id: 'imported_' + nanoid(6),
+            name: `导入的项目`,
+            created: now,
+            lastModified: now,
+            data: jsonData,
+            isBuiltIn: false,
+          };
 
+          const success = useFlowStore
+            .getState()
+            .importCanvasFromJson(jsonData, importedProject.id);
+          if (success) {
             set({ currentProject: importedProject });
             logger.success('项目导入成功，在保存前仅存在于本地');
             return true;
@@ -463,7 +616,7 @@ export const useProjectStore = create<ProjectPersistState>()(
           logger.error('导入失败', error);
           return false;
         }
-      }
+      },
     }),
     {
       name: 'synthesizerflow-projects',
@@ -471,16 +624,43 @@ export const useProjectStore = create<ProjectPersistState>()(
       partialize: (state) => ({
         currentProject: state.currentProject,
         userProjects: state.userProjects,
-        builtInProjects: state.builtInProjects
+        builtInProjects: state.builtInProjects.map((project) => ({
+          ...project,
+          data: undefined,
+        })),
+        projectsLastFetchedAt: state.projectsLastFetchedAt,
       }),
+      version: 3,
+      migrate: (persistedState) => {
+        if (!persistedState || typeof persistedState !== 'object') {
+          return persistedState as ProjectPersistState;
+        }
+
+        const state = persistedState as Partial<ProjectPersistState>;
+        return {
+          ...state,
+          builtInProjects: (state.builtInProjects ?? []).map((project) => ({
+            ...project,
+            data: undefined,
+          })),
+        } as ProjectPersistState;
+      },
+      storage: createJSONStorage(() =>
+        getIndexedDbStorage({
+          databaseName: 'synthesizerflow',
+          storeName: 'project-cache',
+          getFallbackStorage: () => window.localStorage,
+        })
+      ),
       onRehydrateStorage: () => (state) => {
         if (state) {
           logger.info('本地缓存已恢复');
+          state.markProjectsHydrated();
           // 移除 state.fetchProjects()，由 UI 组件 (ProjectManager) 通过 useEffect 触发
 
           // 注意：自动恢复逻辑已下放至 Canvas 组件，以便与 URL 参数协调
         }
-      }
+      },
     }
   )
 );

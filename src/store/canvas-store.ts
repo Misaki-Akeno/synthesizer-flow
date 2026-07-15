@@ -13,11 +13,22 @@ import {
 import { moduleManager, FlowNode } from '../core/services/ModuleManager';
 import { moduleInitManager } from '../core/services/ModuleInitManager';
 import { serializationManager } from '../core/services/SerializationManager';
-import { SerializedModule } from '@/core/types/SerializationTypes';
+import {
+  SerializedCanvas,
+  SerializedModule,
+} from '@/core/types/SerializationTypes';
+import {
+  validateAndParseJson,
+  validateSerializedCanvas,
+  validateSerializedModule,
+} from '@/core/types/SerializationValidator';
 import { createModuleLogger } from '@/lib/logger';
+import { PortType } from '@/core/base/ModuleBase';
+import { createNodeId } from '@/core/utils/nodeId';
 
 // 创建Store专用日志记录器
 const logger = createModuleLogger('FlowStore');
+const MAX_HISTORY_SIZE = 100;
 
 // --------------------------------
 //        Reactflow管理部分
@@ -26,9 +37,21 @@ interface FlowState {
   nodes: FlowNode[];
   edges: Edge[];
   currentProjectId: string; // 修改：预设ID改为项目ID
+  canUndo: boolean;
+  canRedo: boolean;
+  history: {
+    past: SerializedCanvas[];
+    future: SerializedCanvas[];
+  };
+  setCurrentProjectId: (projectId: string) => void;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
+  beginHistoryTransaction: () => void;
+  commitHistoryTransaction: () => void;
+  cancelHistoryTransaction: () => void;
+  undo: () => void;
+  redo: () => void;
   updateModuleParameter: (
     nodeId: string,
     paramKey: string,
@@ -46,7 +69,7 @@ interface FlowState {
 
   // 序列化相关方法
   exportCanvasToJson: () => string;
-  importCanvasFromJson: (jsonString: string) => boolean;
+  importCanvasFromJson: (jsonString: string, projectId?: string) => boolean;
   getModuleAsJson: (moduleId: string) => unknown | null;
   getModuleAsString: (moduleId: string) => string | null;
   importModuleFromData: (data: unknown) => string | null;
@@ -56,19 +79,260 @@ interface FlowState {
 const initialNodes: FlowNode[] = [];
 const initialEdges: Edge[] = [];
 
+function validateImportableNodes(nodes: SerializedCanvas['nodes']): boolean {
+  const seenIds = new Set<string>();
+
+  for (const node of nodes) {
+    if (seenIds.has(node.id)) {
+      logger.error('导入画布包含重复节点ID，已拒绝', { nodeId: node.id });
+      return false;
+    }
+
+    seenIds.add(node.id);
+
+    if (!moduleManager.hasModuleType(node.data.type)) {
+      logger.error('导入画布包含未知模块类型，已拒绝', {
+        nodeId: node.id,
+        type: node.data.type,
+      });
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function filterBindableEdges(nodes: FlowNode[], edges: Edge[]): Edge[] {
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const occupiedSingleInputs = new Set<string>();
+
+  return edges.filter((edge) => {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+      logger.warn('导入画布跳过端点不存在的连接', {
+        source: edge.source,
+        target: edge.target,
+      });
+      return false;
+    }
+
+    const isBindable = moduleManager.canBindModules(
+      edge.source,
+      edge.target,
+      edge.sourceHandle ?? undefined,
+      edge.targetHandle ?? undefined
+    );
+
+    if (!isBindable) {
+      logger.warn('导入画布跳过无法绑定的连接', {
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+      });
+      return false;
+    }
+
+    const targetHandle = edge.targetHandle ?? 'input';
+    const targetModule = moduleManager.getModule(edge.target);
+    const targetType = targetModule?.inputPortTypes[targetHandle];
+    const inputKey = `${edge.target}:${targetHandle}`;
+
+    if (
+      targetType !== PortType.AUDIO &&
+      targetType !== PortType.ARRAY &&
+      occupiedSingleInputs.has(inputKey)
+    ) {
+      logger.warn('导入画布跳过同一单输入端口上的重复连接', {
+        target: edge.target,
+        targetHandle,
+      });
+      return false;
+    }
+
+    if (targetType !== PortType.AUDIO && targetType !== PortType.ARRAY) {
+      occupiedSingleInputs.add(inputKey);
+    }
+
+    return true;
+  });
+}
+
+function getSingleInputConflicts(
+  edges: Edge[],
+  connection: Connection
+): Edge[] {
+  if (!connection.target) {
+    return [];
+  }
+
+  const targetHandle = connection.targetHandle ?? 'input';
+  const targetModule = moduleManager.getModule(connection.target);
+  const targetType = targetModule?.inputPortTypes[targetHandle];
+
+  if (targetType === PortType.AUDIO || targetType === PortType.ARRAY) {
+    return [];
+  }
+
+  return edges.filter(
+    (edge) =>
+      edge.target === connection.target &&
+      (edge.targetHandle ?? 'input') === targetHandle
+  );
+}
+
+function restoreEdgeBindings(edges: Edge[]): void {
+  edges.forEach((edge) => {
+    moduleManager.bindModules(
+      edge.source,
+      edge.target,
+      edge.sourceHandle ?? undefined,
+      edge.targetHandle ?? undefined
+    );
+  });
+}
+
+function createCanvasSnapshot(
+  nodes: FlowNode[],
+  edges: Edge[]
+): SerializedCanvas {
+  return serializationManager.serializeCanvas(nodes, edges);
+}
+
+function cloneCanvasSnapshot(snapshot: SerializedCanvas): SerializedCanvas {
+  return JSON.parse(JSON.stringify(snapshot)) as SerializedCanvas;
+}
+
+function getComparableSnapshot(snapshot: SerializedCanvas): string {
+  return JSON.stringify({
+    nodes: snapshot.nodes,
+    edges: snapshot.edges,
+  });
+}
+
+function areCanvasSnapshotsEqual(
+  left: SerializedCanvas,
+  right: SerializedCanvas
+): boolean {
+  return getComparableSnapshot(left) === getComparableSnapshot(right);
+}
+
+function getHistoryState(past: SerializedCanvas[], future: SerializedCanvas[]) {
+  return {
+    history: { past, future },
+    canUndo: past.length > 0,
+    canRedo: future.length > 0,
+  };
+}
+
 export const useFlowStore = create<FlowState>((set, get) => {
   // 设置节点获取函数
   moduleManager.setNodesGetter(() => get().nodes);
+  const draggingNodeIds = new Set<string>();
+  let historyTransaction: { snapshot: SerializedCanvas; depth: number } | null =
+    null;
+
+  const applyCanvasSnapshot = (snapshot: SerializedCanvas) => {
+    // 撤销/重做会完整重建模块实例，确保模块注册表、参数和连接状态一致。
+    moduleManager.disposeAllModules();
+    moduleInitManager.reset();
+
+    const { nodes, edges } = serializationManager.deserializeCanvas(snapshot);
+    const bindableEdges = filterBindableEdges(nodes, edges);
+
+    set({
+      nodes,
+      edges: bindableEdges,
+    });
+
+    moduleInitManager.onAllModulesReady(() => {
+      moduleManager.setupAllEdgeBindings(bindableEdges);
+    });
+  };
+
+  const recordHistory = () => {
+    if (historyTransaction) {
+      return;
+    }
+
+    const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
+    const { past } = get().history;
+    const lastSnapshot = past[past.length - 1];
+
+    if (
+      lastSnapshot &&
+      areCanvasSnapshotsEqual(lastSnapshot, currentSnapshot)
+    ) {
+      set(getHistoryState(past, []));
+      return;
+    }
+
+    const nextPast = [...past, cloneCanvasSnapshot(currentSnapshot)].slice(
+      -MAX_HISTORY_SIZE
+    );
+
+    set(getHistoryState(nextPast, []));
+  };
+
+  const shouldRecordNodeChanges = (changes: NodeChange[]) => {
+    return changes.some((change) => {
+      if (change.type === 'select' || change.type === 'dimensions') {
+        return false;
+      }
+
+      if (change.type !== 'position') {
+        return true;
+      }
+
+      if ('dragging' in change && change.dragging) {
+        if (draggingNodeIds.has(change.id)) {
+          return false;
+        }
+
+        draggingNodeIds.add(change.id);
+        return true;
+      }
+
+      return !('dragging' in change);
+    });
+  };
+
+  const finishNodeDragTracking = (changes: NodeChange[]) => {
+    changes.forEach((change) => {
+      if (
+        change.type === 'position' &&
+        'dragging' in change &&
+        change.dragging === false
+      ) {
+        draggingNodeIds.delete(change.id);
+      }
+    });
+  };
 
   return {
     nodes: initialNodes,
     edges: initialEdges,
     currentProjectId: '', // 初始为空，由Canvas组件加载第一个项目
+    canUndo: false,
+    canRedo: false,
+    history: {
+      past: [],
+      future: [],
+    },
+
+    setCurrentProjectId: (projectId) => {
+      set({ currentProjectId: projectId });
+    },
 
     onNodesChange: (changes) => {
+      if (shouldRecordNodeChanges(changes)) {
+        recordHistory();
+      }
+
       set({
         nodes: applyNodeChanges(changes, get().nodes) as FlowNode[],
       });
+
+      finishNodeDragTracking(changes);
     },
 
     onEdgesChange: (changes) => {
@@ -87,6 +351,10 @@ export const useFlowStore = create<FlowState>((set, get) => {
         .map((change) => get().edges.find((edge) => edge.id === change.id))
         .filter((edge): edge is Edge => edge !== undefined);
 
+      if (edgesToRemove.length > 0) {
+        recordHistory();
+      }
+
       // 只对要删除的边解除绑定
       edgesToRemove.forEach((edge) => {
         moduleManager.removeEdgeBinding(edge);
@@ -99,37 +367,176 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
 
     onConnect: (connection) => {
-      const _edgeId = `edge_${connection.source}_${connection.target}_${Date.now()}`;
+      if (!connection.source || !connection.target) {
+        logger.warn('连接缺少源节点或目标节点，已忽略', connection);
+        return;
+      }
 
-      // 添加边并建立绑定
-      moduleManager.bindModules(
-        connection.source || '',
-        connection.target || '',
+      const canBind = moduleManager.canBindModules(
+        connection.source,
+        connection.target,
         connection.sourceHandle ?? undefined,
         connection.targetHandle ?? undefined
       );
 
-      set({
-        edges: addEdge(connection, get().edges),
+      if (!canBind) {
+        return;
+      }
+
+      const existingEdges = get().edges;
+      const conflictingEdges = getSingleInputConflicts(
+        existingEdges,
+        connection
+      );
+
+      conflictingEdges.forEach((edge) => {
+        moduleManager.removeEdgeBinding(edge);
       });
+
+      // 只有底层绑定成功时才添加视觉边，避免 UI 与音频图状态分裂
+      const isBound = moduleManager.bindModules(
+        connection.source,
+        connection.target,
+        connection.sourceHandle ?? undefined,
+        connection.targetHandle ?? undefined
+      );
+
+      if (!isBound) {
+        restoreEdgeBindings(conflictingEdges);
+        return;
+      }
+
+      recordHistory();
+
+      set({
+        edges: addEdge(
+          connection,
+          existingEdges.filter(
+            (edge) =>
+              !conflictingEdges.some((conflict) => conflict.id === edge.id)
+          )
+        ),
+      });
+    },
+
+    beginHistoryTransaction: () => {
+      if (historyTransaction) {
+        historyTransaction.depth += 1;
+        return;
+      }
+
+      historyTransaction = {
+        snapshot: cloneCanvasSnapshot(
+          createCanvasSnapshot(get().nodes, get().edges)
+        ),
+        depth: 1,
+      };
+    },
+
+    commitHistoryTransaction: () => {
+      if (!historyTransaction) {
+        return;
+      }
+
+      historyTransaction.depth -= 1;
+      if (historyTransaction.depth > 0) {
+        return;
+      }
+
+      const initialSnapshot = historyTransaction.snapshot;
+      historyTransaction = null;
+      const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
+
+      if (areCanvasSnapshotsEqual(initialSnapshot, currentSnapshot)) {
+        return;
+      }
+
+      const nextPast = [
+        ...get().history.past,
+        cloneCanvasSnapshot(initialSnapshot),
+      ].slice(-MAX_HISTORY_SIZE);
+      set(getHistoryState(nextPast, []));
+    },
+
+    cancelHistoryTransaction: () => {
+      if (!historyTransaction) {
+        return;
+      }
+
+      const initialSnapshot = historyTransaction.snapshot;
+      historyTransaction = null;
+      applyCanvasSnapshot(initialSnapshot);
+    },
+
+    undo: () => {
+      historyTransaction = null;
+      const { past, future } = get().history;
+      const previousSnapshot = past[past.length - 1];
+
+      if (!previousSnapshot) {
+        return;
+      }
+
+      const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
+      const nextPast = past.slice(0, -1);
+      const nextFuture = [
+        cloneCanvasSnapshot(currentSnapshot),
+        ...future,
+      ].slice(0, MAX_HISTORY_SIZE);
+
+      applyCanvasSnapshot(previousSnapshot);
+      set(getHistoryState(nextPast, nextFuture));
+    },
+
+    redo: () => {
+      historyTransaction = null;
+      const { past, future } = get().history;
+      const nextSnapshot = future[0];
+
+      if (!nextSnapshot) {
+        return;
+      }
+
+      const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
+      const nextPast = [...past, cloneCanvasSnapshot(currentSnapshot)].slice(
+        -MAX_HISTORY_SIZE
+      );
+      const nextFuture = future.slice(1);
+
+      applyCanvasSnapshot(nextSnapshot);
+      set(getHistoryState(nextPast, nextFuture));
     },
 
     updateModuleParameter: (nodeId, paramKey, value) => {
-      set({
-        nodes: get().nodes.map((node) => {
-          if (node.id === nodeId && node.data?.module) {
-            node.data.module.updateParameter(paramKey, value);
-            return { ...node }; // 触发React更新
-          }
-          return node;
-        }),
-      });
+      const node = get().nodes.find((n) => n.id === nodeId);
+      if (node?.data?.module) {
+        const parameter = node.data.module.parameters[paramKey];
+        if (!parameter) {
+          node.data.module.updateParameter(paramKey, value);
+          return;
+        }
+
+        const previousValue = parameter.getValue();
+        if (previousValue === value) {
+          return;
+        }
+
+        recordHistory();
+        node.data.module.updateParameter(paramKey, value);
+      }
     },
 
     // 添加新节点
-    addNode: (type: string, label: string, position: { x: number; y: number }, id?: string) => {
-      const nodeId = id || `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    addNode: (
+      type: string,
+      label: string,
+      position: { x: number; y: number },
+      id?: string
+    ) => {
+      const nodeId = id || createNodeId(get().nodes.map((node) => node.id));
       const newNode = moduleManager.createNode(nodeId, type, label, position);
+
+      recordHistory();
 
       set({
         nodes: [...get().nodes, newNode],
@@ -140,16 +547,58 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
     // 添加新边
     addEdge: (source, target) => {
-      const edge = moduleManager.createEdgeWithBinding(source, target);
-      if (edge) {
-        set({
-          edges: [...get().edges, edge],
-        });
+      if (!moduleManager.canBindModules(source, target)) {
+        return;
       }
+
+      const connection: Connection = {
+        source,
+        target,
+        sourceHandle: null,
+        targetHandle: null,
+      };
+      const existingEdges = get().edges;
+      const conflictingEdges = getSingleInputConflicts(
+        existingEdges,
+        connection
+      );
+
+      conflictingEdges.forEach((edge) => {
+        moduleManager.removeEdgeBinding(edge);
+      });
+
+      const edge = moduleManager.createEdge(source, target);
+      const isBound = moduleManager.bindModules(source, target);
+
+      if (!isBound) {
+        restoreEdgeBindings(conflictingEdges);
+        return;
+      }
+
+      recordHistory();
+
+      set({
+        edges: [
+          ...existingEdges.filter(
+            (existingEdge) =>
+              !conflictingEdges.some(
+                (conflict) => conflict.id === existingEdge.id
+              )
+          ),
+          edge,
+        ],
+      });
     },
 
     // 删除节点及相连的边
     deleteNode: (nodeId) => {
+      const node = get().nodes.find((n) => n.id === nodeId);
+      if (!node) {
+        return;
+      }
+
+      recordHistory();
+
       // 1. 找到与该节点相连的所有边
       const connectedEdges = get().edges.filter(
         (edge) => edge.source === nodeId || edge.target === nodeId
@@ -161,9 +610,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
       });
 
       // 3. 释放节点资源
-      const node = get().nodes.find((n) => n.id === nodeId);
       if (node?.data?.module) {
-        node.data.module.dispose();
+        moduleManager.disposeModule(nodeId);
 
         // 记录模块销毁事件
         moduleInitManager.recordDisposal(nodeId);
@@ -183,6 +631,13 @@ export const useFlowStore = create<FlowState>((set, get) => {
       if (!trimmedLabel) {
         return;
       }
+
+      const node = get().nodes.find((currentNode) => currentNode.id === nodeId);
+      if (!node || node.data?.label === trimmedLabel) {
+        return;
+      }
+
+      recordHistory();
 
       set({
         nodes: get().nodes.map((node) => {
@@ -215,24 +670,49 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
 
     // 从JSON格式导入画布
-    importCanvasFromJson: (jsonString) => {
+    importCanvasFromJson: (jsonString, projectId = 'imported-project') => {
       try {
-        const { nodes, edges } =
-          serializationManager.deserializeCanvasFromJson(jsonString);
+        historyTransaction = null;
+        const parseResult = validateAndParseJson<SerializedCanvas>(
+          jsonString,
+          validateSerializedCanvas
+        );
 
-        // 重置初始化管理器
+        if (!parseResult.success || !parseResult.data) {
+          logger.error('导入画布数据验证失败:', parseResult.error);
+          return false;
+        }
+
+        if (!validateImportableNodes(parseResult.data.nodes)) {
+          return false;
+        }
+
+        // 先清理旧画布的模块实例，再重建新图，避免全局注册表残留
+        moduleManager.disposeAllModules();
         moduleInitManager.reset();
+
+        const { nodes, edges } = serializationManager.deserializeCanvas(
+          parseResult.data
+        );
+
+        if (parseResult.data.nodes.length > 0 && nodes.length === 0) {
+          logger.error('导入画布反序列化后没有生成节点');
+          return false;
+        }
+
+        const bindableEdges = filterBindableEdges(nodes, edges);
 
         // 更新状态
         set({
           nodes,
-          edges,
-          currentProjectId: 'imported-project',
+          edges: bindableEdges,
+          currentProjectId: projectId,
+          ...getHistoryState([], []),
         });
 
         // 初始化连接
         moduleInitManager.onAllModulesReady(() => {
-          moduleManager.setupAllEdgeBindings(edges);
+          moduleManager.setupAllEdgeBindings(bindableEdges);
         });
 
         return true;
@@ -261,22 +741,43 @@ export const useFlowStore = create<FlowState>((set, get) => {
     // 从序列化数据导入模块（可以是JSON字符串或JSON对象）
     importModuleFromData: (data) => {
       try {
-        let moduleInstance;
+        let serializedModule: SerializedModule;
 
         if (typeof data === 'string') {
-          moduleInstance = serializationManager.deserializeModuleFromJson(data);
-        } else {
-          moduleInstance = serializationManager.deserializeModule(
-            data as SerializedModule
+          const parseResult = validateAndParseJson<SerializedModule>(
+            data,
+            validateSerializedModule
           );
+          if (!parseResult.success || !parseResult.data) {
+            logger.error('模块JSON验证失败，无法导入', parseResult.error);
+            return null;
+          }
+          serializedModule = parseResult.data;
+        } else {
+          const validationResult = validateSerializedModule(data);
+          if (!validationResult.success) {
+            logger.error('模块数据验证失败，无法导入', validationResult.error);
+            return null;
+          }
+          serializedModule = data as SerializedModule;
         }
+
+        const nodeId = get().nodes.some(
+          (node) => node.id === serializedModule.id
+        )
+          ? createNodeId(get().nodes.map((node) => node.id))
+          : serializedModule.id;
+
+        const moduleInstance = serializationManager.deserializeModule({
+          ...serializedModule,
+          id: nodeId,
+        });
 
         if (!moduleInstance) {
           return null;
         }
 
         // 创建节点
-        const nodeId = `node_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
         const node: FlowNode = {
           id: nodeId,
           type: 'default',
@@ -289,6 +790,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
         };
 
         // 添加节点到画布
+        recordHistory();
+
         set({
           nodes: [...get().nodes, node],
         });

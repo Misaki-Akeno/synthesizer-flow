@@ -5,6 +5,7 @@
 Synthesizer Flow (合成器流) is a modular synthesizer web application that allows users to build custom audio workflows by connecting different audio modules through a visual node-based interface. Users can create sounds by connecting modules like oscillators, modulators, mixers, and speakers using virtual cables.
 
 **Key Features:**
+
 - Visual node-based editor for audio module connections (powered by React Flow)
 - Real-time audio synthesis using Tone.js and Web Audio API
 - Reactive programming with RxJS for signal flow between modules
@@ -16,6 +17,7 @@ Synthesizer Flow (合成器流) is a modular synthesizer web application that al
 ## Technology Stack
 
 ### Frontend
+
 - **Framework**: Next.js 16 (App Router) with React 19
 - **Language**: TypeScript 5
 - **Styling**: Tailwind CSS 4, Shadcn UI (Radix UI components)
@@ -24,22 +26,26 @@ Synthesizer Flow (合成器流) is a modular synthesizer web application that al
 - **Icons**: Lucide React
 
 ### Audio Engine
+
 - **Audio Processing**: Tone.js + Web Audio API
 - **Reactive Programming**: RxJS for inter-module signal flow
 - **MIDI Support**: WebMidi API
 
 ### AI & LLM Integration
+
 - **Agent Framework**: LangChain with LangGraph
 - **Protocol**: Model Context Protocol (MCP) for LLM-to-App communication
 - **Orchestration**: Vercel AI SDK
 - **Embeddings**: OpenAI Embeddings with pgvector for RAG
 
 ### Backend & Database
+
 - **Database**: PostgreSQL with Drizzle ORM
 - **Authentication**: NextAuth.js (Auth.js) with GitHub OAuth
 - **Vector Search**: pgvector extension for RAG documents
 
 ### Testing & Tooling
+
 - **Testing**: Vitest with jsdom, React Testing Library
 - **Linting**: ESLint with Next.js config
 - **Formatting**: Prettier
@@ -80,7 +86,9 @@ src/
 ├── agent/                 # AI Agent system
 │   ├── core/              # Agent core (Agent.ts, types.ts)
 │   ├── graph/             # LangGraph workflow
-│   ├── tools/             # Agent tool definitions
+│   ├── tools/             # Capability-grouped Agent tools
+│   ├── skills/            # Module guides + runtime schema discovery
+│   ├── evals/             # Golden Set schema, scorer, runner, live bench
 │   ├── prompts/           # System prompts
 │   └── drizzleCheckpointer.ts  # State persistence
 ├── db/                    # Database layer
@@ -135,6 +143,7 @@ npm run drizzle:migrate   # Run pending migrations
 ### Base Classes
 
 **ModuleBase** (`src/core/base/ModuleBase.ts`):
+
 - Abstract base class for all modules
 - Manages parameters, input/output ports using RxJS BehaviorSubject
 - Supports three port types: `NUMBER` (blue), `AUDIO` (green), `ARRAY` (purple)
@@ -142,6 +151,7 @@ npm run drizzle:migrate   # Run pending migrations
 - Parameter types: `number`, `boolean`, `list`, `string`
 
 **AudioModuleBase** (`src/core/base/AudioModuleBase.ts`):
+
 - Extends ModuleBase for audio processing modules
 - Manages Tone.js initialization lifecycle
 - Provides fade/smooth parameter ramps to avoid audio clicks
@@ -156,6 +166,7 @@ npm run drizzle:migrate   # Run pending migrations
 5. Register in `src/core/modules/index.ts` `moduleClassMap`
 
 Example structure:
+
 ```typescript
 export class MyModule extends AudioModuleBase {
   static metadata: ModuleMetadata = {
@@ -178,12 +189,14 @@ export class MyModule extends AudioModuleBase {
 ## Code Style Guidelines
 
 ### TypeScript
+
 - Strict mode enabled
 - Use explicit return types for public methods
 - Prefer interfaces over type aliases for object shapes
 - Use `unknown` over `any` when type is truly unknown
 
 ### Naming Conventions
+
 - Components: PascalCase (e.g., `ModuleButton.tsx`)
 - Hooks: camelCase starting with `use` (e.g., `useContextMenu.ts`)
 - Utilities: camelCase (e.g., `serializationManager.ts`)
@@ -191,16 +204,19 @@ export class MyModule extends AudioModuleBase {
 - Constants: UPPER_SNAKE_CASE for true constants
 
 ### File Organization
+
 - One component per file (generally)
 - Co-locate related components in feature folders
 - Use barrel exports (`index.ts`) for clean imports
 
 ### Comments
+
 - Primary documentation language: **Chinese (中文)**
 - Use JSDoc for public API documentation
 - Inline comments for complex logic
 
 ### ESLint Rules
+
 - `@typescript-eslint/no-unused-vars` configured to ignore `_` prefixed variables
 - Next.js core web vitals and TypeScript rules enforced
 - Prettier integration for consistent formatting
@@ -208,15 +224,18 @@ export class MyModule extends AudioModuleBase {
 ## Testing Strategy
 
 ### Test Setup
+
 - **Framework**: Vitest with jsdom environment
 - **React Testing**: @testing-library/react, @testing-library/jest-dom
 - **Configuration**: `vitest.config.ts`, `vitest.setup.ts`
 
 ### Mocking
+
 - Tone.js is mocked in `vitest.setup.ts` to avoid audio context issues in tests
 - Web Audio API is also mocked
 
 ### Writing Tests
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -230,6 +249,7 @@ describe('Component Name', () => {
 ```
 
 ### Running Tests
+
 ```bash
 # Run all tests
 npm run test
@@ -246,52 +266,86 @@ npx vitest run src/path/to/file.test.ts
 ### Zustand Stores
 
 **useFlowStore** (`src/store/canvas-store.ts`):
+
 - Manages React Flow nodes and edges
 - Handles module creation, deletion, parameter updates
 - Provides serialization/deserialization methods
 
 **useProjectsStore** (`src/store/projects-store.ts`):
+
 - Manages project list and current project
 - Handles saving/loading from database
 
 **useSettingsStore** (`src/store/settings-store.ts`):
+
 - User preferences and AI settings
 - UI theme settings
 
 ## Database Schema
 
 ### Tables
+
 - **users**: User accounts with RBAC roles
 - **accounts**: OAuth provider accounts (GitHub)
 - **sessions**: NextAuth.js sessions
 - **verification_tokens**: Email verification tokens
-- **projects**: Saved synthesizer projects (JSON data)
-- **users_to_projects**: Many-to-many user-project associations
-- **rag_documents**: Vector documents for RAG (with pgvector embedding)
-- **checkpoints**: Agent conversation checkpoints
+- **projects**: Saved synthesizer projects with versioned JSON data, optimistic revisions, extensible metadata, and soft archiving
+- **users_to_projects**: Many-to-many user-project associations with roles, metadata, and audit timestamps
+- **rag_documents**: Namespaced vector documents with source and content-hash tracking
+- **checkpoints**: Versioned Agent conversation checkpoints with extensible metadata
 - **langgraph_checkpoints/langgraph_writes**: LangGraph state persistence
 
 ### Migrations
+
 - Use Drizzle Kit for migration management
 - Migrations stored in `src/db/migrations/`
 - Run `npm run drizzle:generate` after schema changes
+- Prefer evolving `projects.data`, `projects.metadata`, and checkpoint metadata through their schema-version fields before adding feature-specific columns
 
 ## AI Agent System
 
 ### Architecture
+
 - **Agent.ts**: Singleton agent instance managing LLM interactions
-- **LangGraph Workflow**: Multi-step agent workflow with tool calling
-- **Tools**: Type-safe tool definitions for module operations
+- **Provider Registry**: `src/lib/ai/providers.ts` defines supported providers, endpoints, and curated models
+- **Model Factory**: `src/lib/ai/modelFactory.ts` creates provider-specific LangChain models behind `BaseChatModel`
+- **Provider Settings**: Versioned per-provider profiles are stored in the existing `users.settings` JSON field; no dedicated provider table is required
+- **LangGraph Workflow**: Multi-step agent workflow with registry-driven approval routing
+- **Tool Registry**: Tools are grouped into inspection, modules, connections, knowledge, and skills capabilities
+- **Agent Skills**: Module guides combine curated usage advice with parameter and port schemas extracted from real module classes
+- **Agent Evals**: Golden Set benchmarks score tool traces, arguments, client operations, approvals, and response constraints
 - **Checkpointer**: Database-backed state persistence for conversations
 
 ### Tool System
-Tools are defined in `src/agent/tools/definitions.ts` and executed via `ToolExecutor`. Tools allow the AI to:
-- Create/delete modules
-- Update parameters
-- Create connections
-- Query module information
+
+`src/agent/tools/definitions.ts` assembles capability groups under `src/agent/tools/groups/`; `ToolExecutor` runs canvas operations against an in-memory shadow state. The public tool protocol is:
+
+- `canvas_inspect`: inspect the full canvas or one module
+- `module_add`, `module_update`, `module_delete`: module lifecycle and parameters
+- `connection_connect`, `connection_disconnect`: typed port connections
+- `knowledge_search`: RAG-backed conceptual and documentation search
+- `skill_list`, `skill_load`: discover and load module-specific guides
+
+Destructive approval policy belongs to the tool registry, not the LangGraph workflow. Keep legacy tool aliases execution-only so older checkpoints can resume without exposing deprecated names to new models.
+
+### Agent Skills
+
+- Add curated module advice in `src/agent/skills/module-guides.ts`
+- Keep parameter defaults, constraints, and ports in module classes; Skills extract them at load time to avoid schema drift
+- Use lightweight `skill_list` summaries for discovery and `skill_load` for progressive disclosure
+- `module_add` requires the corresponding `module:<type>` Skill to be loaded in the current request
+
+### Agent Evals
+
+- Keep the versioned Golden Set in `src/agent/evals/golden-set.json`
+- Validate all datasets through `parseGoldenSet`; duplicate ids and cases without measurable criteria are invalid
+- Use deterministic criteria in `scorer.ts`; do not add LLM-as-judge behavior to the core quality gate
+- Run live benchmarks with `npm run agent:bench`; configure them through `AGENT_EVAL_*` environment variables
+- The live target uses the production Graph, Prompt, Skills, and Tools, but replaces Drizzle checkpoints with `MemorySaver` and disables database-backed knowledge search
+- Reports are written to `artifacts/agent-evals/latest.json`, which must remain untracked
 
 ### MCP (Model Context Protocol)
+
 - Custom MCP server implementation
 - Allows external LLM clients to interact with the synthesizer
 - Located in `src/app/api/mcp/`
@@ -299,11 +353,13 @@ Tools are defined in `src/agent/tools/definitions.ts` and executed via `ToolExec
 ## RAG System
 
 ### Components
+
 - **markdownSplitter.ts**: Document chunking
 - **openaiEmbedder.ts**: Text embedding generation
 - **vectorStore.ts**: Vector similarity search
 
 ### Usage
+
 1. Ingest documents via `/api/rag/ingest` endpoint
 2. Search via `/api/rag/search` endpoint
 3. Agent automatically queries RAG for audio synthesis knowledge
@@ -318,6 +374,7 @@ Tools are defined in `src/agent/tools/definitions.ts` and executed via `ToolExec
 ## Environment Variables
 
 Required in `.env.local`:
+
 ```
 DATABASE_URL=postgresql://...
 NEXTAUTH_SECRET=your_secret
@@ -341,25 +398,30 @@ RAG_EMBEDDINGS_DIM=1024
 ## Common Issues & Solutions
 
 ### Audio Context
+
 - Browsers require user interaction before audio context can start
 - Tone.js initialization is deferred until first user click
 
 ### Module Initialization
+
 - Audio modules use `ModuleInitManager` to track initialization state
 - Connections are deferred until all modules are initialized
 
 ### Hot Module Replacement
+
 - Some audio modules may not clean up properly during HMR
 - Refresh page if audio behaves unexpectedly during development
 
 ## Deployment
 
 ### Vercel (Recommended)
+
 1. Connect GitHub repository to Vercel
 2. Configure environment variables
 3. Deploy with default Next.js settings
 
 ### Database
+
 - Uses PostgreSQL (compatible with Neon, Supabase, etc.)
 - Run migrations before first deployment
 - Ensure pgvector extension is enabled

@@ -15,6 +15,7 @@ import {
   validateAndParseJson,
 } from '../types/SerializationValidator';
 import { createModuleLogger } from '@/lib/logger';
+import { legacyStepsToMidiClip, normalizeMidiClip } from '@/core/midi/utils';
 
 // 创建日志记录器
 const logger = createModuleLogger('SerializationManager');
@@ -108,7 +109,8 @@ export class SerializationManager {
 
       // 恢复参数值
       if (data.parameters) {
-        Object.entries(data.parameters).forEach(([key, value]) => {
+        const parameters = migrateModuleParameters(data.moduleType, data.parameters);
+        Object.entries(parameters).forEach(([key, value]) => {
           if (moduleInstance.parameters[key]) {
             moduleInstance.updateParameter(key, value);
           } else {
@@ -297,3 +299,27 @@ export class SerializationManager {
 
 // 导出单例
 export const serializationManager = new SerializationManager();
+
+function migrateModuleParameters(
+  moduleType: string,
+  parameters: Record<string, unknown>
+): Record<string, number | boolean | string> {
+  if (moduleType.toLowerCase() !== 'sequencer') {
+    return parameters as Record<string, number | boolean | string>;
+  }
+
+  const migrated = { ...parameters };
+  if (typeof migrated.clip !== 'string' && typeof migrated.sequence === 'string') {
+    try {
+      const legacySteps = JSON.parse(migrated.sequence);
+      if (Array.isArray(legacySteps)) {
+        migrated.clip = JSON.stringify(legacyStepsToMidiClip(legacySteps));
+      }
+    } catch {
+      migrated.clip = JSON.stringify(normalizeMidiClip(undefined));
+    }
+  }
+
+  delete migrated.sequence;
+  return migrated as Record<string, number | boolean | string>;
+}

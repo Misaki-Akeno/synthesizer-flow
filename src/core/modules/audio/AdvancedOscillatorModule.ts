@@ -5,6 +5,8 @@ import {
   ParameterType,
   PortType,
 } from '@/core/base/ModuleBase';
+import { MidiActiveNote, MidiFrame } from '@/core/midi/types';
+import { isMidiFrame, legacyArraysToMidiFrame } from '@/core/midi/utils';
 
 /**
  * 将MIDI音符数转换为频率
@@ -36,7 +38,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
   private maxVoices: number = 8; // 最大声部数
   private mixer: any; // 声部混合器
   private voices: Map<
-    number,
+    string,
     {
       // 管理中的声部
       oscillator: any; // 振荡器
@@ -45,9 +47,13 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       velocityMultiply: any; // 力度乘法器
       envelope: any; // 包络发生器
       active: boolean; // 是否激活
+      noteId: string; // MIDI/MPE音符ID
       note: number; // 当前音符
       triggerTime: number; // 触发时间戳
       velocity: number; // 最近一次触发的力度
+      pitchBend: number;
+      pressure: number;
+      timbre: number;
     }
   > = new Map();
 
@@ -211,6 +217,10 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
     // 定义端口
     const inputPorts = {
+      midi: {
+        type: PortType.MIDI,
+        value: null,
+      },
       notes: {
         type: PortType.ARRAY,
         value: [], // 音符数组
@@ -272,6 +282,12 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * 设置输入端口的绑定
    */
   private setupInputBindings(): void {
+    const midiSubscription = this.inputPorts['midi'].subscribe((value: any) => {
+      if (isMidiFrame(value)) {
+        this.handleMidiFrame(value);
+      }
+    });
+
     // 处理复音音符数组输入
     const notesSubscription = this.inputPorts['notes'].subscribe(
       (value: any) => {
@@ -279,14 +295,13 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
           // 获取对应的力度数组
           const velocities = this.inputPorts['velocities'].getValue();
           // 处理复音输入
-          this.handlePolyphonicInput(
-            value,
-            Array.isArray(velocities) ? velocities : []
+          this.handleMidiFrame(
+            legacyArraysToMidiFrame(value, Array.isArray(velocities) ? velocities : [], this.id)
           );
         } else if (Array.isArray(value) && value.length === 0) {
           // 空数组则释放所有声部
-          this.voices.forEach((_, note) => {
-            this.releaseVoice(note);
+          this.voices.forEach((_, noteId) => {
+            this.releaseVoice(noteId);
           });
         }
       }
@@ -298,7 +313,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         if (Array.isArray(value)) {
           const notes = this.inputPorts['notes'].getValue();
           if (Array.isArray(notes) && notes.length > 0) {
-            this.handlePolyphonicInput(notes, value);
+            this.handleMidiFrame(legacyArraysToMidiFrame(notes, value, this.id));
           }
         }
       }
@@ -322,6 +337,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     );
 
     this.addInternalSubscriptions([
+      midiSubscription,
       notesSubscription,
       velocitiesSubscription,
       detuneInSubscription,
@@ -530,39 +546,24 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * @param notes 音符数组
    * @param velocities 力度数组（可选）
    */
-  private handlePolyphonicInput(
-    notes: number[],
-    velocities: number[] = []
-  ): void {
+  private handleMidiFrame(frame: MidiFrame): void {
     if (!this.mixer || !this.isEnabled()) return;
 
-    // 创建当前活跃音符的集合，用于后续比较
-    const activeNotes = new Set(notes);
+    const activeNoteIds = new Set(frame.activeNotes.map((note) => note.id));
 
-    // 处理释放的音符（当前声部中有，但新音符列表中没有的）
-    this.voices.forEach((voice, noteNumber) => {
-      if (!activeNotes.has(noteNumber) && voice.active) {
-        this.releaseVoice(noteNumber);
+    this.voices.forEach((voice, noteId) => {
+      if (!activeNoteIds.has(noteId) && voice.active) {
+        this.releaseVoice(noteId);
       }
     });
 
-    // 处理新的音符（新音符列表中有，但未激活的）
-    notes.forEach((note, index) => {
-      // 获取对应的力度（如果提供）
-      const velocity = index < velocities.length ? velocities[index] : 0.7;
+    frame.activeNotes.forEach((note) => {
+      const existingVoice = this.voices.get(note.id);
 
-      const existingVoice = this.voices.get(note);
-      
-      // 如果这个音符已经有声部并且是活跃的
       if (existingVoice && existingVoice.active) {
-        // 检查力度是否变化（容差 0.05，约5%的变化）
-        if (Math.abs(existingVoice.velocity - velocity) > 0.05) {
-          // 实时更新力度（触后效果）
-          this.updateVoiceVelocityRealtime(note, velocity);
-        }
+        this.updateVoiceExpression(note);
       } else {
-        // 否则触发新的声部
-        this.triggerVoice(note, velocity);
+        this.triggerVoice(note);
       }
     });
   }
@@ -572,21 +573,23 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * @param note MIDI音符
    * @param velocity 力度值 (0-1)
    */
-  private triggerVoice(note: number, velocity: number): void {
+  private triggerVoice(activeNote: MidiActiveNote): void {
+    const { id: noteId, midi: note, velocity } = activeNote;
     // 如果声部已经存在但没激活，重用它
-    if (this.voices.has(note)) {
-      const voice = this.voices.get(note)!;
+    if (this.voices.has(noteId)) {
+      const voice = this.voices.get(noteId)!;
 
       // 更新音符（频率）
       voice.note = note;
       this.applyParameterRamp(
         voice.oscillator.frequency,
-        midiNoteToFrequency(note),
+        this.getExpressiveFrequency(activeNote),
         0.01
       );
 
       // 触发包络
       this.triggerEnvelope(voice, velocity);
+      this.updateVoiceExpression(activeNote);
 
       this.debugInfo = `重用声部: note=${note}, 频率=${midiNoteToFrequency(note).toFixed(2)}Hz, 力度=${velocity.toFixed(2)}`;
     }
@@ -595,28 +598,28 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       // 检查是否已达到最大声部数
       if (this.voices.size >= this.maxVoices) {
         // 寻找可以替换的声部（当前未激活的）
-        let replacedNote: number | null = null;
+        let replacedNoteId: string | null = null;
         this.voices.forEach((v, n) => {
-          if (!v.active && replacedNote === null) {
-            replacedNote = n;
+          if (!v.active && replacedNoteId === null) {
+            replacedNoteId = n;
           }
         });
 
         // 如果没有未激活的声部，则查找持续时间最长的声部
-        if (replacedNote === null) {
+        if (replacedNoteId === null) {
           // 找出最早触发的声部
           let oldestTime = Infinity;
           this.voices.forEach((v, n) => {
             if (v.triggerTime < oldestTime) {
               oldestTime = v.triggerTime;
-              replacedNote = n;
+              replacedNoteId = n;
             }
           });
         }
 
         // 移除要替换的声部
-        if (replacedNote !== null) {
-          this.disposeVoice(replacedNote);
+        if (replacedNoteId !== null) {
+          this.disposeVoice(replacedNoteId);
         } else {
           console.debug(
             `[${this.moduleType}Module ${this.id}] 已达到最大声部数${this.maxVoices}，无法创建新声部`
@@ -632,7 +635,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
         // 创建新的振荡器
         const osc = new this.Tone.Oscillator({
-          frequency: midiNoteToFrequency(note),
+          frequency: this.getExpressiveFrequency(activeNote),
           detune: totalDetune,
           type: waveform,
         });
@@ -677,13 +680,18 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
           velocityMultiply: velMultiply,
           envelope: env,
           active: true,
+          noteId,
           note: note,
           triggerTime: now,
           velocity,
+          pitchBend: activeNote.pitchBend,
+          pressure: activeNote.pressure,
+          timbre: activeNote.timbre,
         };
 
-        this.voices.set(note, voiceData);
+        this.voices.set(noteId, voiceData);
         this.triggerEnvelope(voiceData, velocity);
+        this.updateVoiceExpression(activeNote);
 
         this.debugInfo = `创建声部: note=${note}, 频率=${midiNoteToFrequency(note).toFixed(2)}Hz, 力度=${velocity.toFixed(2)}`;
       } catch (error) {
@@ -749,8 +757,8 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         voice.triggerTime + (this.attackTime + this.decayTime) * 1000;
       setTimeout(() => {
         if (
-          this.voices.has(voice.note) &&
-          this.voices.get(voice.note)!.active
+          this.voices.has(voice.noteId) &&
+          this.voices.get(voice.noteId)!.active
         ) {
           voice.velocityGain.gain.linearRampToValueAtTime(
             0,
@@ -779,10 +787,10 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * 释放一个声部（不销毁，只停止发声）
    * @param note MIDI音符
    */
-  private releaseVoice(note: number): void {
-    if (!this.voices.has(note)) return;
+  private releaseVoice(noteId: string): void {
+    if (!this.voices.has(noteId)) return;
 
-    const voice = this.voices.get(note)!;
+    const voice = this.voices.get(noteId)!;
 
     // 应用释放渐变
     if (voice.envelope) {
@@ -800,10 +808,10 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * @param note MIDI音符
    * @param velocity 新的力度值 (0-1)
    */
-  private updateVoiceVelocity(note: number, velocity: number): void {
-    if (!this.voices.has(note)) return;
+  private updateVoiceVelocity(noteId: string, velocity: number): void {
+    if (!this.voices.has(noteId)) return;
 
-    const voice = this.voices.get(note)!;
+    const voice = this.voices.get(noteId)!;
 
     // 重触发包络以更新力度
     this.triggerEnvelope(voice, velocity);
@@ -814,10 +822,10 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * @param note MIDI音符
    * @param velocity 新的力度值 (0-1)
    */
-  private updateVoiceVelocityRealtime(note: number, velocity: number): void {
-    if (!this.voices.has(note)) return;
+  private updateVoiceVelocityRealtime(noteId: string, velocity: number): void {
+    if (!this.voices.has(noteId)) return;
 
-    const voice = this.voices.get(note)!;
+    const voice = this.voices.get(noteId)!;
     
     // 更新存储的力度值
     voice.velocity = velocity;
@@ -847,18 +855,44 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         voice.velocitySignal.linearRampToValueAtTime(velocity, now + rampTime);
       }
       
-      this.debugInfo = `实时更新力度: note=${note}, velocity=${velocity.toFixed(2)}`;
+      this.debugInfo = `实时更新力度: note=${voice.note}, velocity=${velocity.toFixed(2)}`;
     }
+  }
+
+  private updateVoiceExpression(activeNote: MidiActiveNote): void {
+    const voice = this.voices.get(activeNote.id);
+    if (!voice) return;
+
+    const expressionVelocity = Math.max(activeNote.velocity, activeNote.pressure);
+    if (Math.abs(voice.velocity - expressionVelocity) > 0.02) {
+      this.updateVoiceVelocityRealtime(activeNote.id, expressionVelocity);
+    }
+
+    voice.pitchBend = activeNote.pitchBend;
+    voice.pressure = activeNote.pressure;
+    voice.timbre = activeNote.timbre;
+
+    if (voice.oscillator?.frequency) {
+      this.applyParameterRamp(
+        voice.oscillator.frequency,
+        this.getExpressiveFrequency(activeNote),
+        0.01
+      );
+    }
+  }
+
+  private getExpressiveFrequency(activeNote: MidiActiveNote): number {
+    return midiNoteToFrequency(activeNote.midi + activeNote.pitchBend * 48);
   }
 
   /**
    * 销毁一个声部并释放资源
    * @param note MIDI音符
    */
-  private disposeVoice(note: number): void {
-    if (!this.voices.has(note)) return;
+  private disposeVoice(noteId: string): void {
+    if (!this.voices.has(noteId)) return;
 
-    const voice = this.voices.get(note)!;
+    const voice = this.voices.get(noteId)!;
 
     try {
       // 停止并释放资源
@@ -889,9 +923,9 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       }
 
       // 从映射中删除
-      this.voices.delete(note);
+      this.voices.delete(noteId);
 
-      this.debugInfo = `销毁声部: note=${note}`;
+      this.debugInfo = `销毁声部: note=${voice.note}`;
       console.debug(`[${this.moduleType}Module ${this.id}] ${this.debugInfo}`);
     } catch (error) {
       console.error(
@@ -914,8 +948,8 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         this.applyParameterRamp(this.gainNode.gain, 0, 0.05);
 
         // 释放所有声部
-        this.voices.forEach((_, note) => {
-          this.releaseVoice(note);
+        this.voices.forEach((_, noteId) => {
+          this.releaseVoice(noteId);
         });
       }
     }

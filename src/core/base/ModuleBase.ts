@@ -6,6 +6,7 @@ export enum PortType {
   NUMBER = 'number',
   AUDIO = 'audio',
   ARRAY = 'array', // 新增：用于传输数组数据（如复音MIDI数据）
+  MIDI = 'midi', // MIDI/MPE事件帧
 }
 
 // 参数类型枚举
@@ -55,6 +56,7 @@ export const PORT_COLORS = {
   [PortType.NUMBER]: '#1D4ED8', // 数字端口为蓝色
   [PortType.AUDIO]: '#047857', // 音频端口为绿色
   [PortType.ARRAY]: '#9333EA', // 数组端口为紫色
+  [PortType.MIDI]: '#D97706', // MIDI端口为琥珀色
 };
 
 // 模块抽象类
@@ -109,6 +111,9 @@ export abstract class ModuleBase {
 
   // 存储内部订阅关系
   private internalSubscriptions: Subscription[] = [];
+
+  // 生命周期终态。异步初始化完成时可据此避免“已销毁实例复活”。
+  private disposed = false;
 
   // 存储数组类型的多个输入源的值
   // Map<inputPortName, Map<bindingKey, any[]>>
@@ -318,8 +323,7 @@ export abstract class ModuleBase {
         }
       });
       this.internalSubscriptions.push(subscription);
-    }
- else {
+    } else {
       console.warn(
         `Port type ${portType} not compatible with parameter type ${paramType}`
       );
@@ -403,7 +407,10 @@ export abstract class ModuleBase {
       } else if (value !== '') {
         console.warn(`Invalid option: ${value} for parameter ${paramKey}`);
       }
-    } else if (meta.type === ParameterType.STRING && typeof value === 'string') {
+    } else if (
+      meta.type === ParameterType.STRING &&
+      typeof value === 'string'
+    ) {
       // 字符串类型，直接更新
       this.parameters[paramKey].next(value);
     } else {
@@ -623,8 +630,8 @@ export abstract class ModuleBase {
             sourceModuleId,
             sourcePortName
           );
-          const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
-            key.startsWith(prefix)
+          const hasRemainingBindings = Object.keys(this.subscriptions).some(
+            (key) => key.startsWith(prefix)
           );
           if (!hasRemainingBindings) {
             this.inputPorts[inputPortName].next(null);
@@ -651,8 +658,8 @@ export abstract class ModuleBase {
         if (found) {
           if (isAudioPort) {
             this.handleAudioDisconnect(inputPortName, sourceModuleId);
-            const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
-              key.startsWith(prefix)
+            const hasRemainingBindings = Object.keys(this.subscriptions).some(
+              (key) => key.startsWith(prefix)
             );
             if (!hasRemainingBindings) {
               this.inputPorts[inputPortName].next(null);
@@ -762,7 +769,15 @@ export abstract class ModuleBase {
     }
 
     const connections = this.outputConnections.get(outputPortName);
-    connections?.push({ targetModule, targetPort: targetPortName });
+    const alreadyConnected = connections?.some(
+      (conn) =>
+        conn.targetModule.id === targetModule.id &&
+        conn.targetPort === targetPortName
+    );
+
+    if (!alreadyConnected) {
+      connections?.push({ targetModule, targetPort: targetPortName });
+    }
   }
 
   /**
@@ -790,14 +805,16 @@ export abstract class ModuleBase {
     // 更新输出连接记录
     const connections = this.outputConnections.get(outputPortName);
     if (connections) {
-      const index = connections.findIndex(
+      const remainingConnections = connections.filter(
         (conn) =>
-          conn.targetModule.id === targetModule.id &&
-          conn.targetPort === targetPortName
+          conn.targetModule.id !== targetModule.id ||
+          conn.targetPort !== targetPortName
       );
 
-      if (index !== -1) {
-        connections.splice(index, 1);
+      if (remainingConnections.length > 0) {
+        this.outputConnections.set(outputPortName, remainingConnections);
+      } else {
+        this.outputConnections.delete(outputPortName);
       }
     }
   }
@@ -849,10 +866,22 @@ export abstract class ModuleBase {
   }
 
   /**
+   * 返回模块是否已经进入销毁状态。
+   */
+  public isDisposed(): boolean {
+    return this.disposed;
+  }
+
+  /**
    * 释放模块资源
    * 取消所有订阅并清理资源
    */
   public dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+
     // 取消所有外部订阅
     Object.values(this.subscriptions).forEach((subscription) => {
       subscription.unsubscribe();

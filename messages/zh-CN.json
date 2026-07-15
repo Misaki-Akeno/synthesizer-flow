@@ -1,60 +1,283 @@
 {
-    "Playground": {
-        "title": "合成器游乐场",
-        "description": "用于构建模块化合成器的游乐场"
+  "Playground": {
+    "title": "合成器游乐场",
+    "description": "用于构建模块化合成器的游乐场"
+  },
+  "Settings": {
+    "tabs": {
+      "general": "通用与画布",
+      "ai": "AI 模型"
     },
-    "Settings": {
-        "tabs": {
-            "general": "通用与画布",
-            "ai": "AI 模型"
-        },
-        "general": {
-            "title": "通用与画布设置",
-            "description": "调整应用显示、语言和画布交互的相关设置",
-            "darkMode": {
-                "label": "暗黑模式",
-                "description": "启用应用的暗黑模式主题"
-            },
-            "language": {
-                "label": "语言",
-                "description": "选择应用的显示语言",
-                "en-US": "English",
-                "zh-CN": "简体中文"
-            },
-            "autoSave": {
-                "label": "自动保存",
-                "description": "自动保存画布状态的更改"
-            },
-            "snapToGrid": {
-                "label": "网格对齐",
-                "description": "将模块对齐到网格"
-            },
-            "gridSize": "网格大小: {size}px"
-        },
-        "ai": {
-            "title": "AI 模型设置",
-            "description": "配置AI模型连接以增强应用功能",
-            "modelName": {
-                "label": "模型名称",
-                "placeholder": "例如: gpt-4, claude-3",
-                "description": "指定要使用的AI模型名称"
-            },
-            "apiKey": {
-                "label": "API 密钥",
-                "placeholder": "输入您的API密钥",
-                "errorEmpty": "API密钥不能为空",
-                "description": "您的API密钥将安全地存储在本地"
-            },
-            "apiEndpoint": {
-                "label": "API 端点（可选）",
-                "placeholder": "https://api.example.com/v1",
-                "description": "如果您使用自定义API端点，请在此处指定"
-            }
-        },
-        "toast": {
-            "generalUpdated": "设置已更新",
-            "aiUpdated": "AI设置已更新",
-            "languageUpdated": "语言已切换"
-        }
+    "general": {
+      "title": "通用与画布设置",
+      "description": "调整应用显示、语言和画布交互的相关设置",
+      "darkMode": {
+        "label": "暗黑模式",
+        "description": "启用应用的暗黑模式主题"
+      },
+      "language": {
+        "label": "语言",
+        "description": "选择应用的显示语言",
+        "en-US": "English",
+        "zh-CN": "简体中文"
+      },
+      "autoSave": {
+        "label": "自动保存",
+        "description": "自动保存画布状态的更改"
+      },
+      "snapToGrid": {
+        "label": "网格对齐",
+        "description": "将模块对齐到网格"
+      },
+      "gridSize": "网格大小: {size}px"
+    },
+    "ai": {
+      "eyebrow": "Agent 信号路由",
+      "title": "模型提供商",
+      "description": "选择模型服务并保存独立连接配置。Agent 运行时会自动适配各提供商。",
+      "provider": {
+        "label": "选择提供商",
+        "description": "每个提供商会独立保留模型和密钥配置",
+        "loading": "正在读取配置"
+      },
+      "providers": {
+        "modelscope": "开源模型免费推理",
+        "deepseek": "推理与通用对话",
+        "openai": "原生 OpenAI 模型",
+        "anthropic": "Claude 原生接口",
+        "google": "Gemini 原生接口",
+        "openrouter": "聚合模型路由",
+        "custom": "自定义兼容端点"
+      },
+      "profiles": {
+        "balanced": "均衡",
+        "fast": "快速",
+        "capable": "高性能"
+      },
+      "status": {
+        "connected": "密钥已连接",
+        "notConnected": "等待连接"
+      },
+      "modelName": {
+        "label": "模型名称",
+        "placeholder": "输入模型 ID",
+        "description": "可选择推荐模型，也可以输入提供商支持的其他模型 ID",
+        "custom": "使用其他模型…"
+      },
+      "apiKey": {
+        "label": "API 密钥",
+        "placeholder": "输入您的API密钥",
+        "placeholderSaved": "已保存密钥；留空表示继续使用已保存密钥",
+        "description": "您的API密钥会加密保存在服务端",
+        "descriptionSaved": "服务端密钥已就绪；输入新密钥可以替换它",
+        "getKey": "获取 API 密钥",
+        "remove": "移除密钥"
+      },
+      "apiEndpoint": {
+        "label": "兼容 API 端点",
+        "placeholder": "https://api.example.com/v1",
+        "description": "填写支持 OpenAI Chat Completions 兼容格式的服务地址"
+      },
+      "securityNote": "密钥使用 AES-GCM 加密，仅在服务端解密调用",
+      "save": "保存 AI 设置",
+      "saving": "保存中..."
+    },
+    "toast": {
+      "generalUpdated": "设置已更新",
+      "aiUpdated": "AI设置已更新",
+      "aiKeyRemoved": "API 密钥已移除",
+      "aiSaveFailed": "AI设置保存失败",
+      "languageUpdated": "语言已切换"
     }
+  },
+  "Workbench": {
+    "navigation": {
+      "projects": "项目管理器",
+      "modules": "模块浏览器",
+      "devTools": "开发工具",
+      "settings": "设置",
+      "help": "帮助"
+    },
+    "header": {
+      "file": "文件",
+      "edit": "编辑",
+      "view": "视图",
+      "help": "帮助",
+      "menu": "菜单",
+      "newProject": "新建项目",
+      "openProject": "打开项目",
+      "save": "保存",
+      "saveAs": "另存为",
+      "exit": "退出",
+      "undo": "撤销",
+      "redo": "重做",
+      "cut": "剪切",
+      "copy": "复制",
+      "paste": "粘贴",
+      "selectAll": "选择全部",
+      "fitView": "缩放适配",
+      "resetZoom": "重置缩放",
+      "properties": "属性面板",
+      "aiPanel": "AI 助手面板",
+      "darkMode": "深色模式",
+      "documentation": "文档",
+      "tutorial": "教程",
+      "shortcuts": "快捷键",
+      "repository": "GitHub 仓库",
+      "about": "关于",
+      "settings": "设置",
+      "comingSoon": "功能开发中",
+      "comingSoonDescription": "此功能正在开发中，敬请期待！",
+      "close": "关闭",
+      "descriptions": {
+        "newProject": "创建一个新的合成器项目",
+        "openProject": "打开已有的合成器项目",
+        "save": "保存当前项目",
+        "saveAs": "将当前项目另存为新文件",
+        "exit": "退出应用程序",
+        "cut": "将选中内容剪切到剪贴板",
+        "copy": "将选中内容复制到剪贴板",
+        "paste": "从剪贴板粘贴内容",
+        "selectAll": "选择所有模块",
+        "fitView": "缩放视图以适应所有模块",
+        "resetZoom": "将缩放级别重置为默认值",
+        "darkMode": "切换深色模式",
+        "documentation": "查看使用文档",
+        "tutorial": "查看入门教程",
+        "shortcuts": "查看快捷键列表",
+        "about": "关于 Synthesizer Flow",
+        "settings": "应用程序设置"
+      }
+    },
+    "welcome": {
+      "title": "欢迎来到 Synthesizer Flow",
+      "description": "开始你的模块化音频合成之旅。请选择一个操作：",
+      "newProject": "新建项目",
+      "newProjectDescription": "从空白画布开始创作",
+      "loadExample": "加载示例项目",
+      "loadExampleDescription": "体验预设的声音"
+    },
+    "search": {
+      "placeholder": "搜索模块...",
+      "submit": "搜索模块"
+    },
+    "user": {
+      "user": "用户",
+      "menuFor": "用户菜单：{name}",
+      "loadingStatus": "正在加载用户状态",
+      "openLoginMenu": "打开登录菜单",
+      "signedInAs": "已登录为 {name}",
+      "loading": "加载中...",
+      "clickToLogin": "点击登录",
+      "authenticating": "身份验证中...",
+      "upgrade": "升级到专业版",
+      "account": "账户",
+      "billing": "结算",
+      "notifications": "通知",
+      "logout": "退出登录",
+      "signedOut": "未登录",
+      "signInToSave": "登录以保存您的项目",
+      "login": "登录",
+      "preparingLogin": "正在准备登录",
+      "preparingLoginDescription": "请稍候，正在跳转到登录页面...",
+      "loginFailed": "登录失败",
+      "loginFailedDescription": "无法连接到认证服务，请稍后再试。",
+      "loggingOut": "正在退出",
+      "loggingOutDescription": "正在处理退出登录...",
+      "loggedOut": "已退出登录",
+      "loggedOutDescription": "您已成功退出登录。",
+      "logoutFailed": "退出失败",
+      "logoutFailedDescription": "退出登录时发生错误，请重试。"
+    },
+    "panels": {
+      "properties": "属性",
+      "chat": "AI 助手",
+      "midiEditor": "MIDI 编辑器",
+      "close": "关闭面板",
+      "maximize": "最大化面板",
+      "restore": "还原面板"
+    },
+    "about": {
+      "title": "关于 Synthesizer Flow",
+      "description": "一个基于 Web 的模块化音频合成器",
+      "body": "通过可视化连接不同音频模块来构建和演奏声音。",
+      "source": "项目源码",
+      "repository": "GitHub 仓库",
+      "close": "关闭",
+      "visit": "访问 GitHub"
+    },
+    "settings": {
+      "title": "设置",
+      "description": "Synthesizer Flow 应用设置"
+    },
+    "properties": {
+      "empty": "请选择一个模块以查看属性。",
+      "name": "模块名称",
+      "type": "类型：{type}",
+      "noParameters": "当前模块没有可配置的参数。",
+      "namePlaceholder": "输入模块显示名"
+    },
+    "midi": {
+      "selectModule": "请选择一个 MIDI Clip 模块进行编辑。",
+      "summary": "{notes} 个音符 · {bars} 小节 · {numerator}/{denominator}",
+      "select": "选择",
+      "draw": "绘制",
+      "erase": "擦除",
+      "stop": "停止",
+      "play": "播放",
+      "bpm": "BPM",
+      "bars": "小节",
+      "quantize": "量化",
+      "duplicate": "复制",
+      "delete": "删除",
+      "key": "音高",
+      "mpeLanes": "MPE 表达通道",
+      "mpeDescription": "力度、压力、音色和弯音",
+      "inspector": "检查器",
+      "noNoteSelected": "未选择音符",
+      "pitch": "音高",
+      "start": "起始",
+      "duration": "时值",
+      "channel": "通道",
+      "auto": "自动",
+      "velocity": "力度",
+      "pressure": "压力",
+      "timbre": "音色",
+      "pitchBend": "弯音",
+      "activeLane": "当前通道：{lane}"
+    },
+    "chat": {
+      "start": "开始与 AI 助手聊天吧！可以问问我画布上有什么模块。",
+      "configureApi": "请先在设置中配置 AI 模型的 API 密钥",
+      "settingsPath": "进入设置 > AI 模型设置",
+      "unknownError": "未知错误",
+      "requestError": "抱歉，请求处理过程中出现了错误：{message}",
+      "requiresApproval": "需要你的确认才能继续。",
+      "approvalRequired": "需要确认",
+      "reject": "拒绝",
+      "approve": "批准",
+      "approved": "操作已批准",
+      "rejected": "操作已拒绝",
+      "thinking": "AI 思考中...",
+      "newConversation": "新建对话",
+      "history": "历史",
+      "archiveTitle": "对话存档",
+      "saveCurrent": "保存当前状态",
+      "inputPlaceholder": "输入消息...",
+      "configurePlaceholder": "请先在设置中配置 API 密钥",
+      "autoSaving": "正在自动保存...",
+      "autoSaved": "已自动保存上一次对话",
+      "autoSaveFailed": "自动保存失败",
+      "loginRequired": "请先登录",
+      "checkpointSaved": "存档已保存",
+      "checkpointSaveFailed": "保存失败",
+      "checkpointSaveError": "保存出错",
+      "invalidCheckpoint": "存档画布数据无效",
+      "restoreCanvasFailed": "恢复画布失败",
+      "checkpointLoaded": "存档已加载",
+      "checkpointRestoreError": "恢复出错",
+      "toolCalls": "工具调用 ({count})",
+      "result": "结果"
+    }
+  }
 }

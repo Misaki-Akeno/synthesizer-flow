@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useReactFlow, ReactFlowProvider } from '@xyflow/react';
 import { useFlowStore } from '@/store/canvas-store';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
@@ -18,10 +18,12 @@ import {
   Sliders,
   Music,
   Speaker,
-  PanelRight,
+  PanelLeftClose,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { moduleMetadataMap } from '@/core/modules/index';
+import { useSearchParams } from 'next/navigation';
+import { WorkbenchPanelHeader } from '@/components/layout/WorkbenchPanel';
 
 // 模块类型定义
 export interface ModuleTypeInfo {
@@ -87,9 +89,16 @@ export function ModuleBrowser({ onClose }: ModuleBrowserProps) {
 
 // 内部组件，使用 ReactFlow 上下文
 function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const searchParams = useSearchParams();
+  const moduleSearchParam = searchParams.get('moduleSearch') ?? '';
+  const [searchQuery, setSearchQuery] = useState(moduleSearchParam);
   const reactFlowInstance = useReactFlow();
   const addNode = useFlowStore((state) => state.addNode);
+  const nodeCount = useFlowStore((state) => state.nodes.length);
+
+  useEffect(() => {
+    setSearchQuery(moduleSearchParam);
+  }, [moduleSearchParam]);
 
   // 筛选模块
   const filterModules = (modules: ModuleTypeInfo[]) => {
@@ -111,9 +120,10 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
     const centerX = window.innerWidth / 2 / zoom - x / zoom;
     const centerY = window.innerHeight / 2 / zoom - y / zoom;
 
-    // 添加到画布中心位置附近（有一定随机偏移）
-    const offsetX = (Math.random() - 0.5) * 200;
-    const offsetY = (Math.random() - 0.5) * 200;
+    // 添加到画布中心位置附近（确定性偏移，避免新模块完全重叠）
+    const offsetStep = (nodeCount % 7) - 3;
+    const offsetX = offsetStep * 32;
+    const offsetY = Math.floor(nodeCount / 7) * 32;
 
     // 添加节点
     addNode(moduleType, moduleLabel, {
@@ -139,19 +149,21 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
   };
 
   return (
-    <div className="w-full h-full flex flex-col">
-      {/* 标题栏 */}
-      <div className="flex items-center justify-between p-2 border-b">
-        <h2 className="text-sm font-medium pl-1">模块浏览器</h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          className="h-7 w-7"
-        >
-          <PanelRight size={15} />
-        </Button>
-      </div>
+    <div className="flex h-full min-h-0 w-full flex-col bg-background text-foreground">
+      <WorkbenchPanelHeader
+        title="模块浏览器"
+        actions={
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            aria-label="Close module browser"
+          >
+            <PanelLeftClose size={15} />
+          </Button>
+        }
+      />
 
       {/* 搜索栏 */}
       <div className="p-2 border-b">
@@ -167,7 +179,7 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
       </div>
 
       {/* 模块列表 */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="p-2">
           <Accordion
             type="multiple"
@@ -185,10 +197,12 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
                   </AccordionTrigger>
                   <AccordionContent className="pt-1 pb-3">
                     {filteredModules.map((module) => (
-                      <div
+                      <button
                         key={module.type}
+                        type="button"
+                        aria-label={`添加模块：${module.label}`}
                         className={cn(
-                          'flex items-center text-xs py-1.5 px-2 rounded-md hover:bg-accent cursor-pointer'
+                          'flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent'
                         )}
                         onClick={() =>
                           handleModuleAdd(module.type, module.label)
@@ -205,7 +219,7 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
                             {module.description}
                           </div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </AccordionContent>
                 </AccordionItem>

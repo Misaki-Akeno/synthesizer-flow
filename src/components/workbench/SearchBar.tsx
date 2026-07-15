@@ -1,26 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/shadcn/input';
 import { Button } from '@/components/ui/shadcn/button';
 import { cn } from '@/lib/utils';
 import { usePersistStore } from '@/store/projects-store';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 
 interface SearchBarProps {
   className?: string;
 }
 
 export function SearchBar({ className }: SearchBarProps) {
+  const t = useTranslations('Workbench.search');
   const [isSearchActive, setIsSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { currentProject } = usePersistStore();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const currentProjectName = usePersistStore(
+    (state) => state.currentProject?.name
+  );
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   // 激活搜索
   const activateSearch = () => {
     setIsSearchActive(true);
     setTimeout(() => {
-      document.getElementById('search-input')?.focus();
+      searchInputRef.current?.focus();
     }, 100);
   };
 
@@ -34,15 +42,22 @@ export function SearchBar({ className }: SearchBarProps) {
   // 处理搜索
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    // 执行搜索逻辑
-    console.log('Searching for:', searchQuery);
+    const query = searchQuery.trim();
+    if (!query) {
+      return;
+    }
+
+    const params = new URLSearchParams(searchParams);
+    params.set('panel', 'module-browser');
+    params.set('moduleSearch', query);
+    router.replace(`?${params.toString()}`);
   };
 
   // 处理按键事件
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setSearchQuery('');
-      deactivateSearch();
+      setIsSearchActive(false);
     }
   };
 
@@ -59,11 +74,13 @@ export function SearchBar({ className }: SearchBarProps) {
         <form onSubmit={handleSearch} className="w-full relative">
           <Input
             id="search-input"
+            ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onBlur={deactivateSearch}
             onKeyDown={handleKeyDown}
-            placeholder="搜索模块..."
+            placeholder={t('placeholder')}
+            aria-label={t('placeholder')}
             className="pl-4 h-8 w-full pr-10"
           />
           {searchQuery && (
@@ -72,6 +89,7 @@ export function SearchBar({ className }: SearchBarProps) {
               size="sm"
               variant="ghost"
               className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 px-0"
+              aria-label={t('submit')}
             >
               <Search className="h-3.5 w-3.5" />
             </Button>
@@ -85,7 +103,7 @@ export function SearchBar({ className }: SearchBarProps) {
         >
           <Search className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium truncate max-w-[200px] text-muted-foreground">
-            {currentProject?.name || 'Synthesizer Flow'}
+            {currentProjectName || 'Synthesizer Flow'}
           </span>
         </div>
       )}

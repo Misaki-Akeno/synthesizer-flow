@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2026-06-30
+
+### Security
+
+- **Dependency Audit**: Applied non-breaking `npm audit fix` updates and targeted npm overrides for vulnerable transitive dependencies, resolving current Next.js, Vitest/Vite, Hono, `form-data`, `fast-uri`, `ws`, `esbuild`, and `uuid` advisories. `npm audit --audit-level=moderate` now reports 0 vulnerabilities.
+
+### Reliability
+
+- **Project Persistence**: Hardened project Server Actions with authenticated access checks, owner/editor write enforcement, owner-only delete behavior, preset handling, project ID validation, and serialized canvas validation before writes.
+- **Canvas Import**: Added safer node ID generation and import validation so unknown module types, invalid edges, and duplicate single-value input bindings do not corrupt the active module graph.
+- **Agent Checkpoints**: Moved checkpoint ownership checks fully server-side, validated restorable messages and graph state before saving, and fixed checkpoint title/delete/update flows to use the authenticated session.
+- **LangGraph Persistence**: Updated pending write persistence to upsert repeated writes instead of silently ignoring newer values for the same checkpoint/task/index tuple.
+
+### AI & RAG
+
+- **Server AI Settings**: Added authenticated AI settings actions and server-side fallback handling for model configuration, including support for server-held API keys without exposing them to the client.
+- **Chat Restore**: Added checkpoint restore helpers that convert saved graph snapshots back into importable canvas data and restore chat history safely.
+- **RAG APIs**: Added stricter request parsing, malformed JSON handling, `topK` normalization, vector dimension safeguards, and route-level tests for ingest/search behavior.
+
+### UI & Performance
+
+- **Workbench Rendering**: Reduced unnecessary React Flow and chat panel re-renders through narrower store subscriptions and more predictable client operation handling.
+- **Audio Controls**: Improved resilience across oscilloscope, keyboard, sequencer, and XY pad controls during runtime updates.
+- **Connection Validation**: Added reusable connection validation helpers and tests to keep UI connection feedback aligned with module graph constraints.
+
+### Testing
+
+- Added focused Vitest coverage across project actions, checkpoint actions, agent actions/tools, Drizzle adapter/checkpointer, RAG utilities, vector store behavior, canvas/project stores, persistence storage, workbench components, and chat checkpoint helpers.
+
+## [0.9.3] - 2026-05-07
+
+### Security
+
+- **Dependency Audit**: Resolved all 3 HIGH severity vulnerabilities (down from 19 total to 12).
+  - `next` → `^16.2.4` (was `^16.2.1`): fixes HIGH CVE via `postcss`.
+  - `drizzle-orm` → `^0.45.2` (was `^0.42.0`): fixes HIGH CVE ([GHSA-gpj5-g38j-94v9](https://github.com/advisories/GHSA-gpj5-g38j-94v9)).
+  - `next-intl` → `^4.11.0` (was `^4.8.3`): fixes MODERATE open redirect ([GHSA-8f24-v5vv-gm5j](https://github.com/advisories/GHSA-8f24-v5vv-gm5j), requires `>=4.9.1`).
+  - `drizzle-kit` → `^0.31.10` (was `^0.31.9`): patch update.
+  - Added `overrides` to pin transitive dependencies: `vite ^7.3.2` (fixes 3 HIGH CVEs), `langsmith ^0.6.1` (fixes MODERATE prototype pollution and token leak), `postcss ^8.5.10` (fixes MODERATE regex ReDoS).
+
+### Performance
+
+- **LFO / Audio Parameter Stream**: Throttled output port subscriptions in `useModuleSubscription` to `~10 fps` (100 ms) for the UI layer. Audio processing subscriptions bypass this hook and remain at full rate, so modulation quality is unaffected. Eliminates ~60 redundant React re-renders per second per active LFO node.
+- **Canvas Store**: Removed redundant `nodes.map` + `set()` call from `updateModuleParameter`. Parameter values propagate to UI via RxJS `BehaviorSubject` directly, making the Zustand state update unnecessary. Eliminates cascading re-renders during slider drag.
+- **ChatInterface**: Switched from `useFlowStore()` (full-store subscription) to `useShallow` selector, preventing re-renders caused by unrelated node state changes.
+
+### Bug Fixes
+
+- **Stream Error Recovery**: Fixed a UI regression where a streaming error mid-response would leave an empty assistant message bubble stranded alongside the error message. The error now replaces the placeholder in-place.
+- **Server Action HOF**: Removed `'use server'` directive from `withAuth.ts` (it is a Higher-Order Function, not a Server Action itself), fixing a Turbopack build failure requiring all module exports to be `async`.
+- **Agent Permissions**: Fixed `RAG_SEARCH` API endpoint incorrectly using `isAdmin()` instead of `hasPermission(session, PERMISSIONS.RAG_SEARCH)`, which blocked regular users from accessing the feature despite the RBAC configuration granting them access.
+- **Drizzle `and()` Bug**: Fixed `deleteCheckpoint` and `updateCheckpointTitle` in `checkpoint-actions.ts` using JS `&&` instead of drizzle-orm's `and()`, causing the `id` filter to be silently ignored (only `userId` was applied).
+- **Database Indexes**: Added missing indexes (`checkpoints.user_id`, `checkpoints.created_at`, `projects.updated_at`, `projects.is_preset`) and a `CHECK` constraint on `users_to_projects.role`.
+
+### Developer Experience
+
+- **`withAuth` HOF**: Introduced `src/lib/auth/withAuth.ts` to eliminate repeated auth-check boilerplate across Server Actions.
+- **`UNSAFE_TOOL_NAMES`**: Exported constant from `definitions.ts` as the single source of truth; `workflow.ts` now imports it instead of redefining the array.
+- **`package.json`**: Added `engines.node: ">=18.17.0"` to document the minimum Node.js requirement.
+
 ## [0.9.2] - 2026-03-30
 
 ### Architecture & Framework Upgrade

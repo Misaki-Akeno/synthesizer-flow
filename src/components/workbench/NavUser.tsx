@@ -38,11 +38,13 @@ import {
 } from '@/components/ui/shadcn/tooltip';
 // 导入 logger 系统
 import { createModuleLogger } from '@/lib/logger';
+import { useTranslations } from 'next-intl';
 
 // 创建 AuthUser 专用 logger
 const logger = createModuleLogger('AuthUser');
 
 export function NavUser() {
+  const t = useTranslations('Workbench.user');
   const { isMobile } = useSidebar();
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -67,8 +69,8 @@ export function NavUser() {
       logger.info('用户尝试登录', { provider: 'github' });
 
       // 使用 toast 提示用户
-      toast.loading('正在准备登录', {
-        description: '请稍候，正在跳转到登录页面...',
+      toast.loading(t('preparingLogin'), {
+        description: t('preparingLoginDescription'),
       });
 
       // 尝试登录
@@ -81,8 +83,8 @@ export function NavUser() {
       logger.error('登录过程中发生错误', error);
 
       // 使用 toast 提示用户
-      toast.error('登录失败', {
-        description: '无法连接到认证服务，请稍后再试。',
+      toast.error(t('loginFailed'), {
+        description: t('loginFailedDescription'),
       });
     } finally {
       setIsActionLoading(false);
@@ -99,8 +101,8 @@ export function NavUser() {
       logger.info('用户尝试登出');
 
       // 使用 toast 显示加载状态
-      const toastId = toast.loading('正在退出', {
-        description: '正在处理退出登录...',
+      const toastId = toast.loading(t('loggingOut'), {
+        description: t('loggingOutDescription'),
       });
 
       // 尝试登出
@@ -113,17 +115,17 @@ export function NavUser() {
       router.push('/');
 
       // 成功后更新 toast
-      toast.success('已退出登录', {
+      toast.success(t('loggedOut'), {
         id: toastId,
-        description: '您已成功退出登录。',
+        description: t('loggedOutDescription'),
       });
     } catch (error) {
       // 记录错误
       logger.error('登出过程中发生错误', error);
 
       // 错误 toast
-      toast.error('退出失败', {
-        description: '退出登录时发生错误，请重试。',
+      toast.error(t('logoutFailed'), {
+        description: t('logoutFailedDescription'),
       });
     } finally {
       setIsActionLoading(false);
@@ -142,7 +144,7 @@ export function NavUser() {
 
   // 获取用户显示名
   const getUserDisplayName = () => {
-    return session?.user?.name || '用户';
+    return session?.user?.name || t('user');
   };
 
   // 获取用户头像初始字母
@@ -192,6 +194,14 @@ export function NavUser() {
                 variant="ghost"
                 size="icon"
                 className="w-full h-12 rounded-none relative"
+                aria-label={
+                  status === 'authenticated'
+                    ? t('menuFor', { name: getUserDisplayName() })
+                    : status === 'loading'
+                      ? t('loadingStatus')
+                      : t('openLoginMenu')
+                }
+                aria-expanded={isMenuOpen}
               >
                 {renderAvatar()}
                 {status === 'loading' && (
@@ -202,10 +212,10 @@ export function NavUser() {
           </TooltipTrigger>
           <TooltipContent>
             {status === 'authenticated'
-              ? `已登录为 ${getUserDisplayName()}`
+              ? t('signedInAs', { name: getUserDisplayName() })
               : status === 'loading'
-                ? '加载中...'
-                : '点击登录'}
+                ? t('loading')
+                : t('clickToLogin')}
           </TooltipContent>
         </Tooltip>
 
@@ -218,7 +228,9 @@ export function NavUser() {
           {status === 'loading' ? (
             <div className="p-4 text-center">
               <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">身份验证中...</p>
+              <p className="text-sm text-muted-foreground">
+                {t('authenticating')}
+              </p>
             </div>
           ) : status === 'authenticated' && session?.user ? (
             <>
@@ -249,22 +261,22 @@ export function NavUser() {
               <DropdownMenuGroup>
                 <DropdownMenuItem>
                   <Sparkles className="mr-2 h-4 w-4" />
-                  升级到专业版
+                  {t('upgrade')}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem>
                   <BadgeCheck className="mr-2 h-4 w-4" />
-                  账户
+                  {t('account')}
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <CreditCard className="mr-2 h-4 w-4" />
-                  结算
+                  {t('billing')}
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Bell className="mr-2 h-4 w-4" />
-                  通知
+                  {t('notifications')}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
@@ -278,16 +290,16 @@ export function NavUser() {
                 ) : (
                   <LogOut className="mr-2 h-4 w-4" />
                 )}
-                退出登录
+                {t('logout')}
               </DropdownMenuItem>
             </>
           ) : (
             <>
               <DropdownMenuLabel className="font-normal">
                 <div className="text-left">
-                  <p className="text-sm font-medium">未登录</p>
+                  <p className="text-sm font-medium">{t('signedOut')}</p>
                   <p className="text-xs text-muted-foreground">
-                    登录以保存您的项目
+                    {t('signInToSave')}
                   </p>
                 </div>
               </DropdownMenuLabel>
@@ -301,7 +313,7 @@ export function NavUser() {
                 ) : (
                   <User className="mr-2 h-4 w-4" />
                 )}
-                登录
+                {t('login')}
               </DropdownMenuItem>
             </>
           )}

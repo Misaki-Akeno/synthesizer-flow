@@ -7,6 +7,7 @@
 Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用了 **"双向状态同步"** 模式，将基于 Web Audio API 的即时音频合成能力与基于 Server-side 的 AI Agent 决策能力相结合。
 
 系统主要由三个部分组成：
+
 1.  **Frontend (Client)**: 负责 UI 渲染、用户交互、以及核心的音频信号处理 (Tone.js)。
 2.  **Backend (Server)**: 基于 Next.js Server Actions，提供业务逻辑、数据库访问及 Agent 运行环境。
 3.  **AI Agent**: 运行在服务端的智能体，维护一个虚拟的"影子状态"来感知和操作前端画布。
@@ -49,6 +50,7 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 音频模块系统采用 **类响应式架构**，基类定义在 `src/core/base/ModuleBase.ts`。
 
 #### 2.3.1 端口与参数系统 (RxJS Core)
+
 为了实现高性能的实时控制，模块内部广泛采用 **RxJS** 的 `BehaviorSubject`：
 
 - **Ports (端口)**:
@@ -65,6 +67,7 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
   - UI 组件直接订阅这些 Subject，实现无 React Render 开销的实时数值更新。
 
 #### 2.3.2 音频实现模式 (Tone.js Integration)
+
 以 `AdvancedOscillatorModule` (`src/core/modules/audio/AdvancedOscillatorModule.ts`) 为例：
 
 - **复音管理 (Polyphony)**:
@@ -91,6 +94,7 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 后端主要依托 Next.js 的 Server Actions 和 API Routes，结合 Postgres 提供持久化服务。
 
 ### 3.1 核心技术栈
+
 - **Runtime**: Node.js
 - **Database**: PostgreSQL
 - **ORM**: Drizzle ORM
@@ -98,21 +102,26 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 - **Vector Search**: pgvector
 
 ### 3.2 数据库模型 (`src/db/schema.ts`)
+
 数据库设计涵盖了四个关键领域：
 
 1.  **用户与鉴权**:
-    - `users`, `accounts`, `sessions`: 标准 NextAuth 表结构，支持 OAuth 登录。
+    - `users`, `accounts`, `sessions`: NextAuth 表结构，支持 OAuth 登录、角色与审计时间；会话过期时间有独立索引，便于清理。
 
 2.  **项目数据**:
-    - `projects`: 存储画布的 JSON 快照 (`data` 字段)，支持完整的项目保存与恢复。
-    - `users_to_projects`: 多对多关联表，管理用户对项目的访问权限。
+    - `projects`: 存储画布 JSON 快照；`schema_version` 管理数据升级，`revision` 提供乐观并发控制，`metadata` 承载标签、封面等开放扩展信息，`archived_at` 支持软归档。
+    - `users_to_projects`: 多对多关联表，管理访问角色，并保留协作关系的元数据与审计时间。
+    - 新建项目及所有者关系在同一事务内写入；保存时校验 `revision`，避免多个标签页或未来协作功能静默覆盖数据。
 
 3.  **RAG 知识库**:
-    - `rag_documents`: 存储文本片段及其向量表示 (`embedding` 字段, 1536维)，使用 HNSW 索引加速检索。
+    - `rag_documents`: 存储文本片段及其可配置维度的向量表示，使用 HNSW 索引加速检索。
+    - `namespace` 隔离知识库，`source_id`、`content_hash`、`chunk_index` 支持来源追踪、去重与可重复入库。
 
 4.  **Agent 状态持久化**:
-    - `checkpoints`: 简单的对话历史快照。
+    - `checkpoints`: 带版本号、扩展元数据和更新时间的对话历史快照。
     - `langgraph_checkpoints` & `langgraph_writes`: 复杂的 LangGraph 状态机持久化，支持 Agent 的长期记忆和状态恢复。
+
+迁移策略优先把可预见的基础能力收敛进单次迁移；业务形态仍不确定的字段放入 JSONB，并由 `schema_version` 驱动应用层升级，减少后续零碎 DDL。
 
 ---
 
@@ -124,28 +133,58 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 
 1.  **Agent 入口 (`Agent.ts`)**:
     - 基于 LangChain/LangGraph 构建。
+    - 通过 `src/lib/ai/modelFactory.ts` 只依赖统一的 `BaseChatModel`，运行时可选择 ModelScope、DeepSeek、OpenAI、Anthropic、Google Gemini、OpenRouter 及自定义 OpenAI 兼容服务。
     - 提供了 `sendMessage` 接口，支持带状态的对话。
     - 内置 **Human-in-the-Loop (HIL)** 机制：检测到 `unsafe_tools` 标签的操作时，会暂停执行并在返回结果中标记 `approvalRequired`，等待用户确认 (`threadId` 关联上下文)。
 
-2.  **执行器 (`ToolExecutor` - `src/agent/tools/executor.ts`)**:
+2.  **提供商基础设施 (`src/lib/ai`)**:
+    - `providers.ts` 是提供商能力、固定端点和推荐模型的唯一注册表。
+    - ModelScope 使用其 API Inference 兼容端点接入 Qwen 3.5 开源模型；旧版百炼 Qwen 配置会自动归入 ModelScope 配置。
+    - `modelFactory.ts` 负责按提供商动态加载对应 LangChain 适配器，避免 Agent Graph 出现供应商分支。
+    - 用户设置使用 `version: 2` 的按提供商配置映射；旧版单连接设置会在读取时兼容、下次保存时升级，不新增数据库表或迁移。
+    - API Key 使用 AES-256-GCM 加密后保存在现有 `users.settings` JSON 字段中，切换提供商不会覆盖其他提供商的配置。
+
+3.  **执行器 (`ToolExecutor` - `src/agent/tools/executor.ts`)**:
     这是 Agent 系统最核心的创新点。由于服务端无法访问浏览器的 AudioContext，Executor 实现了一个 **"影子状态模式 (Shadow State Pattern)"**：
     - **初始化**: 每次请求时，接收前端传来的画布快照 (`GraphStateSnapshot`)，在内存中重建虚拟的 `nodes` 和 `edges`。
-    - **模拟执行**: 当 LLM 调用 `add_module` 或 `connect_modules` 时，Executor 在虚拟状态上执行操作（如计算不重叠的坐标、验证端口兼容性）。
+    - **模拟执行**: 当 LLM 调用 `module_add` 或 `connection_connect` 时，Executor 在虚拟状态上执行操作（如计算不重叠的坐标、验证端口兼容性）。
     - **指令记录**: 操作不仅仅是修改虚拟状态，更会被记录为 `ClientOperation` 指令（如 `ADD_MODULE`, `CONNECT_MODULES`）。
 
-3.  **顺序工具节点 (`SequentialToolNode`)**:
+4.  **顺序工具节点 (`SequentialToolNode`)**:
     - 为了解决 LLM 并行调用工具时产生的依赖问题（例如同时“添加模块A”和“连接模块A”，后者会因为A尚未存在而失败），系统强制工具按顺序执行。
     - 后一个工具能立即感知到前一个工具对"影子状态"的修改。
+
+5.  **能力工具注册表 (`src/agent/tools`)**:
+    - 工具按画布检查、模块编辑、信号连接、知识检索和 Skills 五个能力域组织，而不是维护一组扁平定义。
+    - 删除模块、断开连接等审批策略由注册表声明，LangGraph 只消费策略，不重复硬编码工具名。
+    - 旧工具名仅在执行节点转换，用于恢复升级前的 checkpoint，不再绑定给新模型。
+
+6.  **模块 Skills (`src/agent/skills`)**:
+    - `skill_list` 返回轻量索引，`skill_load` 按需加载某个 `module:<type>` 指南，控制上下文体积。
+    - 使用建议与注意事项由 `module-guides.ts` 维护；参数默认值、范围、选项及端口则从真实模块类实时提取，避免两套 schema 漂移。
+    - `module_add` 会校验当前请求是否已加载目标模块 Skill，形成“发现 → 学习 → 操作 → 验证”的执行闭环。
 
 ### 4.2 交互流程 (Internal Interaction Flow)
 
 一个典型的 "User: 添加一个振荡器" 请求流程如下：
 
 1.  **用户发起**: 前端调用 Server Action `chatWithAgent`，携带当前画布快照 (`nodes`, `edges`)。
-2.  **Agent 规划**: 服务端 Agent 接收消息，LLM 决定调用 `add_module` 工具。
-3.  **影子执行**: `ToolExecutor` 在虚拟画布上添加节点，计算出安全坐标 (x, y)，并记录操作指令 `ClientOperation`。
-4.  **响应返回**: Server Action 返回 LLM 的文本回复以及 `clientOperations` 列表。
-5.  **前端同步**: 前端接收到响应，解析 `clientOperations`，并通过 Zustand Store 真正执行 `addNode`，此时才会触发浏览器的 AudioContext 创建声音并在 Canvas 上渲染 UI。
+2.  **指南加载**: Agent 先调用 `skill_list`/`skill_load` 获取振荡器的真实参数、端口和使用建议。
+3.  **Agent 规划**: 服务端 Agent 检查画布后调用 `module_add`。
+4.  **影子执行**: `ToolExecutor` 在虚拟画布上添加节点，计算出安全坐标 (x, y)，并记录操作指令 `ClientOperation`。
+5.  **响应返回**: Server Action 返回 LLM 的文本回复以及 `clientOperations` 列表。
+6.  **前端同步**: 前端接收到响应，解析 `clientOperations`，并通过 Zustand Store 真正执行 `addNode`，此时才会触发浏览器的 AudioContext 创建声音并在 Canvas 上渲染 UI。
 
 ### 4.3 检索增强生成 (RAG)
-Agent 集成了 RAG 能力 (`rag_search` 工具)，直接在服务端调用 `searchDocuments` 查询 Postgres 向量数据库，无需外部 API 调用。这使得 Agent 能够查询项目文档、音频合成原理等知识来辅助用户。
+
+Agent 集成了 RAG 能力 (`knowledge_search` 工具)，直接在服务端调用 `searchDocuments` 查询 Postgres 向量数据库，无需外部 API 调用。RAG 用于概念与项目文档；模块的精确参数、端口和操作指南由 Skills 提供。
+
+### 4.4 Agent Golden Set 评测
+
+`src/agent/evals` 提供版本化 Golden Set、确定性评分器、重复采样 runner 和真实模型 bench：
+
+- Golden case 可以断言工具序列、局部参数、客户端操作、HIL 审批状态及回答文本约束。
+- 每个 case 同时设置单次得分阈值和多次采样稳定性阈值；全局质量门槛基于 case 通过率与平均得分。
+- live target 复用生产环境的 Graph、System Prompt、工具注册表与 Skills，只把 Drizzle checkpointer 替换为 `MemorySaver`。
+- bench 的知识检索使用无数据库桩，保证不会读取或污染开发数据库；RAG 专项评测未来可通过独立 target 接入固定语料。
+- `npm run agent:bench` 运行真实提供商评测，并输出 JSON 报告、平均延迟和 p95 延迟。

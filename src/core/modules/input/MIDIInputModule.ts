@@ -6,6 +6,13 @@ import {
   ParameterType,
   PortType,
 } from '@/core/base/ModuleBase';
+import { MidiActiveNote, MidiEvent } from '@/core/midi/types';
+import {
+  createMidiFrame,
+  midiFrameToLegacyArrays,
+  normalize01,
+  normalizePitchBend,
+} from '@/core/midi/utils';
 
 /**
  * 检查是否在浏览器环境中运行
@@ -31,10 +38,23 @@ export class MIDIInputModule extends AudioModuleBase {
   private selectedInput: WebMidi.MIDIInput | null = null;
   private inputDeviceId: string = '';
   private isRefreshing: boolean = false; // 新增：标记是否正在刷新设备
+  private initTimeout: ReturnType<typeof setTimeout> | null = null;
+  private rescanTimeout: ReturnType<typeof setTimeout> | null = null;
+  private readonly midiMessageListener = (event: WebMidi.MIDIMessageEvent) => {
+    this.handleMIDIMessage(event);
+  };
+  private readonly midiStateChangeListener = (
+    event: WebMidi.MIDIConnectionEvent
+  ) => {
+    console.debug(
+      `[${this.moduleType}Module ${this.id}] MIDI设备状态变化:`,
+      event
+    );
+    this.updateMIDIInputDevices();
+  };
 
-  // 模块状态
-  // 使用 Map 存储每个活动音符及其力度
-  private activeNoteVelocities: Map<number, number> = new Map();
+  private activeNotes: Map<string, MidiActiveNote> = new Map();
+  private channelNoteIds: Map<number, string> = new Map();
 
   // 上次音符变化时间（用于防抖动）
   private lastNoteChangeTime: number = 0;
@@ -87,10 +107,68 @@ export class MIDIInputModule extends AudioModuleBase {
           describe: '调整MIDI音符力度响应，1为标准，小于1减弱，大于1增强',
         },
       },
+      mode: {
+        type: ParameterType.LIST,
+        value: 'standard',
+        options: ['standard', 'mpe'],
+        uiOptions: {
+          label: 'MIDI模式',
+          describe: 'standard为普通MIDI，mpe为每通道每音符表达',
+        },
+      },
+      masterChannel: {
+        type: ParameterType.NUMBER,
+        value: 1,
+        min: 1,
+        max: 16,
+        step: 1,
+        uiOptions: {
+          label: 'MPE主通道',
+          describe: 'MPE主通道，通常为1',
+          group: 'MPE',
+        },
+      },
+      memberChannels: {
+        type: ParameterType.STRING,
+        value: '2-16',
+        uiOptions: {
+          label: 'MPE成员通道',
+          describe: '例如 2-16 或 2,3,4',
+          group: 'MPE',
+        },
+      },
+      pitchBendRange: {
+        type: ParameterType.NUMBER,
+        value: 48,
+        min: 1,
+        max: 96,
+        step: 1,
+        uiOptions: {
+          label: '弯音范围',
+          describe: 'MPE pitch bend范围，单位为半音',
+          group: 'MPE',
+        },
+      },
+      timbreCc: {
+        type: ParameterType.NUMBER,
+        value: 74,
+        min: 0,
+        max: 127,
+        step: 1,
+        uiOptions: {
+          label: '音色CC',
+          describe: 'MPE timbre默认使用CC74',
+          group: 'MPE',
+        },
+      },
     };
 
     // 定义输出端口 - 移除了单音符和力度端口
     const outputPorts = {
+      midi: {
+        type: PortType.MIDI,
+        value: createMidiFrame(),
+      },
       // 添加复音输出端口
       activeNotes: {
         type: PortType.ARRAY,
@@ -109,7 +187,9 @@ export class MIDIInputModule extends AudioModuleBase {
     // 仅在浏览器环境中初始化WebMIDI
     if (isBrowser) {
       // 延迟初始化，确保在客户端渲染时再执行
-      setTimeout(() => {
+      this.initTimeout = setTimeout(() => {
+        this.initTimeout = null;
+        if (this.isDisposed()) return;
         this.initWebMidi();
       }, 0);
     } else {
@@ -124,7 +204,7 @@ export class MIDIInputModule extends AudioModuleBase {
    */
   private async initWebMidi(): Promise<void> {
     // 严格检查浏览器环境
-    if (!isBrowser) {
+    if (!isBrowser || this.isDisposed()) {
       console.warn(
         `[${this.moduleType}Module ${this.id}] 非浏览器环境，跳过WebMIDI初始化`
       );
@@ -137,23 +217,25 @@ export class MIDIInputModule extends AudioModuleBase {
         console.debug(`[${this.moduleType}Module ${this.id}] 初始化WebMIDI...`);
         const midiAccess = await navigator.requestMIDIAccess({ sysex: false });
 
+        if (this.isDisposed()) {
+          return;
+        }
+
         this.midiAccess = midiAccess as unknown as WebMidi.MIDIAccess;
 
         // 更新设备列表
         this.updateMIDIInputDevices();
 
         // 监听设备状态变化
-        this.midiAccess.addEventListener('statechange', (event) => {
-          console.debug(
-            `[${this.moduleType}Module ${this.id}] MIDI设备状态变化:`,
-            event
-          );
-          this.updateMIDIInputDevices();
-        });
+        this.midiAccess.addEventListener(
+          'statechange',
+          this.midiStateChangeListener
+        );
 
         // 如果没有发现设备，尝试延迟再次检测
-        setTimeout(() => {
-          if (this.midiInputs.length === 0) {
+        this.rescanTimeout = setTimeout(() => {
+          this.rescanTimeout = null;
+          if (!this.isDisposed() && this.midiInputs.length === 0) {
             this.updateMIDIInputDevices();
           }
         }, 1000);
@@ -175,7 +257,7 @@ export class MIDIInputModule extends AudioModuleBase {
    */
   private updateMIDIInputDevices(): void {
     // 检查浏览器环境
-    if (!isBrowser || !this.midiAccess) return;
+    if (!isBrowser || !this.midiAccess || this.isDisposed()) return;
 
     // 清空当前设备列表
     this.midiInputs = [];
@@ -250,7 +332,7 @@ export class MIDIInputModule extends AudioModuleBase {
       // 添加MIDI消息监听器
       this.selectedInput.addEventListener(
         'midimessage',
-        this.handleMIDIMessage.bind(this)
+        this.midiMessageListener
       );
 
       console.debug(
@@ -272,14 +354,15 @@ export class MIDIInputModule extends AudioModuleBase {
       // 移除MIDI消息监听器
       this.selectedInput.removeEventListener(
         'midimessage',
-        this.handleMIDIMessage.bind(this)
+        this.midiMessageListener
       );
 
       this.selectedInput = null;
       this.inputDeviceId = '';
 
       // 重置所有音符状态
-      this.activeNoteVelocities.clear(); // 清空 Map
+      this.activeNotes.clear();
+      this.channelNoteIds.clear();
 
       // 更新输出端口
       this.updateOutputPorts();
@@ -312,14 +395,30 @@ export class MIDIInputModule extends AudioModuleBase {
       case 0x90: // Note On
         if (data[2] > 0) {
           // 有些设备发送velocity=0的Note On表示Note Off
-          this.handleNoteOn(data[1], data[2]);
+          this.handleNoteOn(data[1], data[2], channel);
         } else {
-          this.handleNoteOff(data[1]);
+          this.handleNoteOff(data[1], channel);
         }
         break;
 
       case 0x80: // Note Off
-        this.handleNoteOff(data[1]);
+        this.handleNoteOff(data[1], channel);
+        break;
+
+      case 0xe0:
+        this.handlePitchBend(data[1], data[2], channel);
+        break;
+
+      case 0xd0:
+        this.handlePressure(data[1], channel);
+        break;
+
+      case 0xa0:
+        this.handlePolyPressure(data[1], data[2], channel);
+        break;
+
+      case 0xb0:
+        this.handleControlChange(data[1], data[2], channel);
         break;
 
       // 可以添加对Control Change等其他消息的处理
@@ -333,7 +432,7 @@ export class MIDIInputModule extends AudioModuleBase {
   /**
    * 处理音符按下事件
    */
-  private handleNoteOn(note: number, velocity: number): void {
+  private handleNoteOn(note: number, velocity: number, channel: number): void {
     // 获取当前时间戳，用于批处理
     const currentTime = performance.now();
 
@@ -348,41 +447,144 @@ export class MIDIInputModule extends AudioModuleBase {
       Math.min(1, (velocity / 127) * sensitivity)
     );
 
-    // 添加到活跃音符 Map 中，存储音符和对应的力度
-    this.activeNoteVelocities.set(transposedNote, scaledVelocity);
+    const noteId = this.getNoteId(transposedNote, channel);
+    const previous = this.activeNotes.get(noteId);
+    this.activeNotes.set(noteId, {
+      id: noteId,
+      midi: transposedNote,
+      velocity: scaledVelocity,
+      channel,
+      pitchBend: previous?.pitchBend ?? 0,
+      pressure: previous?.pressure ?? 0,
+      timbre: previous?.timbre ?? 0,
+      source: this.id,
+    });
+    this.channelNoteIds.set(channel, noteId);
 
     // 始终立即更新输出端口，但使用批处理方式减少更新频率
     // 移除条件检查，确保每个音符变化都会更新
-    this.updateOutputPorts();
+    this.updateOutputPorts([
+      {
+        type: 'noteOn',
+        noteId,
+        midi: transposedNote,
+        velocity: scaledVelocity,
+        channel,
+      },
+    ]);
     this.lastNoteChangeTime = currentTime;
   }
 
   /**
    * 处理音符释放事件
    */
-  private handleNoteOff(note: number): void {
+  private handleNoteOff(note: number, channel: number): void {
     // 应用音高转置
     const transpose = this.getParameterValue('transpose') as number;
     const transposedNote = Math.max(0, Math.min(127, note + transpose));
 
-    // 从活跃音符 Map 中移除
-    this.activeNoteVelocities.delete(transposedNote);
+    const noteId = this.getNoteId(transposedNote, channel);
+    this.activeNotes.delete(noteId);
+    if (this.channelNoteIds.get(channel) === noteId) {
+      this.channelNoteIds.delete(channel);
+    }
 
     // 始终立即更新输出端口
-    this.updateOutputPorts();
+    this.updateOutputPorts([
+      { type: 'noteOff', noteId, midi: transposedNote, channel },
+    ]);
+  }
+
+  private handlePitchBend(lsb: number, msb: number, channel: number): void {
+    const value14 = (msb << 7) | lsb;
+    const bend = normalizePitchBend((value14 - 8192) / 8192);
+    const noteId = this.channelNoteIds.get(channel);
+    this.applyExpression(channel, 'pitchBend', bend);
+    this.updateOutputPorts([
+      { type: 'pitchBend', noteId, channel, value: bend },
+    ]);
+  }
+
+  private handlePressure(value: number, channel: number): void {
+    const pressure = normalize01(value / 127, 0);
+    const noteId = this.channelNoteIds.get(channel);
+    this.applyExpression(channel, 'pressure', pressure);
+    this.updateOutputPorts([
+      { type: 'pressure', noteId, channel, value: pressure },
+    ]);
+  }
+
+  private handlePolyPressure(
+    note: number,
+    value: number,
+    channel: number
+  ): void {
+    const transpose = this.getParameterValue('transpose') as number;
+    const transposedNote = Math.max(0, Math.min(127, note + transpose));
+    const noteId = this.getNoteId(transposedNote, channel);
+    const pressure = normalize01(value / 127, 0);
+    this.applyExpression(channel, 'pressure', pressure, noteId);
+    this.updateOutputPorts([
+      { type: 'pressure', noteId, channel, value: pressure },
+    ]);
+  }
+
+  private handleControlChange(
+    controller: number,
+    value: number,
+    channel: number
+  ): void {
+    if (controller === 123 || controller === 120) {
+      this.activeNotes.clear();
+      this.channelNoteIds.clear();
+      this.updateOutputPorts([{ type: 'allNotesOff', channel }]);
+      return;
+    }
+
+    const timbreCc = this.getParameterValue('timbreCc') as number;
+    if (controller !== timbreCc) return;
+
+    const timbre = normalize01(value / 127, 0);
+    const noteId = this.channelNoteIds.get(channel);
+    this.applyExpression(channel, 'timbre', timbre);
+    this.updateOutputPorts([
+      { type: 'timbre', noteId, channel, value: timbre },
+    ]);
+  }
+
+  private applyExpression(
+    channel: number,
+    key: 'pitchBend' | 'pressure' | 'timbre',
+    value: number,
+    noteId?: string
+  ): void {
+    this.activeNotes.forEach((activeNote) => {
+      if (noteId ? activeNote.id !== noteId : activeNote.channel !== channel) {
+        return;
+      }
+      activeNote[key] = value;
+    });
+  }
+
+  private getNoteId(note: number, channel: number): string {
+    const mode = this.getParameterValue('mode') as string;
+    return mode === 'mpe'
+      ? `${this.id}_ch${channel}_${note}`
+      : `${this.id}_${note}`;
   }
 
   /**
    * 更新输出端口的值
    */
-  private updateOutputPorts(): void {
-    // 从 Map 中提取音符和力度数组
-    const notesArray = Array.from(this.activeNoteVelocities.keys());
-    const velocitiesArray = Array.from(this.activeNoteVelocities.values());
-
-    // 更新复音输出端口
-    this.outputPorts['activeNotes'].next(notesArray);
-    this.outputPorts['activeVelocities'].next(velocitiesArray);
+  private updateOutputPorts(events: MidiEvent[] = []): void {
+    const frame = createMidiFrame(
+      Array.from(this.activeNotes.values()),
+      events
+    );
+    this.outputPorts['midi'].next(frame);
+    const legacy = midiFrameToLegacyArrays(frame);
+    this.outputPorts['activeNotes'].next(legacy.notes);
+    this.outputPorts['activeVelocities'].next(legacy.velocities);
   }
 
   /**
@@ -457,8 +659,9 @@ export class MIDIInputModule extends AudioModuleBase {
   protected onEnabledStateChanged(enabled: boolean): void {
     if (!enabled) {
       // 如果模块被禁用，重置所有状态
-      this.activeNoteVelocities.clear(); // 清空 Map
-      this.updateOutputPorts();
+      this.activeNotes.clear();
+      this.channelNoteIds.clear();
+      this.updateOutputPorts([{ type: 'allNotesOff' }]);
     }
 
     console.debug(
@@ -470,8 +673,26 @@ export class MIDIInputModule extends AudioModuleBase {
    * 释放资源
    */
   public dispose(): void {
+    if (this.initTimeout !== null) {
+      clearTimeout(this.initTimeout);
+      this.initTimeout = null;
+    }
+    if (this.rescanTimeout !== null) {
+      clearTimeout(this.rescanTimeout);
+      this.rescanTimeout = null;
+    }
+
     // 断开MIDI设备连接
     this.disconnectFromDevice();
+
+    if (this.midiAccess) {
+      this.midiAccess.removeEventListener(
+        'statechange',
+        this.midiStateChangeListener
+      );
+    }
+    this.midiAccess = null;
+    this.midiInputs = [];
 
     console.debug(`[${this.moduleType}Module ${this.id}] 释放资源`);
     super.dispose();
@@ -482,7 +703,7 @@ export class MIDIInputModule extends AudioModuleBase {
    * 用户可通过按钮触发该方法重新扫描可用设备
    */
   public refreshMIDIDevices(): void {
-    if (this.isRefreshing) return; // 防止重复刷新
+    if (this.isRefreshing || this.isDisposed()) return; // 防止重复刷新
 
     this.isRefreshing = true;
     console.debug(`[${this.moduleType}Module ${this.id}] 刷新MIDI设备列表...`);
@@ -499,7 +720,21 @@ export class MIDIInputModule extends AudioModuleBase {
       ) {
         navigator.requestMIDIAccess({ sysex: false }).then(
           (midiAccess) => {
+            if (this.isDisposed()) {
+              return;
+            }
+
+            if (this.midiAccess) {
+              this.midiAccess.removeEventListener(
+                'statechange',
+                this.midiStateChangeListener
+              );
+            }
             this.midiAccess = midiAccess as unknown as WebMidi.MIDIAccess;
+            this.midiAccess.addEventListener(
+              'statechange',
+              this.midiStateChangeListener
+            );
             // 更新设备列表
             this.updateMIDIInputDevices();
             // 恢复状态
@@ -509,6 +744,9 @@ export class MIDIInputModule extends AudioModuleBase {
             );
           },
           (error) => {
+            if (this.isDisposed()) {
+              return;
+            }
             console.error(
               `[${this.moduleType}Module ${this.id}] 刷新MIDI设备失败:`,
               error

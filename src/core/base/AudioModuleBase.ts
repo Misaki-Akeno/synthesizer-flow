@@ -107,10 +107,23 @@ export abstract class AudioModuleBase extends ModuleBase {
   protected async initializeTone(): Promise<void> {
     try {
       const ToneModule = await import('tone');
+
+      if (this.isDisposed()) {
+        return;
+      }
+
       this.Tone = ToneModule;
 
       // 执行子类特定的初始化
       await this.initializeAudio();
+
+      // initializeAudio 期间可能发生项目切换或撤销重建。再次调用动态
+      // dispose，让子类释放刚刚创建的 Tone 节点，避免旧实例复活。
+      if (this.isDisposed()) {
+        this.initialized = true;
+        this.dispose();
+        return;
+      }
 
       // 标记初始化完成
       this.initialized = true;
@@ -119,6 +132,9 @@ export abstract class AudioModuleBase extends ModuleBase {
       // 处理待处理的音频输入
       this.processPendingInputs();
     } catch (error) {
+      if (this.isDisposed()) {
+        return;
+      }
       console.error(
         `[${this.moduleType}Module ${this.id}] Failed to initialize Tone.js:`,
         error
@@ -135,7 +151,7 @@ export abstract class AudioModuleBase extends ModuleBase {
    * 处理待处理的音频输入
    */
   protected processPendingInputs(): void {
-    if (!this.initialized) return;
+    if (!this.initialized || this.isDisposed()) return;
 
     // 处理所有待处理的输入
     this.pendingAudioInputs.forEach(
@@ -157,7 +173,11 @@ export abstract class AudioModuleBase extends ModuleBase {
    * 启动音频上下文
    */
   protected startAudioContext(): void {
-    if (this.Tone && this.Tone.context.state !== 'running') {
+    if (
+      !this.isDisposed() &&
+      this.Tone &&
+      this.Tone.context.state !== 'running'
+    ) {
       try {
         this.Tone.start();
       } catch (error) {
@@ -336,35 +356,10 @@ export abstract class AudioModuleBase extends ModuleBase {
       this.audioInputHandler = null;
     }
 
-    // 标记模块已销毁
-    import('../services/ModuleInitManager').then(({ moduleInitManager }) => {
-      moduleInitManager.recordDisposal(this.id);
-    });
-
-    // 如果存在Tone实例，释放相关资源
-    if (this.initialized && this.Tone) {
-      try {
-        // 子类可能有特定的资源清理逻辑，在基类dispose之前已执行
-        // 释放Tone.js上下文资源
-        if (
-          this.Tone.context &&
-          typeof this.Tone.context.dispose === 'function'
-        ) {
-          // 只有当没有其他模块使用Tone上下文时才释放
-          const activeModules =
-            moduleInitManager.getInitializedModules().length;
-          if (activeModules <= 1) {
-            // 只有当前模块时释放上下文
-            this.Tone.context.dispose();
-          }
-        }
-      } catch (error) {
-        console.error(
-          `[${this.moduleType}Module ${this.id}] Error disposing Tone resources:`,
-          error
-        );
-      }
-    }
+    // Tone Context 属于应用级共享资源，不应由任意单个模块销毁。
+    // 模块只注销自身并释放自己创建的节点。
+    moduleInitManager.recordDisposal(this.id);
+    this.enabled.complete();
 
     // 调用父类的dispose方法清理基础资源
     super.dispose();

@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/lib/auth/drizzle-adapter.ts
 import { and, eq } from 'drizzle-orm';
-import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import {
   Adapter,
   AdapterAccount,
@@ -10,9 +9,31 @@ import {
   VerificationToken as AdapterVerificationToken,
 } from 'next-auth/adapters';
 import { accounts, sessions, users, verificationTokens } from '@/db/schema';
+import type * as dbSchema from '@/db/schema';
 import { nanoid } from 'nanoid';
 
-export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
+type DbUser = typeof users.$inferSelect;
+
+export function normalizeAccountExpiresAt(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+
+  return Math.trunc(value);
+}
+
+function toAdapterUser(user: DbUser): AdapterUser {
+  return {
+    id: user.id,
+    email: user.email,
+    emailVerified: user.emailVerified,
+    name: user.name || null,
+    image: user.image || null,
+    role: user.role,
+  };
+}
+
+export function DrizzleAdapter(db: NodePgDatabase<typeof dbSchema>): Adapter {
   return {
     // 创建用户
     async createUser(data: Omit<AdapterUser, 'id'>): Promise<AdapterUser> {
@@ -30,14 +51,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
       const user = result[0];
       if (!user) throw new Error('Failed to create user');
 
-      return {
-        id: user.id,
-        email: user.email,
-        emailVerified: user.emailVerified,
-        name: user.name || null,
-        image: user.image || null,
-        role: user.role as any,
-      };
+      return toAdapterUser(user);
     },
 
     // 获取用户
@@ -47,14 +61,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
       const user = result[0];
       if (!user) return null;
 
-      return {
-        id: user.id,
-        email: user.email,
-        emailVerified: user.emailVerified,
-        name: user.name || null,
-        image: user.image || null,
-        role: user.role as any,
-      };
+      return toAdapterUser(user);
     },
 
     // 通过邮箱获取用户
@@ -67,14 +74,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
       const user = result[0];
       if (!user) return null;
 
-      return {
-        id: user.id,
-        email: user.email,
-        emailVerified: user.emailVerified,
-        name: user.name || null,
-        image: user.image || null,
-        role: user.role as any,
-      };
+      return toAdapterUser(user);
     },
 
     // 通过账号获取用户
@@ -101,14 +101,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
       const { user } = result[0] || { user: null };
       if (!user) return null;
 
-      return {
-        id: user.id,
-        email: user.email,
-        emailVerified: user.emailVerified,
-        name: user.name || null,
-        image: user.image || null,
-        role: user.role as any,
-      };
+      return toAdapterUser(user);
     },
 
     // 更新用户
@@ -119,21 +112,17 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
 
       const { id, ...userData } = data;
 
-      await db.update(users).set(userData).where(eq(users.id, id));
+      await db
+        .update(users)
+        .set({ ...userData, updatedAt: new Date() })
+        .where(eq(users.id, id));
 
       const result = await db.select().from(users).where(eq(users.id, id));
 
       const user = result[0];
       if (!user) throw new Error('Failed to update user');
 
-      return {
-        id: user.id,
-        email: user.email,
-        emailVerified: user.emailVerified,
-        name: user.name || null,
-        image: user.image || null,
-        role: user.role as any,
-      };
+      return toAdapterUser(user);
     },
 
     // 删除用户
@@ -150,7 +139,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
         providerAccountId: data.providerAccountId,
         refresh_token: data.refresh_token,
         access_token: data.access_token,
-        expires_at: data.expires_at as any,
+        expires_at: normalizeAccountExpiresAt(data.expires_at),
         token_type: data.token_type,
         scope: data.scope,
         id_token: data.id_token,
@@ -226,14 +215,7 @@ export function DrizzleAdapter(db: PgDatabase<any, any, any>): Adapter {
           userId: session.userId,
           expires: session.expires,
         },
-        user: {
-          id: user.id,
-          email: user.email,
-          emailVerified: user.emailVerified,
-          name: user.name || null,
-          image: user.image || null,
-          role: user.role as any,
-        },
+        user: toAdapterUser(user),
       };
     },
 

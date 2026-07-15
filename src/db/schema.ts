@@ -11,13 +11,14 @@ import {
   jsonb,
   vector,
   boolean,
+  check,
 } from 'drizzle-orm/pg-core';
 import { InferSelectModel, InferInsertModel, sql } from 'drizzle-orm';
+import { resolveRagVectorDimension } from '../lib/rag/vectorDimension';
 
-const RAG_VECTOR_DIM =
-  Number(process.env.RAG_EMBEDDINGS_DIM) && Number.isFinite(Number(process.env.RAG_EMBEDDINGS_DIM))
-    ? Number(process.env.RAG_EMBEDDINGS_DIM)
-    : 1536;
+const RAG_VECTOR_DIM = resolveRagVectorDimension(
+  process.env.RAG_EMBEDDINGS_DIM
+);
 
 // 定义 users 表，符合 NextAuth 需求
 export const users = pgTable('users', {
@@ -26,8 +27,10 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 256 }).notNull().unique(),
   emailVerified: timestamp('email_verified', { mode: 'date' }),
   image: text('image'),
-  settings: jsonb('settings'), // 用户设置
-  role: varchar('role', { length: 50 }).default('user').notNull(), // RBAC 角色: 'admin', 'user'
+  settings: jsonb('settings'), // 用户设置及其内部版本由 JSON 自身管理
+  role: varchar('role', { length: 50 }).default('user').notNull(),
+  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
 });
 
 // 定义 accounts 表 (OAuth 认证需要)
@@ -72,6 +75,7 @@ export const sessions = pgTable(
   },
   (session) => ({
     userIdIdx: index('sessions_user_id_idx').on(session.userId),
+    expiresIdx: index('sessions_expires_idx').on(session.expires),
   })
 );
 
@@ -85,9 +89,7 @@ export const verificationTokens = pgTable(
   },
   (vt) => ({
     compoundKey: primaryKey(vt.identifier, vt.token),
-    identifierIdx: index('verification_tokens_identifier_idx').on(
-      vt.identifier
-    ),
+    expiresIdx: index('verification_tokens_expires_idx').on(vt.expires),
   })
 );
 
@@ -110,6 +112,12 @@ export const ragDocuments = pgTable(
     embedding: vector('embedding', { dimensions: RAG_VECTOR_DIM }).notNull(),
     meta: jsonb('meta'),
     model: varchar('model', { length: 255 }).notNull(),
+    namespace: varchar('namespace', { length: 128 })
+      .default('global')
+      .notNull(),
+    sourceId: varchar('source_id', { length: 255 }),
+    contentHash: varchar('content_hash', { length: 64 }),
+    chunkIndex: integer('chunk_index'),
     createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
   },
@@ -124,6 +132,17 @@ export const ragDocuments = pgTable(
       'gin',
       sql`to_tsvector('english', ${table.textSnippet})`
     ),
+    sourceIdx: index('rag_documents_namespace_source_idx').on(
+      table.namespace,
+      table.sourceId
+    ),
+    contentHashIdx: index('rag_documents_content_hash_idx').on(
+      table.contentHash
+    ),
+    chunkIndexCheck: check(
+      'rag_documents_chunk_index_check',
+      sql`${table.chunkIndex} IS NULL OR ${table.chunkIndex} >= 0`
+    ),
   })
 );
 
@@ -131,14 +150,35 @@ export type RagDocument = InferSelectModel<typeof ragDocuments>;
 export type NewRagDocument = InferInsertModel<typeof ragDocuments>;
 
 // 定义 projects 表
-export const projects = pgTable('projects', {
-  id: varchar('id', { length: 255 }).notNull().primaryKey(),
-  name: text('name').notNull(),
-  data: jsonb('data').notNull(), // 存储 canvas JSON 数据
-  isPreset: boolean('is_preset').default(false).notNull(), // 是否为内置预设
-  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
-});
+export const projects = pgTable(
+  'projects',
+  {
+    id: varchar('id', { length: 255 }).notNull().primaryKey(),
+    name: text('name').notNull(),
+    description: text('description'),
+    data: jsonb('data').notNull(), // 存储 canvas JSON 数据
+    metadata: jsonb('metadata').default({}).notNull(), // 标签、封面等开放扩展信息
+    schemaVersion: integer('schema_version').default(1).notNull(),
+    revision: integer('revision').default(1).notNull(),
+    isPreset: boolean('is_preset').default(false).notNull(),
+    archivedAt: timestamp('archived_at', { mode: 'date' }),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    updatedAtIdx: index('projects_updated_at_idx').on(table.updatedAt),
+    presetUpdatedAtIdx: index('projects_preset_updated_at_idx').on(
+      table.isPreset,
+      table.updatedAt
+    ),
+    archivedAtIdx: index('projects_archived_at_idx').on(table.archivedAt),
+    schemaVersionCheck: check(
+      'projects_schema_version_check',
+      sql`${table.schemaVersion} > 0`
+    ),
+    revisionCheck: check('projects_revision_check', sql`${table.revision} > 0`),
+  })
+);
 
 // 定义 users_to_projects 表 (多对多关联)
 export const usersToProjects = pgTable(
@@ -150,13 +190,18 @@ export const usersToProjects = pgTable(
     projectId: varchar('project_id', { length: 255 })
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    // 可以添加角色字段，例如 'owner', 'editor', 'viewer'
     role: varchar('role', { length: 50 }).default('owner').notNull(),
+    metadata: jsonb('metadata').default({}).notNull(),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
   },
   (t) => ({
     pk: primaryKey(t.userId, t.projectId),
-    userIdIdx: index('users_to_projects_user_id_idx').on(t.userId),
     projectIdIdx: index('users_to_projects_project_id_idx').on(t.projectId),
+    roleCheck: check(
+      'users_to_projects_role_check',
+      sql`role IN ('owner', 'editor', 'viewer')`
+    ),
   })
 );
 
@@ -167,16 +212,32 @@ export type UserToProject = InferSelectModel<typeof usersToProjects>;
 export type NewUserToProject = InferInsertModel<typeof usersToProjects>;
 
 // Define checkpoints table
-export const checkpoints = pgTable('checkpoints', {
-  id: varchar('id', { length: 255 }).notNull().primaryKey(),
-  userId: varchar('user_id', { length: 255 })
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  title: text('title').notNull(),
-  messages: jsonb('messages').notNull(), // Chat history
-  graphState: jsonb('graph_state').notNull(), // Nodes and edges snapshot
-  createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
-});
+export const checkpoints = pgTable(
+  'checkpoints',
+  {
+    id: varchar('id', { length: 255 }).notNull().primaryKey(),
+    userId: varchar('user_id', { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    messages: jsonb('messages').notNull(), // Chat history
+    graphState: jsonb('graph_state').notNull(), // Nodes and edges snapshot
+    metadata: jsonb('metadata').default({}).notNull(),
+    schemaVersion: integer('schema_version').default(1).notNull(),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
+  },
+  (table) => ({
+    userCreatedAtIdx: index('checkpoints_user_created_at_idx').on(
+      table.userId,
+      table.createdAt
+    ),
+    schemaVersionCheck: check(
+      'checkpoints_schema_version_check',
+      sql`${table.schemaVersion} > 0`
+    ),
+  })
+);
 
 export type Checkpoint = InferSelectModel<typeof checkpoints>;
 export type NewCheckpoint = InferInsertModel<typeof checkpoints>;
@@ -190,9 +251,15 @@ export const langgraphCheckpoints = pgTable(
     parent_checkpoint_id: text('parent_checkpoint_id'),
     checkpoint: jsonb('checkpoint').notNull(),
     metadata: jsonb('metadata').notNull(),
+    createdAt: timestamp('created_at', { mode: 'date' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'date' }).defaultNow().notNull(),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.thread_id, table.checkpoint_id] }),
+    threadCreatedAtIdx: index('langgraph_checkpoints_thread_created_at_idx').on(
+      table.thread_id,
+      table.createdAt
+    ),
   })
 );
 

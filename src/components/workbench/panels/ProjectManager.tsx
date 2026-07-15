@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePersistStore, type ProjectConfig } from '@/store/projects-store';
+import {
+  usePersistStore,
+  type ProjectConfig,
+  type ProjectListErrorCode,
+} from '@/store/projects-store';
 import {
   Tabs,
   TabsContent,
@@ -22,7 +26,19 @@ import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
 import { ScrollArea } from '@/components/ui/shadcn/scroll-area';
 import { Badge } from '@/components/ui/shadcn/badge';
-import { Save, FileText, Loader2, Trash2, FolderOpen, PanelRight, Sparkles, FolderSync, RefreshCcw, Info } from 'lucide-react';
+import {
+  Save,
+  FileText,
+  Trash2,
+  FolderOpen,
+  PanelLeftClose,
+  Sparkles,
+  FolderSync,
+  RefreshCcw,
+  Info,
+  AlertTriangle,
+} from 'lucide-react';
+import { WorkbenchPanelHeader } from '@/components/layout/WorkbenchPanel';
 
 import { useSearchParams } from 'next/navigation';
 
@@ -35,7 +51,10 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
   const [projectDesc, setProjectDesc] = useState('');
 
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get('projectTab') === 'built-in' ? 'built-in' : 'user-projects';
+  const initialTab =
+    searchParams.get('projectTab') === 'built-in'
+      ? 'built-in'
+      : 'user-projects';
   const [activeTab, setActiveTab] = useState(initialTab);
 
   const {
@@ -47,12 +66,18 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
     deleteProject,
     exportProjectToFile,
     isLoading,
+    isProjectListLoading,
+    hasHydratedProjects,
+    projectsLastFetchedAt,
+    projectListError,
     fetchProjects,
   } = usePersistStore();
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    if (hasHydratedProjects) {
+      fetchProjects();
+    }
+  }, [fetchProjects, hasHydratedProjects]);
 
   const formatDate = (dateStr: string) => {
     try {
@@ -69,181 +94,215 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
   };
 
   const hasCache = userProjects.length > 0 || builtInProjects.length > 0;
-  const isInitialLoad = isLoading && !hasCache;
+  const hasFetchedProjects = Boolean(projectsLastFetchedAt);
+  const isColdLoading =
+    isProjectListLoading && !hasFetchedProjects && !hasCache;
+  const isRefreshingList = isProjectListLoading && !isColdLoading;
+  const listStatusText = isProjectListLoading ? '同步中' : undefined;
+  const userProjectsUnavailable =
+    projectListError === 'database-migration-required' ||
+    projectListError === 'projects-unavailable' ||
+    projectListError === 'user-projects-unavailable';
+  const builtInProjectsUnavailable =
+    projectListError === 'database-migration-required' ||
+    projectListError === 'projects-unavailable' ||
+    projectListError === 'built-in-projects-unavailable';
 
   return (
     <div className="w-full h-full flex flex-col relative">
-      {/* 全屏加载仅在首次无缓存时显示 */}
-      {isInitialLoad && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-          <p className="text-sm text-muted-foreground animate-pulse">正在加载项目...</p>
-        </div>
-      )}
+      <WorkbenchPanelHeader
+        title="项目管理器"
+        subtitle={listStatusText}
+        actions={
+          <>
+            {/* Refresh Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => fetchProjects({ force: true })}
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              title="刷新云端数据"
+              aria-label="刷新云端数据"
+              disabled={isProjectListLoading}
+            >
+              <RefreshCcw
+                size={15}
+                className={isProjectListLoading ? 'animate-spin' : ''}
+              />
+            </Button>
 
-      {/* 标题栏 */}
-      <div className="flex items-center justify-between p-2 border-b">
-        <div className="flex items-center gap-2 pl-1">
-          <FolderOpen className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-bold tracking-tight">项目管理器</h2>
-        </div>
-        <div className="flex items-center gap-1">
-          {/* Refresh Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => fetchProjects()}
-            className="h-7 w-7"
-            title="刷新云端数据"
-            disabled={isLoading}
-          >
-            <RefreshCcw size={15} className={`text-muted-foreground ${isLoading ? 'animate-spin' : ''}`} />
-          </Button>
-
-          {/* Current Project Info Dialog */}
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                title="当前项目信息"
-              >
-                <Info size={15} className="text-muted-foreground" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[400px]">
-              <DialogHeader>
-                <DialogTitle>当前项目详情</DialogTitle>
-                <DialogDescription className="sr-only">显示当前已加载的工作区项目详情</DialogDescription>
-              </DialogHeader>
-              {currentProject ? (
-                <div className="space-y-4 pt-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-lg text-foreground flex items-center gap-2">
-                      {currentProject.name}
-                      {currentProject.isBuiltIn && <Sparkles className="h-4 w-4 text-amber-500" />}
-                    </span>
-                    {currentProject.isBuiltIn && (
-                      <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 border-none">内置预设</Badge>
-                    )}
-                  </div>
-                  {currentProject.description && (
-                    <div className="text-sm text-muted-foreground leading-relaxed">
-                      {currentProject.description}
+            {/* Current Project Info Dialog */}
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  title="当前项目信息"
+                  aria-label="当前项目信息"
+                >
+                  <Info size={15} />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[400px]">
+                <DialogHeader>
+                  <DialogTitle>当前项目详情</DialogTitle>
+                  <DialogDescription className="sr-only">
+                    显示当前已加载的工作区项目详情
+                  </DialogDescription>
+                </DialogHeader>
+                {currentProject ? (
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-lg text-foreground flex items-center gap-2">
+                        {currentProject.name}
+                        {currentProject.isBuiltIn && (
+                          <Sparkles className="h-4 w-4 text-amber-500" />
+                        )}
+                      </span>
+                      {currentProject.isBuiltIn && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-amber-500/10 text-amber-600 border-none"
+                        >
+                          内置预设
+                        </Badge>
+                      )}
                     </div>
-                  )}
-                  <div className="text-xs text-muted-foreground/60 font-mono mt-4 pt-4 border-t">
-                    上次修改: {formatDate(currentProject.lastModified)}
+                    {currentProject.description && (
+                      <div className="text-sm text-muted-foreground leading-relaxed">
+                        {currentProject.description}
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground/60 font-mono mt-4 pt-4 border-t">
+                      上次修改: {formatDate(currentProject.lastModified)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground/60 italic flex flex-col items-center justify-center py-8 gap-2">
+                    <FolderOpen className="h-8 w-8 opacity-50" />
+                    <span>当前暂未加载任何项目</span>
+                  </div>
+                )}
+                <DialogFooter className="sm:justify-end mt-4">
+                  <DialogClose asChild>
+                    <Button variant="secondary">关闭</Button>
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Save Project Dialog */}
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  title="保存到云端"
+                  aria-label="保存到云端"
+                >
+                  <Save size={15} />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[400px]">
+                <DialogHeader>
+                  <DialogTitle>保存当前工作区</DialogTitle>
+                  <DialogDescription className="text-xs mt-1.5 line-clamp-2">
+                    将当前画布的所有节点和连接保存到云端项目。本地也会缓存一份以供快速加载。
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4 mt-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      项目名称
+                    </label>
+                    <Input
+                      value={projectName}
+                      onChange={(e) => setProjectName(e.target.value)}
+                      className="bg-background/50 focus-visible:ring-primary/30"
+                      placeholder="输入一个易于识别的名称..."
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      项目描述 (可选)
+                    </label>
+                    <Input
+                      value={projectDesc}
+                      onChange={(e) => setProjectDesc(e.target.value)}
+                      className="bg-background/50 focus-visible:ring-primary/30"
+                      placeholder="简短说明..."
+                    />
                   </div>
                 </div>
-              ) : (
-                <div className="text-sm text-muted-foreground/60 italic flex flex-col items-center justify-center py-8 gap-2">
-                  <FolderOpen className="h-8 w-8 opacity-50" />
-                  <span>当前暂未加载任何项目</span>
-                </div>
-              )}
-              <DialogFooter className="sm:justify-end mt-4">
-                <DialogClose asChild>
-                  <Button variant="secondary">关闭</Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter className="mt-2">
+                  <DialogClose asChild>
+                    <Button variant="ghost" className="text-xs">
+                      取消
+                    </Button>
+                  </DialogClose>
+                  <DialogClose asChild>
+                    <Button
+                      className="text-xs px-6"
+                      disabled={isLoading && !hasCache && !hasFetchedProjects}
+                      onClick={async () => {
+                        if (!projectName.trim()) {
+                          alert('请输入项目名称');
+                          return;
+                        }
+                        const success = await saveCurrentCanvas(
+                          projectName,
+                          projectDesc
+                        );
+                        if (!success) {
+                          alert('保存失败，请检查网络或权限');
+                        }
+                      }}
+                    >
+                      确认保存
+                    </Button>
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
-          {/* Save Project Dialog */}
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                title="保存到云端"
-              >
-                <Save size={15} className="text-muted-foreground" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[400px]">
-              <DialogHeader>
-                <DialogTitle>保存当前工作区</DialogTitle>
-                <DialogDescription className="text-xs mt-1.5 line-clamp-2">
-                  将当前画布的所有节点和连接保存到云端项目。本地也会缓存一份以供快速加载。
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4 mt-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">项目名称</label>
-                  <Input
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    className="bg-background/50 focus-visible:ring-primary/30"
-                    placeholder="输入一个易于识别的名称..."
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">项目描述 (可选)</label>
-                  <Input
-                    value={projectDesc}
-                    onChange={(e) => setProjectDesc(e.target.value)}
-                    className="bg-background/50 focus-visible:ring-primary/30"
-                    placeholder="简短说明..."
-                  />
-                </div>
-              </div>
-              <DialogFooter className="mt-2">
-                <DialogClose asChild>
-                  <Button variant="ghost" className="text-xs">取消</Button>
-                </DialogClose>
-                <DialogClose asChild>
-                  <Button
-                    className="text-xs px-6"
-                    disabled={isLoading && !hasCache}
-                    onClick={async () => {
-                      if (!projectName.trim()) {
-                        alert('请输入项目名称');
-                        return;
-                      }
-                      const success = await saveCurrentCanvas(
-                        projectName,
-                        projectDesc
-                      );
-                      if (!success) {
-                        alert('保存失败，请检查网络或权限');
-                      }
-                    }}
-                  >
-                    确认保存
-                  </Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            <div className="mx-1 h-4 w-px bg-border/70" />
 
-          <div className="w-px h-4 bg-border/50 mx-1" />
-
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="h-7 w-7"
-            title="关闭面板"
-          >
-            <PanelRight size={15} className="text-muted-foreground" />
-          </Button>
-        </div>
-      </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              title="关闭面板"
+              aria-label="关闭项目管理器"
+            >
+              <PanelLeftClose size={15} />
+            </Button>
+          </>
+        }
+      />
 
       {/* 内容区域 */}
       <div className="flex-1 overflow-hidden flex flex-col p-0">
-
         {/* iOS-like Pull to Refresh Top Indicator */}
         <div
-          className={`absolute top-0 left-0 right-0 z-20 flex items-center justify-center bg-primary/5 text-primary text-xs backdrop-blur-md transition-all duration-500 overflow-hidden ${isLoading && hasCache ? 'h-11 border-b opacity-100' : 'h-0 opacity-0 border-transparent'
-            }`}
+          className={`absolute top-0 left-0 right-0 z-20 flex items-center justify-center bg-primary/5 text-primary text-xs backdrop-blur-md transition-all duration-500 overflow-hidden ${
+            isRefreshingList
+              ? 'h-8 border-b opacity-100'
+              : 'h-0 opacity-0 border-transparent'
+          }`}
         >
           <FolderSync className="h-3 w-3 animate-spin mr-2" />
           正在同步云端数据...
         </div>
+
+        {projectListError && !isProjectListLoading && (
+          <ProjectSyncError
+            error={projectListError}
+            onRetry={() => fetchProjects({ force: true })}
+          />
+        )}
 
         <Tabs
           value={activeTab}
@@ -251,11 +310,23 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
           className="flex-1 flex flex-col mt-2 px-2 pb-2"
         >
           <TabsList className="grid grid-cols-2 bg-muted/50 rounded-lg p-1 h-9 mx-2 mb-3">
-            <TabsTrigger value="user-projects" className="text-xs rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all">
-              我的项目 <span className="ml-1.5 opacity-60 text-[10px] bg-primary/10 px-1.5 rounded-full">{userProjects.length}</span>
+            <TabsTrigger
+              value="user-projects"
+              className="text-xs rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"
+            >
+              我的项目{' '}
+              <span className="ml-1.5 opacity-60 text-[10px] bg-primary/10 px-1.5 rounded-full">
+                {userProjects.length}
+              </span>
             </TabsTrigger>
-            <TabsTrigger value="built-in" className="text-xs rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all">
-              内置预设 <span className="ml-1.5 opacity-60 text-[10px] bg-primary/10 px-1.5 rounded-full">{builtInProjects.length}</span>
+            <TabsTrigger
+              value="built-in"
+              className="text-xs rounded-md data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all"
+            >
+              内置预设{' '}
+              <span className="ml-1.5 opacity-60 text-[10px] bg-primary/10 px-1.5 rounded-full">
+                {builtInProjects.length}
+              </span>
             </TabsTrigger>
           </TabsList>
 
@@ -265,12 +336,15 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
               className="h-full mt-0 focus-visible:outline-none data-[state=active]:flex data-[state=active]:flex-col"
             >
               <ScrollArea className="flex-1 h-full pr-3 pl-2 pb-2">
-                <div className={`space-y-3`}>
-                  {userProjects.length === 0 && !isLoading ? (
-                    <div className="text-xs text-muted-foreground flex flex-col items-center justify-center h-32 opacity-60">
-                      <FolderOpen className="h-10 w-10 mb-3 stroke-[1]" />
-                      <p>云端没有保存的项目</p>
-                    </div>
+                <div
+                  className={`space-y-3 transition-transform duration-500 ${isRefreshingList ? 'pt-8' : 'pt-1'}`}
+                >
+                  {isColdLoading ? (
+                    <ProjectListSkeleton />
+                  ) : userProjects.length === 0 && userProjectsUnavailable ? (
+                    <ProjectListUnavailable label="个人项目暂时无法同步" />
+                  ) : userProjects.length === 0 ? (
+                    <EmptyProjectState label="云端没有保存的项目" />
                   ) : (
                     userProjects.map((project) => (
                       <ProjectItem
@@ -296,23 +370,115 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
               className="h-full mt-0 focus-visible:outline-none data-[state=active]:flex data-[state=active]:flex-col"
             >
               <ScrollArea className="flex-1 h-full pr-3 pl-2 pb-2">
-                <div className={`space-y-3 transition-transform duration-500 ${isLoading && hasCache ? 'pt-8' : 'pt-1'}`}>
-                  {builtInProjects.map((project) => (
-                    <ProjectItem
-                      key={project.id || project.name}
-                      project={project}
-                      onLoad={() => loadProject(project)}
-                      onExport={() => exportProjectToFile(project.name)}
-                      isActive={currentProject?.name === project.name}
-                      isBuiltIn
-                    />
-                  ))}
+                <div
+                  className={`space-y-3 transition-transform duration-500 ${isRefreshingList ? 'pt-8' : 'pt-1'}`}
+                >
+                  {isColdLoading ? (
+                    <ProjectListSkeleton />
+                  ) : builtInProjects.length === 0 &&
+                    builtInProjectsUnavailable ? (
+                    <ProjectListUnavailable label="内置预设暂时无法同步" />
+                  ) : builtInProjects.length === 0 ? (
+                    <EmptyProjectState label="暂无内置预设" />
+                  ) : (
+                    builtInProjects.map((project) => (
+                      <ProjectItem
+                        key={project.id || project.name}
+                        project={project}
+                        onLoad={() => loadProject(project)}
+                        onExport={() => exportProjectToFile(project.name)}
+                        isActive={currentProject?.name === project.name}
+                        isBuiltIn
+                      />
+                    ))
+                  )}
                 </div>
               </ScrollArea>
             </TabsContent>
           </div>
         </Tabs>
       </div>
+    </div>
+  );
+}
+
+function ProjectSyncError({
+  error,
+  onRetry,
+}: {
+  error: ProjectListErrorCode;
+  onRetry: () => void;
+}) {
+  const isMigrationRequired = error === 'database-migration-required';
+
+  return (
+    <div
+      role="alert"
+      className="mx-4 mt-3 flex items-start gap-2.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.07] px-3 py-2.5 text-amber-950 dark:text-amber-100"
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium">
+          {isMigrationRequired
+            ? '云端项目服务需要更新'
+            : '暂时无法同步全部项目'}
+        </p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          {isMigrationRequired
+            ? '当前数据结构与应用版本不一致，完成数据库升级后即可恢复。'
+            : '已保留本地数据，你可以稍后重试。'}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 shrink-0 px-2 text-[11px]"
+        onClick={onRetry}
+        aria-label="重试同步项目"
+      >
+        重试
+      </Button>
+    </div>
+  );
+}
+
+function ProjectListSkeleton() {
+  return (
+    <div className="space-y-3" aria-label="正在加载项目列表">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div key={index} className="rounded-xl border bg-card/60 p-3 shadow-sm">
+          <div className="animate-pulse space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="h-4 w-2/3 rounded bg-muted" />
+              <div className="h-2 w-2 rounded-full bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-2.5 w-full rounded bg-muted/80" />
+              <div className="h-2.5 w-1/2 rounded bg-muted/70" />
+            </div>
+            <div className="h-2.5 w-20 rounded bg-muted/60" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyProjectState({ label }: { label: string }) {
+  return (
+    <div className="flex h-32 flex-col items-center justify-center text-xs text-muted-foreground/70">
+      <FolderOpen className="mb-3 h-10 w-10 stroke-[1]" />
+      <p>{label}</p>
+    </div>
+  );
+}
+
+function ProjectListUnavailable({ label }: { label: string }) {
+  return (
+    <div className="flex h-32 flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground/75">
+      <AlertTriangle className="mb-3 h-9 w-9 stroke-[1] text-amber-500/80" />
+      <p>{label}</p>
     </div>
   );
 }
@@ -338,7 +504,9 @@ function ProjectItem({
       ${isActive ? 'border-primary/60 ring-1 ring-primary/20 bg-primary/[0.03]' : ''}`}
     >
       <div className="flex justify-between items-start mb-1.5 gap-2 pr-2">
-        <div className="font-semibold text-foreground/90 flex-1 truncate text-sm">{project.name}</div>
+        <div className="font-semibold text-foreground/90 flex-1 truncate text-sm">
+          {project.name}
+        </div>
         {isActive && (
           <span className="flex h-1.5 w-1.5 mt-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.8)]" />
         )}
