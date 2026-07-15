@@ -56,6 +56,7 @@ function resetStores(): void {
     isProjectListLoading: false,
     hasHydratedProjects: true,
     projectsLastFetchedAt: null,
+    projectListError: null,
   });
 }
 
@@ -91,6 +92,29 @@ describe('project store', () => {
 
     expect(mockGetUserProjects).toHaveBeenCalledTimes(2);
     expect(mockGetBuiltInPresets).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces migration failures without caching a false empty result', async () => {
+    mockGetBuiltInPresets.mockResolvedValue({
+      success: false,
+      error: 'PROJECT_DATABASE_MIGRATION_REQUIRED',
+    });
+
+    await useProjectStore.getState().fetchProjects();
+
+    expect(useProjectStore.getState().projectListError).toBe(
+      'database-migration-required'
+    );
+    expect(useProjectStore.getState().projectsLastFetchedAt).toBeNull();
+
+    mockGetBuiltInPresets.mockResolvedValue({ success: true, data: [] });
+    await useProjectStore.getState().fetchProjects();
+
+    expect(mockGetBuiltInPresets).toHaveBeenCalledTimes(2);
+    expect(useProjectStore.getState().projectListError).toBeNull();
+    expect(useProjectStore.getState().projectsLastFetchedAt).toEqual(
+      expect.any(String)
+    );
   });
 
   it('keeps project and canvas ids aligned when importing a project JSON file', async () => {

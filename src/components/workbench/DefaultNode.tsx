@@ -245,6 +245,8 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
 
   return (
     <div
+      data-testid={`module-node-${id}`}
+      data-module-type={data.type}
       className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${
         !moduleEnabled ? 'opacity-50' : ''
       }`}

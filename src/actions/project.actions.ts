@@ -17,6 +17,8 @@ const MAX_PROJECT_DESCRIPTION_LENGTH = 2_000;
 const MAX_PROJECT_DATA_BYTES = 5_000_000;
 const MAX_PROJECT_METADATA_BYTES = 100_000;
 const PROJECT_SCHEMA_VERSION = 1;
+const PROJECT_DATABASE_MIGRATION_REQUIRED =
+  'PROJECT_DATABASE_MIGRATION_REQUIRED';
 
 interface SaveProjectOptions {
   projectId?: string;
@@ -28,6 +30,29 @@ interface SaveProjectOptions {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Drizzle 会把 PostgreSQL 错误包在 cause 链中。缺少表或字段通常意味着
+ * 应用代码已经更新，但目标数据库尚未执行配套迁移。
+ */
+function getProjectDatabaseError(error: unknown, fallback: string): string {
+  let current: unknown = error;
+
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (!current || typeof current !== 'object') {
+      break;
+    }
+
+    const databaseError = current as { code?: unknown; cause?: unknown };
+    if (databaseError.code === '42703' || databaseError.code === '42P01') {
+      return PROJECT_DATABASE_MIGRATION_REQUIRED;
+    }
+
+    current = databaseError.cause;
+  }
+
+  return fallback;
 }
 
 /**
@@ -59,7 +84,10 @@ export const getUserProjects = withAuth(async (session) => {
     return { success: true, data: userProjects };
   } catch (error) {
     console.error('Failed to fetch user projects:', error);
-    return { success: false, error: 'Failed to fetch projects' };
+    return {
+      success: false,
+      error: getProjectDatabaseError(error, 'Failed to fetch projects'),
+    };
   }
 });
 
@@ -117,7 +145,10 @@ export const getProjectById = withAuth(async (session, projectId: string) => {
     return { success: true, data: project };
   } catch (error) {
     console.error('Failed to fetch project:', error);
-    return { success: false, error: 'Failed to fetch project' };
+    return {
+      success: false,
+      error: getProjectDatabaseError(error, 'Failed to fetch project'),
+    };
   }
 });
 
@@ -145,7 +176,10 @@ export async function getBuiltInPresets() {
     return { success: true, data: presets };
   } catch (error) {
     console.error('Failed to fetch presets:', error);
-    return { success: false, error: 'Failed to fetch presets' };
+    return {
+      success: false,
+      error: getProjectDatabaseError(error, 'Failed to fetch presets'),
+    };
   }
 }
 
@@ -360,7 +394,10 @@ export const saveProject = withAuth(
       return { success: true, projectId: finalProjectId, revision: 1 };
     } catch (error) {
       console.error('Failed to save project:', error);
-      return { success: false, error: 'Failed to save project' };
+      return {
+        success: false,
+        error: getProjectDatabaseError(error, 'Failed to save project'),
+      };
     }
   }
 );
@@ -432,6 +469,9 @@ export async function deleteProjectAction(projectId: string) {
     return { success: true };
   } catch (error) {
     console.error('Failed to delete project:', error);
-    return { success: false, error: 'Failed to delete project' };
+    return {
+      success: false,
+      error: getProjectDatabaseError(error, 'Failed to delete project'),
+    };
   }
 }

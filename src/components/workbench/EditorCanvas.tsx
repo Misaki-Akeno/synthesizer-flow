@@ -229,6 +229,9 @@ export default function Canvas({ projectId, onAutoLoad }: CanvasProps = {}) {
       style={{ width: '100%', height: '100%' }}
       onContextMenu={(e) => e.preventDefault()}
       className="h-full w-full"
+      data-testid="editor-canvas"
+      aria-label="合成器画布"
+      role="region"
     >
       <CanvasInner projectId={projectId} onAutoLoad={onAutoLoad} />
     </div>

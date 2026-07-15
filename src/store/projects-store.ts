@@ -41,6 +41,12 @@ export interface FetchProjectsOptions {
   force?: boolean;
 }
 
+export type ProjectListErrorCode =
+  | 'database-migration-required'
+  | 'user-projects-unavailable'
+  | 'built-in-projects-unavailable'
+  | 'projects-unavailable';
+
 // ======== 项目管理 Store 接口 ========
 
 export interface ProjectPersistState {
@@ -56,6 +62,7 @@ export interface ProjectPersistState {
   isProjectListLoading: boolean;
   hasHydratedProjects: boolean;
   projectsLastFetchedAt: string | null;
+  projectListError: ProjectListErrorCode | null;
 
   // 动作
   fetchProjects: (options?: FetchProjectsOptions) => Promise<void>;
@@ -99,6 +106,32 @@ function isLocalImportedProject(project: ProjectConfig): boolean {
 }
 
 const PROJECT_LIST_CACHE_TTL_MS = 60_000;
+const PROJECT_DATABASE_MIGRATION_REQUIRED =
+  'PROJECT_DATABASE_MIGRATION_REQUIRED';
+
+function resolveProjectListError(
+  userError: string | null,
+  presetError: string | null
+): ProjectListErrorCode | null {
+  if (
+    userError === PROJECT_DATABASE_MIGRATION_REQUIRED ||
+    presetError === PROJECT_DATABASE_MIGRATION_REQUIRED
+  ) {
+    return 'database-migration-required';
+  }
+
+  if (userError && presetError) {
+    return 'projects-unavailable';
+  }
+  if (userError) {
+    return 'user-projects-unavailable';
+  }
+  if (presetError) {
+    return 'built-in-projects-unavailable';
+  }
+
+  return null;
+}
 
 // ======== 项目管理 Zustand Store ========
 
@@ -113,6 +146,7 @@ export const useProjectStore = create<ProjectPersistState>()(
       isProjectListLoading: false,
       hasHydratedProjects: false,
       projectsLastFetchedAt: null,
+      projectListError: null,
 
       markProjectsHydrated: () => {
         set({ hasHydratedProjects: true });
@@ -136,7 +170,11 @@ export const useProjectStore = create<ProjectPersistState>()(
           return;
         }
 
-        set({ isLoading: true, isProjectListLoading: true });
+        set({
+          isLoading: true,
+          isProjectListLoading: true,
+          projectListError: null,
+        });
         try {
           const [userRes, presetRes] = await Promise.all([
             getUserProjects(),
@@ -189,13 +227,36 @@ export const useProjectStore = create<ProjectPersistState>()(
             });
             set({ builtInProjects: mappedPresets });
           }
+
+          const userError =
+            !userRes.success && userRes.error !== 'Unauthorized'
+              ? (userRes.error ?? 'Failed to fetch projects')
+              : null;
+          const presetError = !presetRes.success
+            ? (presetRes.error ?? 'Failed to fetch presets')
+            : null;
+          const projectListError = resolveProjectListError(
+            userError,
+            presetError
+          );
+
+          set({
+            projectListError,
+            // 失败结果不能进入成功缓存，否则用户会在 TTL 内持续看到伪空状态。
+            projectsLastFetchedAt: projectListError
+              ? null
+              : new Date().toISOString(),
+          });
         } catch (error) {
           logger.error('获取项目列表异常', error);
+          set({
+            projectListError: 'projects-unavailable',
+            projectsLastFetchedAt: null,
+          });
         } finally {
           set({
             isLoading: false,
             isProjectListLoading: false,
-            projectsLastFetchedAt: new Date().toISOString(),
           });
         }
       },

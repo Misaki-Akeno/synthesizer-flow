@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { usePersistStore, type ProjectConfig } from '@/store/projects-store';
+import {
+  usePersistStore,
+  type ProjectConfig,
+  type ProjectListErrorCode,
+} from '@/store/projects-store';
 import {
   Tabs,
   TabsContent,
@@ -32,6 +36,7 @@ import {
   FolderSync,
   RefreshCcw,
   Info,
+  AlertTriangle,
 } from 'lucide-react';
 import { WorkbenchPanelHeader } from '@/components/layout/WorkbenchPanel';
 
@@ -64,6 +69,7 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
     isProjectListLoading,
     hasHydratedProjects,
     projectsLastFetchedAt,
+    projectListError,
     fetchProjects,
   } = usePersistStore();
 
@@ -93,6 +99,14 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
     isProjectListLoading && !hasFetchedProjects && !hasCache;
   const isRefreshingList = isProjectListLoading && !isColdLoading;
   const listStatusText = isProjectListLoading ? '同步中' : undefined;
+  const userProjectsUnavailable =
+    projectListError === 'database-migration-required' ||
+    projectListError === 'projects-unavailable' ||
+    projectListError === 'user-projects-unavailable';
+  const builtInProjectsUnavailable =
+    projectListError === 'database-migration-required' ||
+    projectListError === 'projects-unavailable' ||
+    projectListError === 'built-in-projects-unavailable';
 
   return (
     <div className="w-full h-full flex flex-col relative">
@@ -283,6 +297,13 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
           正在同步云端数据...
         </div>
 
+        {projectListError && !isProjectListLoading && (
+          <ProjectSyncError
+            error={projectListError}
+            onRetry={() => fetchProjects({ force: true })}
+          />
+        )}
+
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
@@ -320,6 +341,8 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
                 >
                   {isColdLoading ? (
                     <ProjectListSkeleton />
+                  ) : userProjects.length === 0 && userProjectsUnavailable ? (
+                    <ProjectListUnavailable label="个人项目暂时无法同步" />
                   ) : userProjects.length === 0 ? (
                     <EmptyProjectState label="云端没有保存的项目" />
                   ) : (
@@ -352,6 +375,9 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
                 >
                   {isColdLoading ? (
                     <ProjectListSkeleton />
+                  ) : builtInProjects.length === 0 &&
+                    builtInProjectsUnavailable ? (
+                    <ProjectListUnavailable label="内置预设暂时无法同步" />
                   ) : builtInProjects.length === 0 ? (
                     <EmptyProjectState label="暂无内置预设" />
                   ) : (
@@ -372,6 +398,47 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
           </div>
         </Tabs>
       </div>
+    </div>
+  );
+}
+
+function ProjectSyncError({
+  error,
+  onRetry,
+}: {
+  error: ProjectListErrorCode;
+  onRetry: () => void;
+}) {
+  const isMigrationRequired = error === 'database-migration-required';
+
+  return (
+    <div
+      role="alert"
+      className="mx-4 mt-3 flex items-start gap-2.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.07] px-3 py-2.5 text-amber-950 dark:text-amber-100"
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium">
+          {isMigrationRequired
+            ? '云端项目服务需要更新'
+            : '暂时无法同步全部项目'}
+        </p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+          {isMigrationRequired
+            ? '当前数据结构与应用版本不一致，完成数据库升级后即可恢复。'
+            : '已保留本地数据，你可以稍后重试。'}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 shrink-0 px-2 text-[11px]"
+        onClick={onRetry}
+        aria-label="重试同步项目"
+      >
+        重试
+      </Button>
     </div>
   );
 }
@@ -402,6 +469,15 @@ function EmptyProjectState({ label }: { label: string }) {
   return (
     <div className="flex h-32 flex-col items-center justify-center text-xs text-muted-foreground/70">
       <FolderOpen className="mb-3 h-10 w-10 stroke-[1]" />
+      <p>{label}</p>
+    </div>
+  );
+}
+
+function ProjectListUnavailable({ label }: { label: string }) {
+  return (
+    <div className="flex h-32 flex-col items-center justify-center px-6 text-center text-xs text-muted-foreground/75">
+      <AlertTriangle className="mb-3 h-9 w-9 stroke-[1] text-amber-500/80" />
       <p>{label}</p>
     </div>
   );

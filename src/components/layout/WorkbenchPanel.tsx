@@ -51,9 +51,9 @@ export function WorkbenchPanelHeader({
       <div className="flex h-full min-w-0 items-end gap-1">
         <div className="flex h-8 min-w-0 items-center border-b-2 border-chart-5 px-3">
           <div className="min-w-0">
-            <div className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-foreground">
+            <h2 className="truncate text-xs font-semibold uppercase tracking-[0.16em] text-foreground">
               {title}
-            </div>
+            </h2>
             {subtitle && (
               <div className="truncate text-[10px] leading-3 text-muted-foreground">
                 {subtitle}
@@ -67,8 +67,13 @@ export function WorkbenchPanelHeader({
   );
 }
 
-export function WorkbenchPanelBody({ children, className }: WorkbenchPanelProps) {
-  return <div className={cn('min-h-0 min-w-0 flex-1', className)}>{children}</div>;
+export function WorkbenchPanelBody({
+  children,
+  className,
+}: WorkbenchPanelProps) {
+  return (
+    <div className={cn('min-h-0 min-w-0 flex-1', className)}>{children}</div>
+  );
 }
 
 export function WorkbenchResizeHandle({

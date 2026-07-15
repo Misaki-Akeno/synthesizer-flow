@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   deleteProjectAction,
+  getBuiltInPresets,
   getProjectById,
   saveProject,
 } from './project.actions';
@@ -140,6 +141,23 @@ describe('project actions', () => {
       throw new Error(result.error);
     }
     expect(result.data?.id).toBe('preset-1');
+  });
+
+  it('reports a pending database migration for missing project columns', async () => {
+    const databaseError = new Error('Failed query') as Error & {
+      cause?: unknown;
+    };
+    databaseError.cause = { code: '42703' };
+    mockDb.select.mockImplementationOnce(() => {
+      throw databaseError;
+    });
+
+    const result = await getBuiltInPresets();
+
+    expect(result).toEqual({
+      success: false,
+      error: 'PROJECT_DATABASE_MIGRATION_REQUIRED',
+    });
   });
 
   it('denies private projects without user association', async () => {

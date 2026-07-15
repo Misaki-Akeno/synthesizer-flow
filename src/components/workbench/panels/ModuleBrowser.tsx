@@ -197,10 +197,12 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
                   </AccordionTrigger>
                   <AccordionContent className="pt-1 pb-3">
                     {filteredModules.map((module) => (
-                      <div
+                      <button
                         key={module.type}
+                        type="button"
+                        aria-label={`添加模块：${module.label}`}
                         className={cn(
-                          'flex items-center text-xs py-1.5 px-2 rounded-md hover:bg-accent cursor-pointer'
+                          'flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent'
                         )}
                         onClick={() =>
                           handleModuleAdd(module.type, module.label)
@@ -217,7 +219,7 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
                             {module.description}
                           </div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </AccordionContent>
                 </AccordionItem>
