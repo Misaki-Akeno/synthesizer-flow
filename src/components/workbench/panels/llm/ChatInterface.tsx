@@ -377,7 +377,10 @@ export function ChatInterface() {
   const enhanceToolResult = (toolCall: ToolCall): ToolCall => {
     const enhancedToolCall: ToolCall = { ...toolCall };
 
-    if (toolCall.function.name === 'add_module') {
+    if (
+      toolCall.function.name === 'module_add' ||
+      toolCall.function.name === 'add_module'
+    ) {
       try {
         const resultObj = JSON.parse(enhancedToolCall.result || '{}');
         const moduleId = resultObj.data?.moduleId;
@@ -436,7 +439,10 @@ export function ChatInterface() {
       }
     }
 
-    if (toolCall.function.name === 'update_module_parameter') {
+    if (
+      toolCall.function.name === 'module_update' ||
+      toolCall.function.name === 'update_module_parameter'
+    ) {
       try {
         const resultObj = JSON.parse(enhancedToolCall.result || '{}');
         const moduleId = resultObj.data?.moduleDetails?.module?.id;
@@ -465,7 +471,10 @@ export function ChatInterface() {
       }
     }
 
-    if (toolCall.function.name === 'connect_modules') {
+    if (
+      toolCall.function.name === 'connection_connect' ||
+      toolCall.function.name === 'connect_modules'
+    ) {
       try {
         const resultObj = JSON.parse(enhancedToolCall.result || '{}');
         const sourceId = resultObj.data?.sourceModuleDetails?.module?.id;

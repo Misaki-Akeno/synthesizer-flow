@@ -86,7 +86,8 @@ src/
 ├── agent/                 # AI Agent system
 │   ├── core/              # Agent core (Agent.ts, types.ts)
 │   ├── graph/             # LangGraph workflow
-│   ├── tools/             # Agent tool definitions
+│   ├── tools/             # Capability-grouped Agent tools
+│   ├── skills/            # Module guides + runtime schema discovery
 │   ├── prompts/           # System prompts
 │   └── drizzleCheckpointer.ts  # State persistence
 ├── db/                    # Database layer
@@ -308,18 +309,29 @@ npx vitest run src/path/to/file.test.ts
 - **Provider Registry**: `src/lib/ai/providers.ts` defines supported providers, endpoints, and curated models
 - **Model Factory**: `src/lib/ai/modelFactory.ts` creates provider-specific LangChain models behind `BaseChatModel`
 - **Provider Settings**: Versioned per-provider profiles are stored in the existing `users.settings` JSON field; no dedicated provider table is required
-- **LangGraph Workflow**: Multi-step agent workflow with tool calling
-- **Tools**: Type-safe tool definitions for module operations
+- **LangGraph Workflow**: Multi-step agent workflow with registry-driven approval routing
+- **Tool Registry**: Tools are grouped into inspection, modules, connections, knowledge, and skills capabilities
+- **Agent Skills**: Module guides combine curated usage advice with parameter and port schemas extracted from real module classes
 - **Checkpointer**: Database-backed state persistence for conversations
 
 ### Tool System
 
-Tools are defined in `src/agent/tools/definitions.ts` and executed via `ToolExecutor`. Tools allow the AI to:
+`src/agent/tools/definitions.ts` assembles capability groups under `src/agent/tools/groups/`; `ToolExecutor` runs canvas operations against an in-memory shadow state. The public tool protocol is:
 
-- Create/delete modules
-- Update parameters
-- Create connections
-- Query module information
+- `canvas_inspect`: inspect the full canvas or one module
+- `module_add`, `module_update`, `module_delete`: module lifecycle and parameters
+- `connection_connect`, `connection_disconnect`: typed port connections
+- `knowledge_search`: RAG-backed conceptual and documentation search
+- `skill_list`, `skill_load`: discover and load module-specific guides
+
+Destructive approval policy belongs to the tool registry, not the LangGraph workflow. Keep legacy tool aliases execution-only so older checkpoints can resume without exposing deprecated names to new models.
+
+### Agent Skills
+
+- Add curated module advice in `src/agent/skills/module-guides.ts`
+- Keep parameter defaults, constraints, and ports in module classes; Skills extract them at load time to avoid schema drift
+- Use lightweight `skill_list` summaries for discovery and `skill_load` for progressive disclosure
+- `module_add` requires the corresponding `module:<type>` Skill to be loaded in the current request
 
 ### MCP (Model Context Protocol)
 

@@ -129,61 +129,6 @@ export class ToolExecutor {
   }
 
   /**
-   * 执行工具调用
-   */
-  async executeToolCall(
-    toolName: string,
-    args: Record<string, unknown>
-  ): Promise<unknown> {
-    logger.info(`执行工具: ${toolName}`, args);
-
-    try {
-      switch (toolName) {
-        case 'get_canvas':
-          return this.getCanvas();
-        case 'get_module_details':
-          return this.getModuleDetails(args.moduleId as string);
-        case 'add_module':
-          return this.addModule(
-            args.type as string,
-            args.label as string,
-            args.position as { x: number; y: number }
-          );
-        case 'delete_module':
-          return this.deleteModule(args.moduleId as string);
-        case 'update_module_parameter':
-          return this.updateModuleParameter(
-            args.moduleId as string,
-            args.paramKey as string,
-            args.value
-          );
-        case 'connect_modules':
-          return this.connectModules(
-            args.sourceId as string,
-            args.targetId as string,
-            args.sourceHandle as string,
-            args.targetHandle as string
-          );
-        case 'disconnect_modules':
-          return this.disconnectModules(
-            args.sourceId as string,
-            args.targetId as string,
-            args.sourceHandle as string,
-            args.targetHandle as string
-          );
-        case 'rag_search':
-          return await this.ragSearch(args.query as string, args.topK);
-        default:
-          throw new Error(`未知的工具: ${toolName}`);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '未知错误';
-      logger.error(`工具执行失败: ${toolName}`, errorMessage);
-      return { error: errorMessage };
-    }
-  }
-
-  /**
    * 获取画布上的所有模块和连接 (合并视图)
    */
   public getCanvas() {
@@ -211,29 +156,6 @@ export class ToolExecutor {
         totalConnections: connections.length,
         modules,
         connections,
-        timestamp: new Date().toISOString(),
-      },
-    };
-  }
-
-  /**
-   * 获取画布上的所有模块 (Legacy: retained for internal use/tests if needed, but get_canvas is preferred)
-   */
-  public getCanvasModules() {
-    const modules = this.nodes.map((node) => ({
-      id: node.id,
-      type: node.data?.type || node.type,
-      label: node.data?.label,
-      position: node.position,
-      // parameters: node.data?.parameters || {},
-      selected: node.selected || false,
-    }));
-
-    return {
-      success: true,
-      data: {
-        totalModules: modules.length,
-        modules,
         timestamp: new Date().toISOString(),
       },
     };
@@ -331,28 +253,6 @@ export class ToolExecutor {
             toHandle: edge.targetHandle,
           })),
         },
-      },
-    };
-  }
-
-  /**
-   * 获取画布上的所有连接
-   */
-  public getCanvasConnections() {
-    const connections = this.edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      sourceHandle: edge.sourceHandle,
-      targetHandle: edge.targetHandle,
-    }));
-
-    return {
-      success: true,
-      data: {
-        totalConnections: connections.length,
-        connections,
-        timestamp: new Date().toISOString(),
       },
     };
   }

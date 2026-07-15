@@ -147,23 +147,34 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 3.  **执行器 (`ToolExecutor` - `src/agent/tools/executor.ts`)**:
     这是 Agent 系统最核心的创新点。由于服务端无法访问浏览器的 AudioContext，Executor 实现了一个 **"影子状态模式 (Shadow State Pattern)"**：
     - **初始化**: 每次请求时，接收前端传来的画布快照 (`GraphStateSnapshot`)，在内存中重建虚拟的 `nodes` 和 `edges`。
-    - **模拟执行**: 当 LLM 调用 `add_module` 或 `connect_modules` 时，Executor 在虚拟状态上执行操作（如计算不重叠的坐标、验证端口兼容性）。
+    - **模拟执行**: 当 LLM 调用 `module_add` 或 `connection_connect` 时，Executor 在虚拟状态上执行操作（如计算不重叠的坐标、验证端口兼容性）。
     - **指令记录**: 操作不仅仅是修改虚拟状态，更会被记录为 `ClientOperation` 指令（如 `ADD_MODULE`, `CONNECT_MODULES`）。
 
 4.  **顺序工具节点 (`SequentialToolNode`)**:
     - 为了解决 LLM 并行调用工具时产生的依赖问题（例如同时“添加模块A”和“连接模块A”，后者会因为A尚未存在而失败），系统强制工具按顺序执行。
     - 后一个工具能立即感知到前一个工具对"影子状态"的修改。
 
+5.  **能力工具注册表 (`src/agent/tools`)**:
+    - 工具按画布检查、模块编辑、信号连接、知识检索和 Skills 五个能力域组织，而不是维护一组扁平定义。
+    - 删除模块、断开连接等审批策略由注册表声明，LangGraph 只消费策略，不重复硬编码工具名。
+    - 旧工具名仅在执行节点转换，用于恢复升级前的 checkpoint，不再绑定给新模型。
+
+6.  **模块 Skills (`src/agent/skills`)**:
+    - `skill_list` 返回轻量索引，`skill_load` 按需加载某个 `module:<type>` 指南，控制上下文体积。
+    - 使用建议与注意事项由 `module-guides.ts` 维护；参数默认值、范围、选项及端口则从真实模块类实时提取，避免两套 schema 漂移。
+    - `module_add` 会校验当前请求是否已加载目标模块 Skill，形成“发现 → 学习 → 操作 → 验证”的执行闭环。
+
 ### 4.2 交互流程 (Internal Interaction Flow)
 
 一个典型的 "User: 添加一个振荡器" 请求流程如下：
 
 1.  **用户发起**: 前端调用 Server Action `chatWithAgent`，携带当前画布快照 (`nodes`, `edges`)。
-2.  **Agent 规划**: 服务端 Agent 接收消息，LLM 决定调用 `add_module` 工具。
-3.  **影子执行**: `ToolExecutor` 在虚拟画布上添加节点，计算出安全坐标 (x, y)，并记录操作指令 `ClientOperation`。
-4.  **响应返回**: Server Action 返回 LLM 的文本回复以及 `clientOperations` 列表。
-5.  **前端同步**: 前端接收到响应，解析 `clientOperations`，并通过 Zustand Store 真正执行 `addNode`，此时才会触发浏览器的 AudioContext 创建声音并在 Canvas 上渲染 UI。
+2.  **指南加载**: Agent 先调用 `skill_list`/`skill_load` 获取振荡器的真实参数、端口和使用建议。
+3.  **Agent 规划**: 服务端 Agent 检查画布后调用 `module_add`。
+4.  **影子执行**: `ToolExecutor` 在虚拟画布上添加节点，计算出安全坐标 (x, y)，并记录操作指令 `ClientOperation`。
+5.  **响应返回**: Server Action 返回 LLM 的文本回复以及 `clientOperations` 列表。
+6.  **前端同步**: 前端接收到响应，解析 `clientOperations`，并通过 Zustand Store 真正执行 `addNode`，此时才会触发浏览器的 AudioContext 创建声音并在 Canvas 上渲染 UI。
 
 ### 4.3 检索增强生成 (RAG)
 
-Agent 集成了 RAG 能力 (`rag_search` 工具)，直接在服务端调用 `searchDocuments` 查询 Postgres 向量数据库，无需外部 API 调用。这使得 Agent 能够查询项目文档、音频合成原理等知识来辅助用户。
+Agent 集成了 RAG 能力 (`knowledge_search` 工具)，直接在服务端调用 `searchDocuments` 查询 Postgres 向量数据库，无需外部 API 调用。RAG 用于概念与项目文档；模块的精确参数、端口和操作指南由 Skills 提供。

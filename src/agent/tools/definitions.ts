@@ -1,188 +1,43 @@
-import {
-  DynamicStructuredTool,
-  type StructuredTool,
-} from '@langchain/core/tools';
-import { z } from 'zod';
-import { ToolExecutor } from './executor';
+import type { ToolExecutor } from './executor';
+import { createInspectionToolGroup } from './groups/inspection';
+import { createModuleToolGroup } from './groups/modules';
+import { createConnectionToolGroup } from './groups/connections';
+import { createKnowledgeToolGroup } from './groups/knowledge';
+import { createSkillToolGroup } from './groups/skills';
+import type { AgentToolRegistry } from './types';
+import { AgentSkillSession } from '@/agent/skills';
 
-export const UNSAFE_TOOL_NAMES = [
-  'delete_module',
-  'disconnect_modules',
-] as const;
-export type UnsafeToolName = (typeof UNSAFE_TOOL_NAMES)[number];
-export type AgentTool = StructuredTool;
-
-// 定义 Schema
-const getCanvasModulesSchema = z.object({});
-const getModuleDetailsSchema = z.object({
-  moduleId: z.string().describe('模块ID'),
-});
-
-const ragSearchSchema = z.object({
-  query: z.string().describe('检索问题或文本'),
-  topK: z.number().optional().default(5).describe('返回条数，默认5，最大20'),
-});
-
-const addModuleSchema = z.object({
-  type: z.string().describe('模块类型 (例如: oscillator, filter, gain, etc.)'),
-  label: z.string().describe('模块标签/名称'),
-  position: z
-    .object({
-      x: z.number(),
-      y: z.number(),
-    })
-    .optional()
-    .describe('模块位置 (可选)'),
-});
-
-const deleteModuleSchema = z.object({
-  moduleId: z.string().describe('要删除的模块ID'),
-});
-
-const updateModuleParameterSchema = z.object({
-  moduleId: z.string().describe('模块ID'),
-  paramKey: z.string().describe('参数名称'),
-  value: z.union([z.string(), z.number(), z.boolean()]).describe('参数值'),
-});
-
-const connectModulesSchema = z.object({
-  sourceId: z.string().describe('源模块ID'),
-  targetId: z.string().describe('目标模块ID'),
-  sourceHandle: z.string().optional().describe('源模块句柄 (可选)'),
-  targetHandle: z.string().optional().describe('目标模块句柄 (可选)'),
-});
-
-const disconnectModulesSchema = z.object({
-  sourceId: z.string().describe('源模块ID'),
-  targetId: z.string().describe('目标模块ID'),
-  sourceHandle: z.string().optional().describe('源模块句柄 (可选)'),
-  targetHandle: z.string().optional().describe('目标模块句柄 (可选)'),
-});
-
-type DynamicStructuredToolConstructor = new (input: {
-  name: string;
-  description: string;
-  schema: z.ZodType;
-  func: (input: unknown) => Promise<string>;
-}) => AgentTool;
-
-// 轻量化 LangChain 工具构造类型，避免把深层泛型扩散到业务代码。
-const TypedDynamicStructuredTool =
-  DynamicStructuredTool as unknown as DynamicStructuredToolConstructor;
-
-function createStructuredTool<TSchema extends z.ZodType>(input: {
-  name: string;
-  description: string;
-  schema: TSchema;
-  func: (args: z.infer<TSchema>) => Promise<string>;
-}): AgentTool {
-  return new TypedDynamicStructuredTool({
-    name: input.name,
-    description: input.description,
-    schema: input.schema,
-    func: async (args: unknown) => input.func(input.schema.parse(args)),
-  });
-}
-
-export function createTools(executor: ToolExecutor) {
-  const getCanvasTool = createStructuredTool({
-    name: 'get_canvas',
-    description: '获取画布上的所有模块和连接信息的快照',
-    schema: getCanvasModulesSchema, // Schema is typically empty for "get all"
-    func: async () => {
-      const result = executor.getCanvas();
-      return JSON.stringify(result);
-    },
-  });
-
-  const getModuleDetailsTool = createStructuredTool({
-    name: 'get_module_details',
-    description: '获取指定模块的详细信息',
-    schema: getModuleDetailsSchema,
-    func: async ({ moduleId }) => {
-      const result = executor.getModuleDetails(moduleId);
-      return JSON.stringify(result);
-    },
-  });
-
-  const ragSearchTool = createStructuredTool({
-    name: 'rag_search',
-    description: '对本地知识库进行向量检索，返回最相关片段（RAG）',
-    schema: ragSearchSchema,
-    func: async ({ query, topK }) => {
-      const result = await executor.ragSearch(query, topK);
-      return JSON.stringify(result);
-    },
-  });
-
-  const addModuleTool = createStructuredTool({
-    name: 'add_module',
-    description: '在画布上添加一个新的音频模块，返回新模块的详细信息',
-    schema: addModuleSchema,
-    func: async ({ type, label, position }) => {
-      const result = executor.addModule(type, label, position);
-      return JSON.stringify(result);
-    },
-  });
-
-  const deleteModuleTool = createStructuredTool({
-    name: 'delete_module',
-    description: '从画布上删除指定的模块',
-    schema: deleteModuleSchema,
-    func: async ({ moduleId }) => {
-      const result = executor.deleteModule(moduleId);
-      return JSON.stringify(result);
-    },
-  });
-
-  const updateModuleParameterTool = createStructuredTool({
-    name: 'update_module_parameter',
-    description: '更新指定模块的参数值，返回更新后的模块详细信息',
-    schema: updateModuleParameterSchema,
-    func: async ({ moduleId, paramKey, value }) => {
-      const result = executor.updateModuleParameter(moduleId, paramKey, value);
-      return JSON.stringify(result);
-    },
-  });
-
-  const connectModulesTool = createStructuredTool({
-    name: 'connect_modules',
-    description: '连接两个模块，返回涉及模块的详细信息',
-    schema: connectModulesSchema,
-    func: async ({ sourceId, targetId, sourceHandle, targetHandle }) => {
-      const result = executor.connectModules(
-        sourceId,
-        targetId,
-        sourceHandle,
-        targetHandle
-      );
-      return JSON.stringify(result);
-    },
-  });
-
-  const disconnectModulesTool = createStructuredTool({
-    name: 'disconnect_modules',
-    description: '断开两个模块之间的连接，返回涉及模块的详细信息',
-    schema: disconnectModulesSchema,
-    func: async ({ sourceId, targetId, sourceHandle, targetHandle }) => {
-      const result = executor.disconnectModules(
-        sourceId,
-        targetId,
-        sourceHandle,
-        targetHandle
-      );
-      return JSON.stringify(result);
-    },
-  });
-
-  return [
-    getCanvasTool,
-    getModuleDetailsTool,
-    addModuleTool,
-    deleteModuleTool,
-    updateModuleParameterTool,
-    connectModulesTool,
-    disconnectModulesTool,
-    ragSearchTool,
+/**
+ * 创建按能力域组织的 Agent 工具注册表。
+ * Graph 从注册表读取审批策略，避免在工作流中重复维护危险工具名单。
+ */
+export function createAgentToolRegistry(
+  executor: ToolExecutor
+): AgentToolRegistry {
+  const skillSession = new AgentSkillSession();
+  const groups = [
+    createInspectionToolGroup(executor),
+    createModuleToolGroup(executor, skillSession),
+    createConnectionToolGroup(executor),
+    createKnowledgeToolGroup(executor),
+    createSkillToolGroup(skillSession),
   ];
+  const entries = groups.flatMap((group) => group.entries);
+
+  return {
+    groups,
+    tools: entries.map((entry) => entry.tool),
+    approvalRequiredToolNames: entries
+      .filter((entry) => entry.requiresApproval)
+      .map((entry) => entry.tool.name),
+  };
 }
+
+/**
+ * 兼容只需要扁平工具数组的调用点；新代码优先使用 createAgentToolRegistry。
+ */
+export function createTools(executor: ToolExecutor) {
+  return createAgentToolRegistry(executor).tools;
+}
+
+export type { AgentTool, AgentToolGroup, AgentToolRegistry } from './types';

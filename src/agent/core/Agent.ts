@@ -10,7 +10,7 @@ import { createModuleLogger } from '@/lib/logger';
 import { ChatMessage, ChatResponse, GraphStateSnapshot } from './types';
 import { createGraph } from '../graph/workflow';
 import { ToolExecutor } from '../tools/executor';
-import { createTools } from '../tools/definitions';
+import { createAgentToolRegistry } from '../tools/definitions';
 import { DrizzleCheckpointer } from '../drizzleCheckpointer';
 import { createAIChatModel } from '@/lib/ai/modelFactory';
 
@@ -89,8 +89,8 @@ export class Agent {
       // Initialize Tool Executor and Graph
       const checkpointer = new DrizzleCheckpointer();
       const executor = new ToolExecutor(initialState);
-      const tools = createTools(executor);
-      const graph = createGraph(tools, checkpointer);
+      const toolRegistry = createAgentToolRegistry(executor);
+      const graph = createGraph(toolRegistry, checkpointer);
 
       // Convert messages to LangChain format
       const inputs = messages.map((msg) => {

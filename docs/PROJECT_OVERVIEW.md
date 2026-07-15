@@ -101,37 +101,35 @@ Synthesizer Flow 是一个基于 Web 的模块化音频合成器应用，深度�
 
 - **节点定义**:
   - `agent` 节点: 调用 LLM（带工具绑定），生成响应或工具调用决策。
-  - `tools` 节点: 执行工具调用，返回结果。
+  - `safe_tools` 节点: 顺序执行常规工具调用并返回结果。
+  - `unsafe_tools` 节点: 在用户批准后执行注册表声明的破坏性操作。
 - **条件边**:
   - `shouldContinue()`: 检查最后一条消息是否包含工具调用。
-    - 有工具调用 → 路由到 `tools` 节点。
+    - 常规工具 → 路由到 `safe_tools` 节点。
+    - 需要审批的工具 → 路由到 `unsafe_tools` 节点并暂停。
     - 无工具调用 → 终止流程（END）。
-- **循环结构**: `START -> agent -> [tools -> agent]* -> END`，支持多轮工具调用。
+- **循环结构**: `START -> agent -> [safe_tools/unsafe_tools -> agent]* -> END`，支持多轮工具调用。
 - **System Prompt 注入**: 自动在消息链头部插入 System Prompt，定义 Agent 角色和工具使用规范。
 
 **顺序工具节点** (`sequentialToolNode.ts`):
 
 - **关键创新**: 顺序执行工具调用（`for...of` 循环），而非并行。
-- **原因**: 确保状态依赖的工具调用（如先 `add_module` 再 `connect_modules`）能获取最新状态。
+- **原因**: 确保状态依赖的工具调用（如先 `module_add` 再 `connection_connect`）能获取最新状态。
 - **错误处理**: 捕获工具执行异常，返回错误消息给 LLM，避免流程中断。
+- **会话兼容**: 执行时转换旧 checkpoint 的工具名与参数，但不向新模型暴露旧协议。
 - **返回格式**: 为每个工具调用生成 `ToolMessage`，追踪 `tool_call_id`。
 
 #### 4.2.3 工具层 (Tools Layer) - `/src/agent/tools`
 
-**工具定义** (`definitions.ts`):
+**能力注册表** (`definitions.ts`, `groups/`):
 
-- 使用 `DynamicStructuredTool` + Zod Schema 定义 8 种工具：
-  - **感知类**:
-    - `get_canvas`: 获取画布完整快照（模块+连接）。
-    - `get_module_details`: 查询特定模块的参数、端口、连接信息。
-  - **操作类**:
-    - `add_module`: 添加新模块，返回详细信息（包括可用端口）。
-    - `delete_module`: 删除模块及其连接。
-    - `update_module_parameter`: 更新参数值，返回更新后的模块状态。
-    - `connect_modules`: 连接两个模块（支持 Handle 指定）。
-    - `disconnect_modules`: 断开连接。
-  - **知识类**:
-    - `rag_search`: 向量检索本地知识库（音频合成教程、模块文档等）。
+- 工具使用统一的 `DynamicStructuredTool` + Zod 工厂创建，并按五个能力域组织：
+  - **画布检查**: `canvas_inspect`，既可获取画布摘要，也可查询单个模块详情。
+  - **模块编辑**: `module_add`、`module_update`、`module_delete`。
+  - **信号连接**: `connection_connect`、`connection_disconnect`。
+  - **知识检索**: `knowledge_search`，查询合成概念和项目文档。
+  - **模块 Skills**: `skill_list`、`skill_load`，发现并按需加载模块指南。
+- `module_delete` 和 `connection_disconnect` 在注册表中声明为需审批工具；Graph 不维护第二份危险工具名单。
 
 **工具执行器** (`executor.ts`):
 
@@ -149,23 +147,30 @@ Synthesizer Flow 是一个基于 Web 的模块化音频合成器应用，深度�
   - `ragSearch()`: 直接调用 `searchDocuments()` 进行向量检索，避免 HTTP 调用失败。
 - **位置算法**: `findSafePosition()` 检测现有节点，偏移新节点位置避免重叠。
 
-#### 4.2.4 Prompt 层 (Prompts Layer) - `/src/agent/prompts`
+#### 4.2.4 Skills 层 - `/src/agent/skills`
+
+- **轻量发现**: `skill_list` 只返回标题、分类、描述和 tags，避免一次向上下文注入所有模块细节。
+- **按需加载**: `skill_load(module:<type>)` 返回用途、配置步骤、注意事项、参数 schema 和端口 schema。
+- **单一事实来源**: 人工维护的仅是使用建议；参数默认值、范围、选项和端口直接从 `moduleClassMap` 中的真实模块实例提取。
+- **操作约束**: `AgentSkillSession` 记录单次请求已加载的指南；`module_add` 只允许创建已经学习过的模块类型。
+- **扩展方式**: 新模块注册后自动进入 Skill 索引，只需在 `module-guides.ts` 补充面向 Agent 的使用指南。
+
+#### 4.2.5 Prompt 层 (Prompts Layer) - `/src/agent/prompts`
 
 **System Prompt** (`system.ts`):
 
 - **角色定义**: 定位为"无状态 AI 助手"，强调必须通过工具感知和操作状态。
 - **核心原则**:
   - 无状态性: 禁止幻觉（不调用工具不说"已完成"）。
-  - 工具优先: 明确"工具是唯一途径"。
-  - 验证先行: 操作前必须先查询（如调用 `get_canvas` 获取 ID，`get_module_details` 确认参数名）。
+  - 渐进式披露: 先发现并加载当前任务需要的 Skill，而不是把全部模块文档塞进 System Prompt。
+  - 验证先行: 通过 `canvas_inspect` 获取真实 ID、参数值和连接状态。
 - **工具使用规范**:
-  - ID 必须真实（从 `get_canvas` 获取）。
-  - 参数名必须准确（从 `get_module_details` 获取）。
+  - ID 必须来自 `canvas_inspect`。
+  - 模块 type、参数名与端口名必须来自 `skill_load` 或画布详情。
   - 连接前检查端口类型和可用性。
-- **标准工作流示例**: 提供查询、操作的典型流程模板。
-- **默认策略**: 工具调用已全面集成。AI 助手会根据用户请求主动调用工具（如 `get_canvas`, `add_module`）来完成任务。
+- **标准工作流**: `skill_list → skill_load → canvas_inspect → 操作 → canvas_inspect`。
 
-#### 4.2.5 Server Actions 层 - `/src/agent/actions.ts`
+#### 4.2.6 Server Actions 层 - `/src/agent/actions.ts`
 
 **chatWithAgent**:
 
@@ -215,7 +220,7 @@ Synthesizer Flow 是一个基于 Web 的模块化音频合成器应用，深度�
 
 #### 工作流程
 
-1. 用户提问触发 `rag_search` 工具调用。
+1. 用户的概念或文档问题触发 `knowledge_search` 工具调用。
 2. ToolExecutor 调用 `searchDocuments()`（`/src/lib/rag/vectorStore.ts`）。
 3. 向量相似度搜索（pgvector HNSW 索引）返回 Top-K 文档片段。
 4. 工具结果作为 `ToolMessage` 返回给 LLM。
@@ -224,14 +229,14 @@ Synthesizer Flow 是一个基于 Web 的模块化音频合成器应用，深度�
 #### 应用场景
 
 - 音频合成理论解释（振荡器、滤波器原理）。
-- 模块使用文档查询（特定模块的参数说明）。
+- 项目与模块的背景文档查询（精确参数与端口由 Skills 提供）。
 - 声音设计建议（基于知识库的最佳实践）。
 
 ### 4.5 关键设计决策
 
 #### 顺序工具执行 vs. 并行执行
 
-- **问题**: LangChain 默认并行执行多个工具调用，导致 `add_module` 未完成时 `connect_modules` 找不到模块。
+- **问题**: LangChain 默认并行执行多个工具调用，导致 `module_add` 未完成时 `connection_connect` 找不到模块。
 - **解决**: 实现 `SequentialToolNode`，强制顺序执行，确保每个工具调用都能看到前一个的状态变更。
 
 #### 虚拟状态 vs. 数据库状态

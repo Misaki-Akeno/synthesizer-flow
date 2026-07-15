@@ -21,6 +21,7 @@ Synthesizer Flow 致力于构建模块化合成器。可以通过菜单来添加
 
 - **Agent Protocol**: **Model Context Protocol (MCP)** - 实现了 MCP 客户端标准，让 LLM 能够标准化地“感知”和“操作”应用状态。
 - **Orchestration**: **LangChain** & **Vercel AI SDK** - 管理 LLM 上下文、工具调用 (Tool Calling) 和流式响应。
+- **Agent Skills**: 按需加载模块指南，并直接从真实模块类读取参数与端口定义，避免提示词与实现漂移。
 - **RAG System**: **OpenAI Embeddings** + **pgvector** (via Drizzle) - 构建向量知识库，使 Agent 能够基于文档回答专业音频问题。
 
 **后端与基础设施 (Backend & Infra)**

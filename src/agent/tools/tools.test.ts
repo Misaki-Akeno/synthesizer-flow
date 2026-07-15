@@ -2,7 +2,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ToolExecutor } from './executor';
-import { createTools } from './definitions';
+import { createAgentToolRegistry, createTools } from './definitions';
 import type { GraphStateSnapshot } from '../core/types';
 
 // Mock dependencies
@@ -495,10 +495,7 @@ describe('ToolExecutor', () => {
 
       await executor.ragSearch('query', 0);
       await executor.ragSearch('query', 3.9);
-      await executor.executeToolCall('rag_search', {
-        query: 'query',
-        topK: 0,
-      });
+      await executor.ragSearch('query', 0);
 
       expect(searchDocuments).toHaveBeenNthCalledWith(1, 'query', 1);
       expect(searchDocuments).toHaveBeenNthCalledWith(2, 'query', 3);
@@ -516,20 +513,42 @@ describe('Tool Definitions', () => {
 
   it('should create all tools', () => {
     const tools = createTools(executor);
-    expect(tools).toHaveLength(8);
+    expect(tools).toHaveLength(9);
 
     const toolNames = tools.map((t) => t.name);
-    expect(toolNames).toContain('get_canvas');
-    expect(toolNames).toContain('add_module');
-    expect(toolNames).toContain('rag_search');
+    expect(toolNames).toContain('canvas_inspect');
+    expect(toolNames).toContain('module_add');
+    expect(toolNames).toContain('knowledge_search');
+    expect(toolNames).toContain('skill_list');
+    expect(toolNames).toContain('skill_load');
+  });
+
+  it('organizes tools into capability groups with declarative approval policy', () => {
+    const registry = createAgentToolRegistry(executor);
+
+    expect(registry.groups.map((group) => group.id)).toEqual([
+      'inspection',
+      'modules',
+      'connections',
+      'knowledge',
+      'skills',
+    ]);
+    expect(registry.approvalRequiredToolNames).toEqual([
+      'module_delete',
+      'connection_disconnect',
+    ]);
   });
 
   it('tools should invoke executor methods', async () => {
     const tools = createTools(executor);
-    const addTool = tools.find((t) => t.name === 'add_module');
+    const addTool = tools.find((t) => t.name === 'module_add');
+    const loadSkillTool = tools.find((t) => t.name === 'skill_load');
 
     expect(addTool).toBeDefined();
-    if (!addTool) return;
+    expect(loadSkillTool).toBeDefined();
+    if (!addTool || !loadSkillTool) return;
+
+    await loadSkillTool.call({ skillId: 'module:numberinput' });
 
     await addTool.call({
       type: 'numberinput',
@@ -542,9 +561,31 @@ describe('Tool Definitions', () => {
     expect(operations[0].type).toBe('ADD_MODULE');
   });
 
+  it('requires a module Skill before adding that module type', async () => {
+    const tools = createTools(executor);
+    const addTool = tools.find((tool) => tool.name === 'module_add');
+
+    expect(addTool).toBeDefined();
+    if (!addTool) return;
+
+    const result = JSON.parse(
+      await addTool.call({
+        type: 'numberinput',
+        label: 'Needs Skill',
+      })
+    );
+
+    expect(result).toEqual({
+      success: false,
+      error: '添加 numberinput 前必须先加载模块 Skill',
+      requiredSkillId: 'module:numberinput',
+    });
+    expect(executor.getOperations()).toHaveLength(0);
+  });
+
   it('rejects malformed tool arguments before mutating executor state', async () => {
     const tools = createTools(executor);
-    const addTool = tools.find((t) => t.name === 'add_module');
+    const addTool = tools.find((t) => t.name === 'module_add');
 
     expect(addTool).toBeDefined();
     if (!addTool) return;
@@ -558,5 +599,26 @@ describe('Tool Definitions', () => {
     ).rejects.toThrow();
 
     expect(executor.getOperations()).toHaveLength(0);
+  });
+
+  it('loads module Skills through the skills tool group', async () => {
+    const tools = createTools(executor);
+    const loadSkillTool = tools.find((tool) => tool.name === 'skill_load');
+
+    expect(loadSkillTool).toBeDefined();
+    if (!loadSkillTool) return;
+
+    const result = JSON.parse(
+      await loadSkillTool.call({ skillId: 'module:numberinput' })
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data.moduleType).toBe('numberinput');
+    expect(result.data.parameters).toEqual([
+      expect.objectContaining({ key: 'value', min: 0, max: 999 }),
+    ]);
+    expect(result.data.ports.outputs).toEqual([
+      { key: 'output', type: 'number' },
+    ]);
   });
 });

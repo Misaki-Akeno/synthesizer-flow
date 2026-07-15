@@ -6,15 +6,8 @@ import { RunnableConfig } from '@langchain/core/runnables';
 import { AgentState } from './state';
 import { getSystemPrompt } from '../prompts/system';
 import { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
-import {
-  UNSAFE_TOOL_NAMES,
-  type AgentTool,
-  type UnsafeToolName,
-} from '../tools/definitions';
-
-function isUnsafeToolName(name: string): name is UnsafeToolName {
-  return (UNSAFE_TOOL_NAMES as readonly string[]).includes(name);
-}
+import type { AgentToolRegistry } from '../tools/definitions';
+import { getCanonicalToolName } from '../tools/legacy';
 
 type ToolBindableChatModel = BaseChatModel & {
   bindTools: NonNullable<BaseChatModel['bindTools']>;
@@ -45,14 +38,24 @@ function getConfiguredModel(
 }
 
 export function createGraph(
-  tools: AgentTool[],
+  toolRegistry: AgentToolRegistry,
   checkpointer?: BaseCheckpointSaver
 ) {
-  const safeTools = tools.filter((t) => !isUnsafeToolName(t.name));
-  const unsafeTools = tools.filter((t) => isUnsafeToolName(t.name));
+  const { tools } = toolRegistry;
+  const approvalRequiredToolNames = new Set(
+    toolRegistry.approvalRequiredToolNames
+  );
+  const safeTools = tools.filter(
+    (tool) => !approvalRequiredToolNames.has(tool.name)
+  );
+  const unsafeTools = tools.filter((tool) =>
+    approvalRequiredToolNames.has(tool.name)
+  );
 
   const safeToolNodeInstance = new SequentialToolNode(safeTools);
-  const unsafeToolNodeInstance = new SequentialToolNode(unsafeTools);
+  // 只要同一批调用中包含破坏性工具，就整体等待批准；批准后必须能够
+  // 顺序执行该批次中的常规工具，否则混合调用会产生 "tool not found"。
+  const unsafeToolNodeInstance = new SequentialToolNode(tools);
 
   const safeToolNode = (
     state: typeof AgentState.State,
@@ -108,8 +111,8 @@ export function createGraph(
       lastMessage.tool_calls.length > 0
     ) {
       // Check if any tool call is unsafe
-      const hasUnsafe = lastMessage.tool_calls.some((tc) =>
-        UNSAFE_TOOL_NAMES.includes(tc.name)
+      const hasUnsafe = lastMessage.tool_calls.some((toolCall) =>
+        approvalRequiredToolNames.has(getCanonicalToolName(toolCall.name))
       );
       if (hasUnsafe) {
         return 'unsafe_tools';
