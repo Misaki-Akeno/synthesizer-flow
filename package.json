@@ -21,7 +21,9 @@
     "agent:bench": "vitest run --config vitest.agent-bench.config.ts",
     "drizzle:generate": "drizzle-kit generate --config drizzle.config.ts",
     "drizzle:migrate": "drizzle-kit migrate --config drizzle.config.ts",
-    "drizzle:check": "node scripts/check-database.mjs"
+    "drizzle:check": "node scripts/check-database.mjs",
+    "db:seed:examples": "node scripts/seed-example-projects.mjs",
+    "db:seed:examples:validate": "node scripts/seed-example-projects.mjs --validate"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.9.0",

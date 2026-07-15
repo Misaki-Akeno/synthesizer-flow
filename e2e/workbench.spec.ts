@@ -47,3 +47,20 @@ test('可以从 MIDI Clip 打开底部编辑器', async ({ page }) => {
   await page.getByRole('button', { name: 'Open MIDI editor' }).click();
   await expect(page.getByText('MIDI 编辑器', { exact: true })).toBeVisible();
 });
+
+test('模块浏览器可以滚动到列表底部并添加模块', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openBlankWorkbench(page);
+  await openModuleBrowser(page);
+
+  const speakerButton = page.getByRole('button', {
+    name: '添加模块：扬声器',
+  });
+  await expect(speakerButton).not.toBeInViewport();
+
+  await speakerButton.scrollIntoViewIfNeeded();
+  await expect(speakerButton).toBeInViewport();
+  await speakerButton.click();
+
+  await expect(page.locator('[data-module-type="speaker"]')).toHaveCount(1);
+});

@@ -106,7 +106,7 @@ export function Sidebar({ className }: SidebarProps) {
   return (
     <TooltipProvider>
       <SidebarProvider>
-        <div className={cn('flex h-full', className)}>
+        <div className={cn('flex h-full min-h-0', className)}>
           {/* 左侧图标栏 */}
           <div className="flex w-[48px] flex-col border-r bg-card">
             {/* 顶部图标 - 触发侧面板的选项 */}
@@ -152,8 +152,8 @@ export function Sidebar({ className }: SidebarProps) {
           </div>
           {/* 左侧工作台面板 */}
           {activePanel && (
-            <div className="flex w-[360px] flex-col border-r bg-background">
-              <div className="flex-1 overflow-hidden">
+            <div className="flex min-h-0 w-[360px] flex-col border-r bg-background">
+              <div className="min-h-0 flex-1 overflow-hidden">
                 {activePanel === 'project-manager' && (
                   <ProjectManager onClose={() => togglePanel(null)} />
                 )}

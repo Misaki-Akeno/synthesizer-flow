@@ -64,6 +64,22 @@ npm run drizzle:check
 - RAG 搜索仍能返回已有文档
 - 项目管理器不再显示“云端项目服务需要更新”
 
+### 示例工程数据
+
+先预览目标数据库和即将写入的固定示例：
+
+```bash
+npm run db:seed:examples
+```
+
+确认输出中的 Neon 主机与数据库名称无误后，再显式写入：
+
+```bash
+npm run db:seed:examples -- --apply
+```
+
+脚本只 upsert `preset-signal-math-lab-v1` 和 `preset-space-oscillator-v1`，不会删除或复制用户数据；内容没有变化时重复执行不会增加 revision。迁移与示例数据同步应保持为两个独立步骤，避免每次部署覆盖运营数据。
+
 ## 5. Vercel 部署核对
 
 在 Vercel 中确认：
@@ -75,6 +91,24 @@ npm run drizzle:check
 - RAG Embedding 的模型、维度、Base URL 和密钥互相匹配
 
 部署完成后再次执行项目读取、登录、Agent 和 RAG 冒烟验证。
+
+### Neon 分支隔离建议
+
+不要让 Vercel 的 Production、Preview 和 Development 长期共用同一个 `DATABASE_URL`：
+
+- Production 指向 Neon `main`，只在 main 分支的 Production Deployment 中执行迁移。
+- development 分支的 Preview 指向独立的 Neon `dev` 分支。
+- 本地 `.env.local` 指向独立的 Neon `localdev` 分支。
+
+不要为了同步内置示例而复制整个 main 数据库；这会同时复制用户、Session、Agent Checkpoint 和 RAG 数据。内置预设由 `db:seed:examples` 独立同步。只有在确认目标分支没有需要保留的测试数据时，才使用 Neon 的 branch reset/restore 功能重建非生产分支。
+
+当前 Vercel Build Command 为：
+
+```bash
+npm run drizzle:migrate && next build
+```
+
+合并 main 前应先确认 Production 的数据库恢复点；Production Deployment 会先迁移再构建，迁移失败必须阻止发布。
 
 ## 6. 失败处理
 

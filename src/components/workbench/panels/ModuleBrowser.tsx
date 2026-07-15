@@ -149,7 +149,7 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
   };
 
   return (
-    <div className="flex h-full w-full flex-col bg-background text-foreground">
+    <div className="flex h-full min-h-0 w-full flex-col bg-background text-foreground">
       <WorkbenchPanelHeader
         title="模块浏览器"
         actions={
@@ -179,7 +179,7 @@ function ModuleBrowserContent({ onClose }: ModuleBrowserProps) {
       </div>
 
       {/* 模块列表 */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="p-2">
           <Accordion
             type="multiple"
