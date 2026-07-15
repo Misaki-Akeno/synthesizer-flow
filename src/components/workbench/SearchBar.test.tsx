@@ -12,11 +12,19 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/store/projects-store', () => ({
-  usePersistStore: () => ({
-    currentProject: {
-      name: 'Patch Lab',
-    },
-  }),
+  usePersistStore: (
+    selector: (state: { currentProject: { name: string } }) => unknown
+  ) =>
+    selector({
+      currentProject: {
+        name: 'Patch Lab',
+      },
+    }),
+}));
+
+vi.mock('next-intl', () => ({
+  useTranslations: () => (key: string) =>
+    key === 'placeholder' ? '搜索模块...' : '搜索模块',
 }));
 
 describe('SearchBar', () => {

@@ -1,11 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { SidebarProvider } from '@/components/ui/shadcn/sidebar';
-import { ProjectManager } from '@/components/workbench/panels/ProjectManager';
-import { ModuleBrowser } from '@/components/workbench/panels/ModuleBrowser';
-import DevTools from '@/components/workbench/panels/devTools/DevTools';
 import { NavUser } from '@/components/workbench/NavUser';
 import { Button } from '@/components/ui/shadcn/button';
 import { Code, Cpu, FileText, Settings, HelpCircle } from 'lucide-react';
@@ -18,6 +16,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import {
   Dialog,
   DialogContent,
@@ -26,7 +25,39 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/shadcn/dialog';
-import { SettingsPanels } from '@/components/workbench/SettingPanels';
+
+const PanelLoading = () => (
+  <div
+    className="h-full animate-pulse bg-muted/20"
+    aria-label="Loading panel"
+  />
+);
+
+const ProjectManager = dynamic(
+  () =>
+    import('@/components/workbench/panels/ProjectManager').then(
+      (module) => module.ProjectManager
+    ),
+  { loading: PanelLoading }
+);
+const ModuleBrowser = dynamic(
+  () =>
+    import('@/components/workbench/panels/ModuleBrowser').then(
+      (module) => module.ModuleBrowser
+    ),
+  { loading: PanelLoading }
+);
+const DevTools = dynamic(
+  () => import('@/components/workbench/panels/devTools/DevTools'),
+  { loading: PanelLoading }
+);
+const SettingsPanels = dynamic(
+  () =>
+    import('@/components/workbench/SettingPanels').then(
+      (module) => module.SettingsPanels
+    ),
+  { loading: PanelLoading }
+);
 
 interface SidebarProps {
   className?: string;
@@ -36,6 +67,7 @@ interface SidebarProps {
 type PanelType = 'project-manager' | 'module-browser' | 'dev-tools' | null;
 
 export function Sidebar({ className }: SidebarProps) {
+  const t = useTranslations('Workbench');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
@@ -82,20 +114,20 @@ export function Sidebar({ className }: SidebarProps) {
               <ActivityBarButton
                 icon={<FileText size={20} />}
                 active={activePanel === 'project-manager'}
-                tooltip="项目管理器"
+                tooltip={t('navigation.projects')}
                 onClick={() => togglePanel('project-manager')}
               />
               <ActivityBarButton
                 icon={<Cpu size={20} />}
                 active={activePanel === 'module-browser'}
-                tooltip="模块浏览器"
+                tooltip={t('navigation.modules')}
                 onClick={() => togglePanel('module-browser')}
               />
               {isUserAdmin && (
                 <ActivityBarButton
                   icon={<Code size={20} />}
                   active={activePanel === 'dev-tools'}
-                  tooltip="开发工具"
+                  tooltip={t('navigation.devTools')}
                   onClick={() => togglePanel('dev-tools')}
                 />
               )}
@@ -107,13 +139,13 @@ export function Sidebar({ className }: SidebarProps) {
 
               <MenuBarButton
                 icon={<Settings size={20} />}
-                tooltip="设置"
+                tooltip={t('navigation.settings')}
                 onClick={() => setSettingsDialogOpen(true)}
               />
 
               <MenuBarButton
                 icon={<HelpCircle size={20} />}
-                tooltip="帮助"
+                tooltip={t('navigation.help')}
                 onClick={() => setHelpDialogOpen(true)}
               />
             </div>
@@ -138,35 +170,29 @@ export function Sidebar({ className }: SidebarProps) {
           <Dialog open={helpDialogOpen} onOpenChange={setHelpDialogOpen}>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>关于 SynthesizerFlow</DialogTitle>
-                <DialogDescription>
-                  一个基于Web的模块化音频合成器应用
-                </DialogDescription>
+                <DialogTitle>{t('about.title')}</DialogTitle>
+                <DialogDescription>{t('about.description')}</DialogDescription>
               </DialogHeader>
               <div className="py-4">
+                <p className="mb-2">{t('about.body')}</p>
                 <p className="mb-2">
-                  SynthesizerFlow 是一个使用 Next.js
-                  构建的模块化音频合成应用，通过可视化连接不同音频模块实现声音合成。
-                </p>
-                <p className="mb-2">
-                  项目源码：
+                  {t('about.source')}：
                   <a
                     href="https://github.com/Misaki-Akeno/synthesizer-flow"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:underline"
                   >
-                    GitHub 仓库
+                    {t('about.repository')}
                   </a>
                 </p>
-                <p>如果您喜欢这个项目，欢迎前往 GitHub 给我们一个 star！</p>
               </div>
               <DialogFooter>
                 <Button
                   variant="outline"
                   onClick={() => setHelpDialogOpen(false)}
                 >
-                  关闭
+                  {t('about.close')}
                 </Button>
                 <Button
                   onClick={() =>
@@ -176,7 +202,7 @@ export function Sidebar({ className }: SidebarProps) {
                     )
                   }
                 >
-                  访问 GitHub
+                  {t('about.visit')}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -188,8 +214,10 @@ export function Sidebar({ className }: SidebarProps) {
           >
             <DialogContent className="sm:max-w-[900px] sm:max-h-[90vh] overflow-auto">
               <DialogHeader>
-                <DialogTitle>设置</DialogTitle>
-                <DialogDescription>SynthesizerFlow 应用设置</DialogDescription>
+                <DialogTitle>{t('settings.title')}</DialogTitle>
+                <DialogDescription>
+                  {t('settings.description')}
+                </DialogDescription>
               </DialogHeader>
               <SettingsPanels />
             </DialogContent>
@@ -223,8 +251,10 @@ function ActivityBarButton({
           className={cn(
             'relative flex h-12 w-full items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
             active &&
-            'bg-chart-5/10 text-foreground before:absolute before:bottom-2 before:left-0 before:top-2 before:w-px before:bg-chart-5'
+              'bg-chart-5/10 text-foreground before:absolute before:bottom-2 before:left-0 before:top-2 before:w-px before:bg-chart-5'
           )}
+          aria-label={tooltip}
+          aria-pressed={active}
           onClick={onClick}
         >
           {icon}
@@ -252,6 +282,7 @@ function MenuBarButton({ icon, tooltip, onClick }: MenuBarButtonProps) {
           variant="ghost"
           size="icon"
           className="flex h-12 w-full items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          aria-label={tooltip}
           onClick={onClick}
         >
           {icon}

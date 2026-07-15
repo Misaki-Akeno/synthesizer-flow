@@ -14,6 +14,8 @@ import {
   parseMidiClipJson,
 } from '@/core/midi/utils';
 import { MidiActiveNote, MidiClip, MidiEvent } from '@/core/midi/types';
+import { combineLatest } from 'rxjs';
+import { transportService } from '@/core/audio/TransportService';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -120,43 +122,18 @@ export class SequencerModule extends AudioModuleBase {
   }
 
   private setupParameterBindings(): void {
-    const bpmSubscription = this.parameters['bpm'].subscribe((value) => {
-      if (typeof value === 'number') {
-        this.Tone.Transport.bpm.value = value;
-        this.recreateSequence();
-      }
-    });
-
     this.bindInputToParameter('bpm', 'bpm');
 
-    const runningSubscription = this.parameters['running'].subscribe((value) => {
-      if (typeof value !== 'boolean') return;
+    // combineLatest 只执行一次初始调度，避免四个 BehaviorSubject 在初始化时
+    // 连续销毁/重建同一个 Tone.Part。
+    const schedulingSubscription = combineLatest([
+      this.parameters['bpm'],
+      this.parameters['running'],
+      this.parameters['clip'],
+      this.parameters['transpose'],
+    ]).subscribe(() => this.recreateSequence());
 
-      if (value && this.Tone.Transport.state !== 'started') {
-        this.Tone.Transport.start();
-      }
-
-      if (!value) {
-        this.allNotesOff();
-      }
-
-      this.recreateSequence();
-    });
-
-    const clipSubscription = this.parameters['clip'].subscribe(() => {
-      this.recreateSequence();
-    });
-
-    const transposeSubscription = this.parameters['transpose'].subscribe(() => {
-      this.recreateSequence();
-    });
-
-    this.addInternalSubscriptions([
-      bpmSubscription,
-      runningSubscription,
-      clipSubscription,
-      transposeSubscription,
-    ]);
+    this.addInternalSubscription(schedulingSubscription);
   }
 
   private getClip(): MidiClip {
@@ -174,23 +151,32 @@ export class SequencerModule extends AudioModuleBase {
     this.allNotesOff();
 
     const running = this.getParameterValue('running') as boolean;
-    if (!running) return;
+    if (!running) {
+      transportService.stop(this.id, this.Tone);
+      return;
+    }
 
     const clip = this.getClip();
     const scheduledEvents = this.buildScheduledEvents(clip);
-    if (scheduledEvents.length === 0) return;
+    if (scheduledEvents.length === 0) {
+      transportService.stop(this.id, this.Tone);
+      return;
+    }
 
-    this.sequencePart = new this.Tone.Part((time: number, frame: ScheduledMidiFrame) => {
-      this.scheduleFrame(frame, time);
-    }, scheduledEvents.map((frame) => [frame.timeSeconds, frame]));
+    this.sequencePart = new this.Tone.Part(
+      (time: number, frame: ScheduledMidiFrame) => {
+        this.scheduleFrame(frame, time);
+      },
+      scheduledEvents.map((frame) => [frame.timeSeconds, frame])
+    );
 
     this.sequencePart.loop = true;
-    this.sequencePart.loopEnd = this.ticksToSeconds(getClipLengthTicks(clip), clip);
+    this.sequencePart.loopEnd = this.ticksToSeconds(
+      getClipLengthTicks(clip),
+      clip
+    );
     this.sequencePart.start(0);
-
-    if (this.Tone.Transport.state !== 'started') {
-      this.Tone.Transport.start();
-    }
+    transportService.start(this.id, this.Tone);
   }
 
   private buildScheduledEvents(clip: MidiClip): ScheduledMidiFrame[] {
@@ -238,7 +224,9 @@ export class SequencerModule extends AudioModuleBase {
       .map(([tick, tickEvents]) => ({
         tick,
         timeSeconds: this.ticksToSeconds(tick, clip),
-        events: tickEvents.sort((a, b) => this.getEventPriority(a) - this.getEventPriority(b)),
+        events: tickEvents.sort(
+          (a, b) => this.getEventPriority(a) - this.getEventPriority(b)
+        ),
       }))
       .sort((a, b) => a.timeSeconds - b.timeSeconds);
   }
@@ -300,7 +288,9 @@ export class SequencerModule extends AudioModuleBase {
     this.applyExpressionEvent(event);
   }
 
-  private applyExpressionEvent(event: Extract<MidiEvent, { type: 'pitchBend' | 'pressure' | 'timbre' }>): void {
+  private applyExpressionEvent(
+    event: Extract<MidiEvent, { type: 'pitchBend' | 'pressure' | 'timbre' }>
+  ): void {
     this.activeNotes.forEach((note) => {
       const matchesNote = event.noteId && note.id === event.noteId;
       const matchesChannel = event.channel && note.channel === event.channel;
@@ -322,7 +312,10 @@ export class SequencerModule extends AudioModuleBase {
   }
 
   private updateOutputPorts(events: MidiEvent[] = []): void {
-    const frame = createMidiFrame(Array.from(this.activeNotes.values()), events);
+    const frame = createMidiFrame(
+      Array.from(this.activeNotes.values()),
+      events
+    );
     this.outputPorts['midi'].next(frame);
 
     const legacy = midiFrameToLegacyArrays(frame);
@@ -332,7 +325,9 @@ export class SequencerModule extends AudioModuleBase {
     if (legacy.notes.length > 0) {
       const lastNoteMidi = legacy.notes[legacy.notes.length - 1];
       if (this.outputPorts['frequency']) {
-        this.outputPorts['frequency'].next(this.Tone.Frequency(lastNoteMidi, 'midi').toFrequency());
+        this.outputPorts['frequency'].next(
+          this.Tone.Frequency(lastNoteMidi, 'midi').toFrequency()
+        );
       }
       if (this.outputPorts['gate']) this.outputPorts['gate'].next(1);
     } else if (this.outputPorts['gate']) {
@@ -355,6 +350,7 @@ export class SequencerModule extends AudioModuleBase {
     if (this.sequencePart) {
       this.sequencePart.dispose();
     }
+    transportService.stop(this.id, this.Tone);
     super.dispose();
   }
 }

@@ -2,7 +2,7 @@ import type {
   GraphStateParameterValue,
   GraphStateSnapshot,
   GraphStateSnapshotEdge,
-} from '@/agent';
+} from '@/agent/core/types';
 
 type ParameterValueReader = {
   getValue: () => unknown;

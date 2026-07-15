@@ -112,7 +112,10 @@ export function DrizzleAdapter(db: NodePgDatabase<typeof dbSchema>): Adapter {
 
       const { id, ...userData } = data;
 
-      await db.update(users).set(userData).where(eq(users.id, id));
+      await db
+        .update(users)
+        .set({ ...userData, updatedAt: new Date() })
+        .where(eq(users.id, id));
 
       const result = await db.select().from(users).where(eq(users.id, id));
 

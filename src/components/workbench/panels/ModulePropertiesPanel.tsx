@@ -8,6 +8,7 @@ import { useFlowStore } from '@/store/canvas-store';
 import { ParameterControl } from '@/components/audioControls';
 import type { FlowNode } from '@/core/services/ModuleManager';
 import { Input } from '@/components/ui/shadcn/input';
+import { useTranslations } from 'next-intl';
 
 type ModulePropertiesPanelProps = {
   onRequestClose?: () => void;
@@ -30,12 +31,19 @@ type ParameterItem = {
 export function ModulePropertiesPanel({
   onRequestClose: _onRequestClose,
 }: ModulePropertiesPanelProps) {
+  const t = useTranslations('Workbench.properties');
   void _onRequestClose;
   const nodes = useFlowStore((state) => state.nodes);
   const updateModuleParameter = useFlowStore(
     (state) => state.updateModuleParameter
   );
   const renameNode = useFlowStore((state) => state.renameNode);
+  const beginHistoryTransaction = useFlowStore(
+    (state) => state.beginHistoryTransaction
+  );
+  const commitHistoryTransaction = useFlowStore(
+    (state) => state.commitHistoryTransaction
+  );
 
   const selectedNode = useMemo(() => {
     return nodes.find((node) => node.selected && node.data?.module);
@@ -64,11 +72,7 @@ export function ModulePropertiesPanel({
   );
 
   if (!selectedNode || !moduleInstance) {
-    return (
-      <div className="text-sm text-muted-foreground">
-        请选择一个模块以查看属性。
-      </div>
-    );
+    return <div className="text-sm text-muted-foreground">{t('empty')}</div>;
   }
 
   const handleParameterChange = (
@@ -139,7 +143,7 @@ export function ModulePropertiesPanel({
       <div className="space-y-2">
         <div className="space-y-1">
           <div className="text-xs text-muted-foreground uppercase tracking-wide">
-            模块名称
+            {t('name')}
           </div>
           <ModuleNameInput
             key={selectedNode.id}
@@ -148,7 +152,7 @@ export function ModulePropertiesPanel({
           />
         </div>
         <div className="text-xs text-muted-foreground">
-          类型：{moduleInstance.moduleType}
+          {t('type', { type: moduleInstance.moduleType })}
         </div>
       </div>
 
@@ -164,6 +168,8 @@ export function ModulePropertiesPanel({
               updateParameter={handleParameterChange}
               label={param.label}
               description={param.describe}
+              onEditStart={beginHistoryTransaction}
+              onEditEnd={commitHistoryTransaction}
             />
           ))}
         </div>
@@ -189,6 +195,8 @@ export function ModulePropertiesPanel({
                       updateParameter={handleParameterChange}
                       label={param.label}
                       description={param.describe}
+                      onEditStart={beginHistoryTransaction}
+                      onEditEnd={commitHistoryTransaction}
                     />
                   ))}
                 </div>
@@ -198,9 +206,7 @@ export function ModulePropertiesPanel({
       ) : null}
 
       {!groupedParameters['']?.length && !hasGroups ? (
-        <div className="text-sm text-muted-foreground">
-          当前模块没有可配置的参数。
-        </div>
+        <div className="text-sm text-muted-foreground">{t('noParameters')}</div>
       ) : null}
     </div>
   );
@@ -213,6 +219,7 @@ function ModuleNameInput({
   initialName: string;
   onCommit: (value: string) => void;
 }) {
+  const t = useTranslations('Workbench.properties');
   const [displayName, setDisplayName] = useState(initialName);
 
   const handleNameInputKeyDown = useCallback(
@@ -236,7 +243,7 @@ function ModuleNameInput({
       onChange={(event) => setDisplayName(event.target.value)}
       onBlur={(event) => onCommit(event.target.value)}
       onKeyDown={handleNameInputKeyDown}
-      placeholder="输入模块显示名"
+      placeholder={t('namePlaceholder')}
     />
   );
 }

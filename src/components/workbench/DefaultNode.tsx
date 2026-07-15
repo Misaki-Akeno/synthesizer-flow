@@ -54,12 +54,20 @@ type CustomUIRenderProps = CustomUIComponentProps & {
   module?: ModuleBase;
   paramValues: Record<string, number | boolean | string>;
   onParamChange: (paramKey: string, value: number | boolean | string) => void;
+  onEditStart?: () => void;
+  onEditEnd?: () => void;
 };
 
 const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
   const { module: moduleInstance } = data;
   const updateModuleParameter = useFlowStore(
     (state) => state.updateModuleParameter
+  );
+  const beginHistoryTransaction = useFlowStore(
+    (state) => state.beginHistoryTransaction
+  );
+  const commitHistoryTransaction = useFlowStore(
+    (state) => state.commitHistoryTransaction
   );
 
   // 使用自定义Hook获取模块数据
@@ -164,6 +172,8 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
           module={moduleInstance}
           paramValues={paramValues}
           onParamChange={handleParamChange}
+          onEditStart={beginHistoryTransaction}
+          onEditEnd={commitHistoryTransaction}
           {...enhancedProps}
         />
       </div>
@@ -277,6 +287,8 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
           label={param.label}
           description={param.describe}
           readonly={param.readonly}
+          onEditStart={beginHistoryTransaction}
+          onEditEnd={commitHistoryTransaction}
         />
       ))}
 
@@ -306,6 +318,8 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
                           label={param.label}
                           description={param.describe}
                           readonly={param.readonly}
+                          onEditStart={beginHistoryTransaction}
+                          onEditEnd={commitHistoryTransaction}
                         />
                       ))}
                     </div>

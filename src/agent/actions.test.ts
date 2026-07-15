@@ -309,7 +309,8 @@ describe('chatWithAgent', () => {
       settings,
       graphState,
       'thread-1',
-      undefined
+      undefined,
+      'user-1:thread-1'
     );
   });
 
@@ -324,7 +325,40 @@ describe('chatWithAgent', () => {
       settings,
       graphState,
       'thread-1',
-      'approve'
+      'approve',
+      'user-1:thread-1'
+    );
+  });
+
+  it('rejects oversized chat requests before resolving settings', async () => {
+    await expect(
+      collect(
+        chatWithAgent(
+          [{ role: 'user', content: 'x'.repeat(50_001) }],
+          settings,
+          graphState
+        )
+      )
+    ).rejects.toThrow(/too long/);
+
+    expect(mockResolveAISettingsForUser).not.toHaveBeenCalled();
+  });
+
+  it('uses a different checkpoint namespace for each authenticated user', async () => {
+    mockAuth.mockResolvedValue({
+      ...session,
+      user: { ...session.user, id: 'user-2' },
+    });
+
+    await collect(chatWithAgent(messages, settings, graphState, 'thread-1'));
+
+    expect(mockStreamMessage).toHaveBeenCalledWith(
+      messages,
+      settings,
+      graphState,
+      'thread-1',
+      undefined,
+      'user-2:thread-1'
     );
   });
 });

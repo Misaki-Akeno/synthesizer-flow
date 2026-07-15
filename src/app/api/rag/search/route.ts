@@ -3,16 +3,12 @@ import { searchDocuments } from '@/lib/rag/vectorStore';
 import { normalizeTopK } from '@/lib/rag/searchParams';
 import { auth } from '@/lib/auth/auth';
 import { hasPermission, PERMISSIONS } from '@/lib/auth/rbac';
+import { readBoundedJsonBody } from '@/lib/http/readJsonBody';
 
 export const runtime = 'nodejs';
 
-async function readJsonBody(req: Request): Promise<unknown> {
-  try {
-    return await req.json();
-  } catch {
-    return null;
-  }
-}
+const MAX_QUERY_LENGTH = 2_000;
+const MAX_REQUEST_BODY_BYTES = 16_000;
 
 export async function POST(req: Request) {
   try {
@@ -26,17 +22,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const body = await readJsonBody(req);
-    if (body === null) {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    const bodyResult = await readBoundedJsonBody(req, MAX_REQUEST_BODY_BYTES);
+    if (!bodyResult.success) {
+      return NextResponse.json(
+        { error: bodyResult.error },
+        { status: bodyResult.status }
+      );
     }
+    const body = bodyResult.data;
 
-    const bodyRecord = body as Record<string, unknown>;
+    const bodyRecord =
+      typeof body === 'object' && body !== null && !Array.isArray(body)
+        ? (body as Record<string, unknown>)
+        : {};
     const query =
       typeof bodyRecord.query === 'string' ? bodyRecord.query.trim() : '';
     const topK = normalizeTopK(bodyRecord.topK);
     if (!query) {
       return NextResponse.json({ error: 'query is required' }, { status: 400 });
+    }
+    if (query.length > MAX_QUERY_LENGTH) {
+      return NextResponse.json({ error: 'query is too long' }, { status: 413 });
     }
 
     const res = await searchDocuments(query, topK);

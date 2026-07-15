@@ -1,4 +1,4 @@
-import type { GraphStateSnapshot } from '@/agent';
+import type { GraphStateSnapshot } from '@/agent/core/types';
 import type { SerializedCanvas } from '@/core/types/SerializationTypes';
 
 function isPosition(value: unknown): value is { x: number; y: number } {

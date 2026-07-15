@@ -8,20 +8,30 @@ import { createModuleLogger } from '@/lib/logger';
 
 // 创建模块专用日志记录器
 const logger = createModuleLogger('SerializationValidator');
+const MAX_CANVAS_NODES = 500;
+const MAX_CANVAS_EDGES = 2_000;
+const MAX_PARAMETER_STRING_LENGTH = 2_000_000;
+const MAX_PROJECT_DATA_LENGTH = 5_000_000;
 
 // 序列化节点数据验证模式
 export const SerializedNodeSchema = z.object({
-  id: z.string().min(1, '节点ID不能为空'),
+  id: z.string().min(1, '节点ID不能为空').max(255),
   position: z.object({
     x: z.number(),
     y: z.number(),
   }),
   data: z
     .object({
-      type: z.string().min(1, '节点类型不能为空'),
-      label: z.string().optional(),
+      type: z.string().min(1, '节点类型不能为空').max(100),
+      label: z.string().max(200).optional(),
       parameters: z
-        .record(z.union([z.number(), z.boolean(), z.string()]))
+        .record(
+          z.union([
+            z.number().finite(),
+            z.boolean(),
+            z.string().max(MAX_PARAMETER_STRING_LENGTH),
+          ])
+        )
         .optional(),
     })
     .and(z.record(z.unknown())),
@@ -29,10 +39,10 @@ export const SerializedNodeSchema = z.object({
 
 // 序列化边数据验证模式
 export const SerializedEdgeSchema = z.object({
-  source: z.string().min(1, '源节点ID不能为空'),
-  target: z.string().min(1, '目标节点ID不能为空'),
-  sourceHandle: z.string().optional(),
-  targetHandle: z.string().optional(),
+  source: z.string().min(1, '源节点ID不能为空').max(255),
+  target: z.string().min(1, '目标节点ID不能为空').max(255),
+  sourceHandle: z.string().max(255).optional(),
+  targetHandle: z.string().max(255).optional(),
 });
 
 // 序列化模块数据验证模式
@@ -56,8 +66,8 @@ export const SerializedModuleSchema = z.object({
 export const SerializedCanvasSchema = z.object({
   version: z.string().regex(/^\d+\.\d+$/, '版本格式应为X.Y'),
   timestamp: z.number().int().positive(),
-  nodes: z.array(SerializedNodeSchema),
-  edges: z.array(SerializedEdgeSchema),
+  nodes: z.array(SerializedNodeSchema).max(MAX_CANVAS_NODES),
+  edges: z.array(SerializedEdgeSchema).max(MAX_CANVAS_EDGES),
   metadata: z.record(z.unknown()).optional(),
 });
 
@@ -75,7 +85,7 @@ export const ProjectConfigSchema = z.object({
   description: z.string().optional(),
   created: z.string().datetime(),
   lastModified: z.string().datetime(),
-  data: z.string().min(1, '项目数据不能为空'),
+  data: z.string().min(1, '项目数据不能为空').max(MAX_PROJECT_DATA_LENGTH),
   isBuiltIn: z.boolean().optional(),
 });
 

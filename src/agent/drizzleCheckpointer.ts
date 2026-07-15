@@ -126,6 +126,7 @@ export class DrizzleCheckpointer extends BaseCheckpointSaver {
         set: {
           checkpoint: JSON.parse(checkpointJson),
           metadata: JSON.parse(metadataJson),
+          updatedAt: new Date(),
         },
       });
 

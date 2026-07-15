@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * 系统提示 - 为AI定义角色和能力
  */

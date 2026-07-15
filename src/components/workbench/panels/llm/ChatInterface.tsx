@@ -23,8 +23,12 @@ import {
 } from '@/store/settings-store';
 import { useFlowStore } from '@/store/canvas-store';
 import { useShallow } from 'zustand/react/shallow';
-import { ChatMessage, ClientOperation, ToolCall, ChatResponse } from '@/agent';
-import { getSystemPrompt } from '@/agent/prompts/system';
+import type {
+  ChatMessage,
+  ClientOperation,
+  ToolCall,
+  ChatResponse,
+} from '@/agent/core/types';
 import { chatWithAgent } from '@/agent/actions';
 import { saveCheckpoint } from '@/agent/checkpoint-actions';
 import { getAISettingsAction } from '@/actions/ai-settings.actions';
@@ -49,6 +53,7 @@ import {
   readRuntimeParameters,
 } from './canvasSnapshot';
 import { createThreadId } from './threadId';
+import { useTranslations } from 'next-intl';
 
 function getCurrentCanvasSnapshot() {
   const state = useFlowStore.getState();
@@ -56,6 +61,7 @@ function getCurrentCanvasSnapshot() {
 }
 
 export function ChatInterface() {
+  const t = useTranslations('Workbench.chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -84,17 +90,6 @@ export function ChatInterface() {
       importCanvasFromJson: s.importCanvasFromJson,
     }))
   );
-
-  // 当组件首次加载时，添加系统提示
-  useEffect(() => {
-    setMessages([
-      {
-        role: 'system',
-        content: getSystemPrompt(),
-      },
-    ]);
-    // 仅首次加载
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,7 +193,7 @@ export function ChatInterface() {
           content:
             response.message.content ||
             currentAssistantMessage ||
-            'Requires approval.',
+            t('requiresApproval'),
           approval: { status: 'pending' },
         };
         return newMessages;
@@ -257,6 +252,7 @@ export function ChatInterface() {
     setIsLoading(true);
     // 标记是否已预插入占位符消息，以便 catch 中正确替换而非 append
     let assistantPlaceholderAdded = false;
+    let pendingAnimationFrame: number | null = null;
 
     try {
       // 捕获当前状态快照 (sanitize to remove non-serializable data)
@@ -280,9 +276,11 @@ export function ChatInterface() {
 
       let currentAssistantMessage = '';
 
-      // Pre-add an empty assistant message for streaming
-      setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
-      assistantPlaceholderAdded = true;
+      // 拒绝操作只需要清理服务端中断点，不额外创建空白助手消息。
+      if (action !== 'reject') {
+        setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+        assistantPlaceholderAdded = true;
+      }
 
       // Check if it's a generator/iterable
       if (
@@ -298,22 +296,35 @@ export function ChatInterface() {
         for await (const part of asyncIterable) {
           if (part.type === 'chunk' && part.content) {
             currentAssistantMessage += part.content;
-            setMessages((prev) => {
-              const newMessages = [...prev];
-              const lastIndex = newMessages.length - 1;
-              if (
-                lastIndex >= 0 &&
-                newMessages[lastIndex].role === 'assistant'
-              ) {
-                newMessages[lastIndex] = {
-                  ...newMessages[lastIndex],
-                  content: currentAssistantMessage,
-                };
-              }
-              return newMessages;
-            });
+            if (pendingAnimationFrame === null) {
+              pendingAnimationFrame = window.requestAnimationFrame(() => {
+                pendingAnimationFrame = null;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  const lastIndex = newMessages.length - 1;
+                  if (
+                    lastIndex >= 0 &&
+                    newMessages[lastIndex].role === 'assistant'
+                  ) {
+                    newMessages[lastIndex] = {
+                      ...newMessages[lastIndex],
+                      content: currentAssistantMessage,
+                    };
+                  }
+                  return newMessages;
+                });
+              });
+            }
           } else if (part.type === 'done' && part.response) {
-            handleFinalResponse(part.response, currentAssistantMessage);
+            if (pendingAnimationFrame !== null) {
+              window.cancelAnimationFrame(pendingAnimationFrame);
+              pendingAnimationFrame = null;
+            }
+            if (action === 'reject') {
+              setThreadId(createThreadId(window.crypto));
+            } else {
+              handleFinalResponse(part.response, currentAssistantMessage);
+            }
           }
         }
       } else {
@@ -330,8 +341,9 @@ export function ChatInterface() {
       }
     } catch (error) {
       console.error('聊天请求失败:', error);
-      const errorMessage = error instanceof Error ? error.message : '未知错误';
-      const errorContent = `抱歉，请求处理过程中出现了错误: ${errorMessage}`;
+      const errorMessage =
+        error instanceof Error ? error.message : t('unknownError');
+      const errorContent = t('requestError', { message: errorMessage });
       if (assistantPlaceholderAdded) {
         // 替换流中途失败留下的空占位符，而非 append 新消息
         setMessages((prev) => {
@@ -352,6 +364,9 @@ export function ChatInterface() {
         ]);
       }
     } finally {
+      if (pendingAnimationFrame !== null) {
+        window.cancelAnimationFrame(pendingAnimationFrame);
+      }
       setIsLoading(false);
     }
   };
@@ -503,30 +518,26 @@ export function ChatInterface() {
     }
   };
 
-  // 新建对话：重置为系统提示
+  // 新建对话：保存旧状态，并切换到全新的 LangGraph 线程。
   const resetConversation = async () => {
     // Auto-save if there are user/assistant messages
     const hasHistory = messages.some((m) => m.role !== 'system');
     if (hasHistory && session?.user?.id) {
       try {
-        toast.info('正在自动保存...');
+        toast.info(t('autoSaving'));
         const graphSnapshot = getCurrentCanvasSnapshot();
         await saveCheckpoint('', messages, graphSnapshot, aiSettings);
-        toast.success('已自动保存上一次对话');
+        toast.success(t('autoSaved'));
       } catch (e) {
         console.error('Auto-save failed', e);
-        toast.error('自动保存失败');
+        toast.error(t('autoSaveFailed'));
       }
     }
 
-    setMessages([
-      {
-        role: 'system',
-        content: getSystemPrompt(),
-      },
-    ]);
+    setMessages([]);
     setInput('');
     setIsLoading(false);
+    setThreadId(createThreadId(window.crypto));
   };
 
   // 检查是否已设置API密钥
@@ -542,7 +553,7 @@ export function ChatInterface() {
 
   const handleSaveCheckpoint = async () => {
     if (!session?.user?.id) {
-      toast.error('请先登录');
+      toast.error(t('loginRequired'));
       return;
     }
 
@@ -558,13 +569,13 @@ export function ChatInterface() {
       );
 
       if (res.success) {
-        toast.success('存档已保存');
+        toast.success(t('checkpointSaved'));
       } else {
-        toast.error('保存失败');
+        toast.error(t('checkpointSaveFailed'));
       }
     } catch (e) {
       console.error(e);
-      toast.error('保存出错');
+      toast.error(t('checkpointSaveError'));
     } finally {
       setIsSaving(false);
     }
@@ -576,11 +587,11 @@ export function ChatInterface() {
     try {
       const restoredMessages = checkpoint.messages as ChatMessage[];
       const restoredCanvas = graphStateToSerializedCanvas(
-        checkpoint.graphState as import('@/agent').GraphStateSnapshot
+        checkpoint.graphState as import('@/agent/core/types').GraphStateSnapshot
       );
 
       if (!restoredCanvas) {
-        toast.error('存档画布数据无效');
+        toast.error(t('invalidCheckpoint'));
         return;
       }
 
@@ -591,16 +602,16 @@ export function ChatInterface() {
       );
 
       if (!imported) {
-        toast.error('恢复画布失败');
+        toast.error(t('restoreCanvasFailed'));
         return;
       }
 
       setMessages(restoredMessages);
-      toast.success('存档已加载');
+      toast.success(t('checkpointLoaded'));
       setIsHistoryOpen(false);
     } catch (e) {
       console.error(e);
-      toast.error('恢复出错');
+      toast.error(t('checkpointRestoreError'));
     }
   };
 
@@ -613,13 +624,11 @@ export function ChatInterface() {
             {displayMessages.length === 0 ? (
               <div className="text-center text-gray-500 dark:text-gray-400">
                 {hasApiKey ? (
-                  '开始与AI助手聊天吧！可以问问我画布上有什么模块。'
+                  t('start')
                 ) : (
                   <div>
-                    <p>
-                      请先在<strong>设置</strong>中配置AI模型的API密钥
-                    </p>
-                    <p className="text-xs mt-2">进入设置 &gt; AI模型设置</p>
+                    <p>{t('configureApi')}</p>
+                    <p className="text-xs mt-2">{t('settingsPath')}</p>
                   </div>
                 )}
               </div>
@@ -678,7 +687,7 @@ export function ChatInterface() {
                           <div className="flex flex-col gap-2">
                             <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200 flex items-center">
                               <Loader2 className="h-3 w-3 mr-2 animate-pulse" />
-                              Approval Required
+                              {t('approvalRequired')}
                             </p>
                             <div className="flex gap-2">
                               <Button
@@ -689,7 +698,7 @@ export function ChatInterface() {
                                 }
                                 disabled={isLoading}
                               >
-                                Reject
+                                {t('reject')}
                               </Button>
                               <Button
                                 size="sm"
@@ -700,7 +709,7 @@ export function ChatInterface() {
                                 }
                                 disabled={isLoading}
                               >
-                                Approve
+                                {t('approve')}
                               </Button>
                             </div>
                           </div>
@@ -708,13 +717,13 @@ export function ChatInterface() {
                         {msg.approval.status === 'approved' && (
                           <div className="flex items-center text-green-600 dark:text-green-400 font-medium text-sm">
                             <Check className="w-4 h-4 mr-2" />
-                            <span>Action Approved</span>
+                            <span>{t('approved')}</span>
                           </div>
                         )}
                         {msg.approval.status === 'rejected' && (
                           <div className="flex items-center text-red-600 dark:text-red-400 font-medium text-sm">
                             <X className="w-4 h-4 mr-2" />
-                            <span>Action Rejected</span>
+                            <span>{t('rejected')}</span>
                           </div>
                         )}
                       </div>
@@ -726,7 +735,9 @@ export function ChatInterface() {
             {isLoading && (
               <div className="flex items-center justify-center">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="ml-2 text-sm text-gray-500">AI思考中...</span>
+                <span className="ml-2 text-sm text-gray-500">
+                  {t('thinking')}
+                </span>
               </div>
             )}
             {/* 用于自动滚动到底部的空白元素 */}
@@ -741,18 +752,18 @@ export function ChatInterface() {
         <div className="flex justify-between items-center mb-2">
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={resetConversation}>
-              <Plus className="h-4 w-4 mr-1" /> 新建对话
+              <Plus className="h-4 w-4 mr-1" /> {t('newConversation')}
             </Button>
             {session?.user && (
               <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
-                    <History className="h-4 w-4 mr-1" /> 历史
+                    <History className="h-4 w-4 mr-1" /> {t('history')}
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[350px]">
                   <DialogHeader>
-                    <DialogTitle>对话存档</DialogTitle>
+                    <DialogTitle>{t('archiveTitle')}</DialogTitle>
                   </DialogHeader>
                   <div className="flex flex-col gap-4">
                     <Button
@@ -765,7 +776,7 @@ export function ChatInterface() {
                       ) : (
                         <Save className="h-4 w-4 mr-2" />
                       )}
-                      保存当前状态
+                      {t('saveCurrent')}
                     </Button>
                     <div className="border-t my-2" />
                     <CheckpointList onRestore={handleRestoreCheckpoint} />
@@ -781,7 +792,9 @@ export function ChatInterface() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyPress}
-            placeholder={hasApiKey ? '输入消息...' : '请先在设置中配置API密钥'}
+            placeholder={
+              hasApiKey ? t('inputPlaceholder') : t('configurePlaceholder')
+            }
             disabled={isLoading || !hasApiKey || isApprovalPending} // Disable input during approval?
             className="flex-1"
           />
@@ -805,6 +818,7 @@ export function ChatInterface() {
 }
 
 function ToolCallsDisplay({ toolCalls }: { toolCalls: ToolCall[] }) {
+  const t = useTranslations('Workbench.chat');
   const [isOpen, setIsOpen] = useState(false);
 
   if (!toolCalls || toolCalls.length === 0) return null;
@@ -830,7 +844,9 @@ function ToolCallsDisplay({ toolCalls }: { toolCalls: ToolCall[] }) {
           <ChevronRight className="h-4 w-4" />
         )}
         <Terminal className="h-4 w-4" />
-        <span className="font-medium">工具调用 ({toolCalls.length})</span>
+        <span className="font-medium">
+          {t('toolCalls', { count: toolCalls.length })}
+        </span>
       </button>
 
       {isOpen && (
@@ -846,7 +862,7 @@ function ToolCallsDisplay({ toolCalls }: { toolCalls: ToolCall[] }) {
               {call.result && (
                 <div className="mt-1 w-full min-w-0">
                   <div className="font-semibold text-primary/80 text-[10px] uppercase">
-                    Result
+                    {t('result')}
                   </div>
                   <div className="w-full p-2 rounded border bg-muted font-mono text-muted-foreground whitespace-pre overflow-auto max-h-60 text-[10px] leading-tight">
                     {formatJson(call.result)}

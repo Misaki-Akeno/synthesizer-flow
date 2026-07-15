@@ -2,7 +2,7 @@
 
 import { db } from '@/db/client';
 import { projects, usersToProjects } from '@/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { revalidatePath } from 'next/cache';
 import { isAdmin } from '@/lib/auth/rbac';
@@ -12,6 +12,23 @@ import { validateSerializedCanvas } from '@/core/types/SerializationValidator';
 
 const PROJECT_WRITE_ROLES = new Set(['owner', 'editor']);
 const PROJECT_DELETE_ROLES = new Set(['owner']);
+const MAX_PROJECT_NAME_LENGTH = 120;
+const MAX_PROJECT_DESCRIPTION_LENGTH = 2_000;
+const MAX_PROJECT_DATA_BYTES = 5_000_000;
+const MAX_PROJECT_METADATA_BYTES = 100_000;
+const PROJECT_SCHEMA_VERSION = 1;
+
+interface SaveProjectOptions {
+  projectId?: string;
+  isPreset?: boolean;
+  description?: string;
+  expectedRevision?: number;
+  metadata?: Record<string, unknown>;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 /**
  * 获取当前用户的项目列表（仅元数据，不含大字段 data）
@@ -23,12 +40,20 @@ export const getUserProjects = withAuth(async (session) => {
         id: projects.id,
         name: projects.name,
         description: projects.description,
+        metadata: projects.metadata,
+        schemaVersion: projects.schemaVersion,
+        revision: projects.revision,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
       })
       .from(usersToProjects)
       .innerJoin(projects, eq(usersToProjects.projectId, projects.id))
-      .where(eq(usersToProjects.userId, session.user.id))
+      .where(
+        and(
+          eq(usersToProjects.userId, session.user.id),
+          isNull(projects.archivedAt)
+        )
+      )
       .orderBy(desc(projects.updatedAt));
 
     return { success: true, data: userProjects };
@@ -42,6 +67,9 @@ export const getUserProjects = withAuth(async (session) => {
  * 获取单个项目的完整详情
  */
 export const getProjectById = withAuth(async (session, projectId: string) => {
+  if (typeof projectId !== 'string') {
+    return { success: false, error: 'Project not found' };
+  }
   const trimmedProjectId = projectId.trim();
   if (!trimmedProjectId) {
     return { success: false, error: 'Project not found' };
@@ -66,11 +94,16 @@ export const getProjectById = withAuth(async (session, projectId: string) => {
         description: projects.description,
         data: projects.data,
         isPreset: projects.isPreset,
+        metadata: projects.metadata,
+        schemaVersion: projects.schemaVersion,
+        revision: projects.revision,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
       })
       .from(projects)
-      .where(eq(projects.id, trimmedProjectId))
+      .where(
+        and(eq(projects.id, trimmedProjectId), isNull(projects.archivedAt))
+      )
       .limit(1);
 
     if (!project) {
@@ -100,11 +133,13 @@ export async function getBuiltInPresets() {
         description: projects.description,
         createdAt: projects.createdAt,
         updatedAt: projects.updatedAt,
-        data: projects.data,
         isPreset: projects.isPreset,
+        metadata: projects.metadata,
+        schemaVersion: projects.schemaVersion,
+        revision: projects.revision,
       })
       .from(projects)
-      .where(eq(projects.isPreset, true))
+      .where(and(eq(projects.isPreset, true), isNull(projects.archivedAt)))
       .orderBy(desc(projects.updatedAt));
 
     return { success: true, data: presets };
@@ -122,18 +157,78 @@ export const saveProject = withAuth(
     session,
     name: string,
     data: unknown,
-    projectId?: string,
-    isPreset: boolean = false,
-    description?: string
+    options: SaveProjectOptions = {}
   ) => {
+    const safeOptions = isPlainRecord(options)
+      ? (options as SaveProjectOptions)
+      : {};
+    const {
+      projectId,
+      isPreset = false,
+      description,
+      expectedRevision,
+      metadata = {},
+    } = safeOptions;
+    if (typeof name !== 'string') {
+      return { success: false, error: 'Project name is required' };
+    }
     const trimmedName = name.trim();
     if (!trimmedName) {
       return { success: false, error: 'Project name is required' };
     }
+    if (trimmedName.length > MAX_PROJECT_NAME_LENGTH) {
+      return { success: false, error: 'Project name is too long' };
+    }
+    if (
+      description !== undefined &&
+      (typeof description !== 'string' ||
+        description.length > MAX_PROJECT_DESCRIPTION_LENGTH)
+    ) {
+      return { success: false, error: 'Invalid project description' };
+    }
 
+    let serializedData: string;
+    try {
+      serializedData = JSON.stringify(data);
+    } catch {
+      return { success: false, error: 'Invalid project data' };
+    }
+    if (Buffer.byteLength(serializedData, 'utf8') > MAX_PROJECT_DATA_BYTES) {
+      return { success: false, error: 'Project data is too large' };
+    }
+
+    if (projectId !== undefined && typeof projectId !== 'string') {
+      return { success: false, error: 'Invalid project id' };
+    }
     const trimmedProjectId = projectId?.trim();
     if (projectId !== undefined && !trimmedProjectId) {
       return { success: false, error: 'Invalid project id' };
+    }
+    if (trimmedProjectId && trimmedProjectId.length > 255) {
+      return { success: false, error: 'Invalid project id' };
+    }
+    if (typeof isPreset !== 'boolean') {
+      return { success: false, error: 'Invalid preset flag' };
+    }
+    if (
+      expectedRevision !== undefined &&
+      (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)
+    ) {
+      return { success: false, error: 'Invalid project revision' };
+    }
+    if (!isPlainRecord(metadata)) {
+      return { success: false, error: 'Invalid project metadata' };
+    }
+    let serializedMetadata: string;
+    try {
+      serializedMetadata = JSON.stringify(metadata);
+    } catch {
+      return { success: false, error: 'Invalid project metadata' };
+    }
+    if (
+      Buffer.byteLength(serializedMetadata, 'utf8') > MAX_PROJECT_METADATA_BYTES
+    ) {
+      return { success: false, error: 'Project metadata is too large' };
     }
 
     // 如果尝试保存为系统预设，必须是管理员
@@ -155,7 +250,9 @@ export const saveProject = withAuth(
           const existing = await db
             .select()
             .from(projects)
-            .where(eq(projects.id, finalProjectId))
+            .where(
+              and(eq(projects.id, finalProjectId), isNull(projects.archivedAt))
+            )
             .limit(1);
           if (existing.length > 0) {
             if (!existing[0].isPreset) {
@@ -190,39 +287,77 @@ export const saveProject = withAuth(
       }
 
       if (isUpdate && finalProjectId) {
-        await db
+        const updateConditions = [
+          eq(projects.id, finalProjectId),
+          isNull(projects.archivedAt),
+        ];
+        if (expectedRevision !== undefined) {
+          updateConditions.push(eq(projects.revision, expectedRevision));
+        }
+
+        const [updatedProject] = await db
           .update(projects)
           .set({
             name: trimmedName,
             description,
             data,
+            metadata,
+            schemaVersion: PROJECT_SCHEMA_VERSION,
+            revision: sql`${projects.revision} + 1`,
             isPreset,
             updatedAt: new Date(),
           })
-          .where(eq(projects.id, finalProjectId));
-      } else {
-        finalProjectId = finalProjectId || nanoid(10);
-        await db.insert(projects).values({
-          id: finalProjectId,
-          name: trimmedName,
-          description,
-          data,
-          isPreset,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
+          .where(and(...updateConditions))
+          .returning({ revision: projects.revision });
 
-        if (!isPreset) {
-          await db.insert(usersToProjects).values({
-            userId: session.user.id,
-            projectId: finalProjectId,
-            role: 'owner',
-          });
+        if (!updatedProject) {
+          return {
+            success: false,
+            error:
+              expectedRevision === undefined
+                ? 'Project not found or access denied'
+                : 'Project was modified elsewhere. Reload and try again.',
+          };
         }
+
+        revalidatePath('/');
+        return {
+          success: true,
+          projectId: finalProjectId,
+          revision: updatedProject.revision,
+        };
+      } else {
+        const newProjectId = finalProjectId || nanoid(10);
+        finalProjectId = newProjectId;
+        const now = new Date();
+        await db.transaction(async (tx) => {
+          await tx.insert(projects).values({
+            id: newProjectId,
+            name: trimmedName,
+            description,
+            data,
+            metadata,
+            schemaVersion: PROJECT_SCHEMA_VERSION,
+            revision: 1,
+            isPreset,
+            createdAt: now,
+            updatedAt: now,
+          });
+
+          if (!isPreset) {
+            await tx.insert(usersToProjects).values({
+              userId: session.user.id,
+              projectId: newProjectId,
+              role: 'owner',
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        });
       }
 
       revalidatePath('/');
-      return { success: true, projectId: finalProjectId };
+      return { success: true, projectId: finalProjectId, revision: 1 };
     } catch (error) {
       console.error('Failed to save project:', error);
       return { success: false, error: 'Failed to save project' };
@@ -239,6 +374,9 @@ export async function deleteProjectAction(projectId: string) {
     return { success: false, error: 'Unauthorized' };
   }
 
+  if (typeof projectId !== 'string') {
+    return { success: false, error: 'Project not found or access denied' };
+  }
   const trimmedProjectId = projectId.trim();
   if (!trimmedProjectId) {
     return { success: false, error: 'Project not found or access denied' };
@@ -278,9 +416,17 @@ export async function deleteProjectAction(projectId: string) {
       }
     }
 
-    // projects 表被 usersToProjects 引用，但 projects 删除时
-    // usersToProjects 的外键设置了 onDelete: cascade，所以关联关系会自动删除
-    await db.delete(projects).where(eq(projects.id, trimmedProjectId));
+    // 默认采用软归档，避免未来加入回收站或审计能力时再次改变数据模型。
+    await db
+      .update(projects)
+      .set({
+        archivedAt: new Date(),
+        updatedAt: new Date(),
+        revision: sql`${projects.revision} + 1`,
+      })
+      .where(
+        and(eq(projects.id, trimmedProjectId), isNull(projects.archivedAt))
+      );
 
     revalidatePath('/');
     return { success: true };

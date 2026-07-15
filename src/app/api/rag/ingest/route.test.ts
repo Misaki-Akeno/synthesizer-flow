@@ -147,4 +147,33 @@ describe('POST /api/rag/ingest', () => {
       },
     ]);
   });
+
+  it('rejects oversized document batches before embedding', async () => {
+    mockAuth.mockResolvedValue(adminSession);
+
+    const response = await POST(
+      createIngestRequest({
+        items: Array.from({ length: 51 }, (_, index) => ({
+          id: `doc-${index}`,
+          text: 'text',
+        })),
+      })
+    );
+
+    expect(response.status).toBe(413);
+    expect(mockUpsertDocuments).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized raw request bodies before JSON parsing', async () => {
+    mockAuth.mockResolvedValue(adminSession);
+
+    const response = await POST(
+      createIngestRequest({
+        items: [{ text: 'valid', meta: { padding: 'x'.repeat(1_500_000) } }],
+      })
+    );
+
+    expect(response.status).toBe(413);
+    expect(mockUpsertDocuments).not.toHaveBeenCalled();
+  });
 });

@@ -18,13 +18,11 @@ Synthesizer Flow 是一个基于 Web 的模块化音频合成器应用，深度�
 ### 关键设计与实现
 
 - **模块化画布 (Workbench Canvas)**:
-
   - 基于 React Flow 实现，支持节点（Modules）和边（Connections）的增删改查。
   - 自定义节点组件对应不同的音频模块（如 Oscillator, Filter, Envelope 等）。
   - 右键菜单（Context Menu）与快捷键支持，提升交互体验。
 
 - **音频引擎集成**:
-
   - 音频逻辑与 UI 分离，Tone.js 负责底层的声音生成与处理。
   - 通过 Zustand store 同步 UI 状态与音频引擎参数，实现"数据驱动视图，视图更新音频"的单向流。
 
@@ -45,10 +43,13 @@ Synthesizer Flow 是一个基于 Web 的模块化音频合成器应用，深度�
 ### 数据库设计 (`/src/db/schema.ts`)
 
 - **用户系统**: `users`, `accounts`, `sessions` (标准的 NextAuth Schema).
+- **项目系统**:
+  - `projects` 使用版本化 JSONB、乐观并发修订号和软归档，兼顾快速迭代与数据安全。
+  - `users_to_projects` 通过角色和扩展元数据为多人协作预留空间。
 - **RAG 知识库**:
   - `rag_documents`: 存储文本片段及其向量 Embedding。
   - 使用 HNSW 索引 (`embeddingIndex`) 加速余弦相似度搜索。
-  - 能够存储元数据 (`meta` jsonb 字段) 以支持更灵活的检索。
+  - 使用命名空间隔离知识库，并记录来源、内容哈希与分块序号。
 
 ### API 与服务器架构
 
@@ -193,7 +194,6 @@ Synthesizer Flow 是一个基于 Web 的模块化音频合成器应用，深度�
 #### 解决方案：双向状态同步
 
 1. **客户端 → 服务端**:
-
    - 前端通过 `chatWithAgent` Server Action 传递 `GraphStateSnapshot`（当前画布的 nodes 和 edges）。
    - ToolExecutor 基于快照初始化虚拟状态，所有工具调用在此状态上模拟执行。
 

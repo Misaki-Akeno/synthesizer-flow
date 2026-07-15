@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Slider } from '@/components/ui/shadcn/slider';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Input } from '@/components/ui/shadcn/input';
@@ -53,6 +53,8 @@ export const NumberParameterControl = ({
   updateParameter,
   label,
   description,
+  onEditStart,
+  onEditEnd,
 }: {
   paramKey: string;
   value: number;
@@ -62,7 +64,10 @@ export const NumberParameterControl = ({
   updateParameter: (key: string, value: number) => void;
   label: string;
   description?: string;
+  onEditStart?: () => void;
+  onEditEnd?: () => void;
 }) => {
+  const isEditingRef = useRef(false);
   // 使用useEffect来确保inputValue总是跟随value的变化而更新
   const [inputValue, setInputValue] = useState<string>(
     typeof value === 'number' ? value.toFixed(2) : '0.00'
@@ -74,10 +79,25 @@ export const NumberParameterControl = ({
   }, [value]);
 
   // 处理滑块值变化
-  const handleSliderChange = useCallback((newValue: number[]) => {
-    updateParameter(paramKey, newValue[0]);
-    setInputValue(newValue[0].toFixed(2));
-  }, [paramKey, updateParameter]);
+  const handleSliderChange = useCallback(
+    (newValue: number[]) => {
+      updateParameter(paramKey, newValue[0]);
+      setInputValue(newValue[0].toFixed(2));
+    },
+    [paramKey, updateParameter]
+  );
+
+  const beginEdit = useCallback(() => {
+    if (isEditingRef.current) return;
+    isEditingRef.current = true;
+    onEditStart?.();
+  }, [onEditStart]);
+
+  const endEdit = useCallback(() => {
+    if (!isEditingRef.current) return;
+    isEditingRef.current = false;
+    onEditEnd?.();
+  }, [onEditEnd]);
 
   // 处理输入框值变化
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,11 +117,14 @@ export const NumberParameterControl = ({
   }, [inputValue, min, max, paramKey, updateParameter, value]);
 
   // 处理键盘事件
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleInputCommit();
-    }
-  }, [handleInputCommit]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        handleInputCommit();
+      }
+    },
+    [handleInputCommit]
+  );
 
   // 创建参数标签组件
   const labelComponent = <ParamLabel label={label} description={description} />;
@@ -127,6 +150,13 @@ export const NumberParameterControl = ({
         max={max}
         step={step}
         onValueChange={(val) => handleSliderChange(val)}
+        onValueCommit={endEdit}
+        onPointerDown={beginEdit}
+        onKeyDown={(event) => {
+          if (!event.repeat) beginEdit();
+        }}
+        onKeyUp={endEdit}
+        onBlur={endEdit}
       />
     </div>
   );
@@ -274,6 +304,8 @@ export const ParameterControl = ({
   label,
   description,
   readonly,
+  onEditStart,
+  onEditEnd,
 }: {
   paramKey: string;
   paramType: ParameterType;
@@ -288,6 +320,8 @@ export const ParameterControl = ({
   label: string;
   description?: string;
   readonly?: boolean;
+  onEditStart?: () => void;
+  onEditEnd?: () => void;
 }) => {
   switch (paramType) {
     case ParameterType.NUMBER:
@@ -304,6 +338,8 @@ export const ParameterControl = ({
           }
           label={label}
           description={description}
+          onEditStart={onEditStart}
+          onEditEnd={onEditEnd}
         />
       );
     case ParameterType.BOOLEAN:

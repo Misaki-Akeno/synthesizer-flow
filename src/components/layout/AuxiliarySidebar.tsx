@@ -1,17 +1,32 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/shadcn/button';
 import { X } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ChatInterface } from '@/components/workbench/panels/llm/ChatInterface';
-import { ModulePropertiesPanel } from '@/components/workbench/panels/ModulePropertiesPanel';
+import { useTranslations } from 'next-intl';
 import {
   WorkbenchPanel,
   WorkbenchPanelBody,
   WorkbenchPanelHeader,
 } from '@/components/layout/WorkbenchPanel';
+
+const ChatInterface = dynamic(
+  () =>
+    import('@/components/workbench/panels/llm/ChatInterface').then(
+      (module) => module.ChatInterface
+    ),
+  { loading: () => <div className="h-full animate-pulse bg-muted/20" /> }
+);
+const ModulePropertiesPanel = dynamic(
+  () =>
+    import('@/components/workbench/panels/ModulePropertiesPanel').then(
+      (module) => module.ModulePropertiesPanel
+    ),
+  { loading: () => <div className="h-full animate-pulse bg-muted/20" /> }
+);
 
 interface AuxiliarySidebarProps {
   className?: string;
@@ -21,6 +36,7 @@ interface AuxiliarySidebarProps {
 type RightPanelType = 'properties' | 'llm_chat' | null;
 
 export function AuxiliarySidebar({ className }: AuxiliarySidebarProps) {
+  const t = useTranslations('Workbench');
   const router = useRouter();
   const searchParams = useSearchParams();
   const auxiliarySidebarFromUrl = searchParams.get(
@@ -48,14 +64,18 @@ export function AuxiliarySidebar({ className }: AuxiliarySidebarProps) {
   return (
     <WorkbenchPanel className={cn('border-l', className)}>
       <WorkbenchPanelHeader
-        title={activePanel === 'properties' ? '属性面板' : 'Chat'}
+        title={
+          activePanel === 'properties'
+            ? t('panels.properties')
+            : t('panels.chat')
+        }
         actions={
           <Button
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-foreground"
             onClick={closePanel}
-            aria-label="Close side panel"
+            aria-label={t('panels.close')}
           >
             <X size={15} />
           </Button>

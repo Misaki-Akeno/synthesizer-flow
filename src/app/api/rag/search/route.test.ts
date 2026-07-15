@@ -140,4 +140,47 @@ describe('POST /api/rag/search', () => {
     expect(body).toEqual({ error: 'Invalid JSON body' });
     expect(mockSearchDocuments).not.toHaveBeenCalled();
   });
+
+  it('rejects oversized queries before vector search', async () => {
+    mockAuth.mockResolvedValue({
+      user: {
+        id: 'user-1',
+        role: 'user',
+        name: null,
+        email: null,
+        image: null,
+      },
+      expires: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const response = await POST(
+      createSearchRequest({ query: 'x'.repeat(2_001) })
+    );
+
+    expect(response.status).toBe(413);
+    expect(mockSearchDocuments).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized raw request bodies before JSON parsing', async () => {
+    mockAuth.mockResolvedValue({
+      user: {
+        id: 'user-1',
+        role: 'user',
+        name: null,
+        email: null,
+        image: null,
+      },
+      expires: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const response = await POST(
+      createSearchRequest({
+        query: 'oscillator',
+        padding: 'x'.repeat(16_000),
+      })
+    );
+
+    expect(response.status).toBe(413);
+    expect(mockSearchDocuments).not.toHaveBeenCalled();
+  });
 });

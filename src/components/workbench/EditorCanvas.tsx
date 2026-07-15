@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -17,6 +17,7 @@ import { useFlowContextMenu } from './contextMenu/hooks/useFlowContextMenu';
 import { usePersistStore } from '@/store/projects-store';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { isValidModuleConnection } from './connectionValidation';
+import { useShallow } from 'zustand/react/shallow';
 
 const nodeTypes = {
   default: DefaultNode,
@@ -44,10 +45,19 @@ function isEditableTarget(target: EventTarget | null): boolean {
 // 内部Canvas组件，包含实际的ReactFlow
 const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
-    useFlowStore();
+    useFlowStore(
+      useShallow((state) => ({
+        nodes: state.nodes,
+        edges: state.edges,
+        onNodesChange: state.onNodesChange,
+        onEdgesChange: state.onEdgesChange,
+        onConnect: state.onConnect,
+        addNode: state.addNode,
+      }))
+    );
 
-  const { loadProject, currentProject } =
-    usePersistStore();
+  const loadProject = usePersistStore((state) => state.loadProject);
+  const currentProject = usePersistStore((state) => state.currentProject);
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -159,9 +169,10 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
   }, []);
 
   // 验证连接是否有效的函数
-  const isValidConnection: IsValidConnection = (params) => {
-    return isValidModuleConnection(nodes, params);
-  };
+  const isValidConnection: IsValidConnection = useCallback(
+    (params) => isValidModuleConnection(nodes, params),
+    [nodes]
+  );
 
   // 处理拖放事件
   const handleDrop = (event: React.DragEvent) => {

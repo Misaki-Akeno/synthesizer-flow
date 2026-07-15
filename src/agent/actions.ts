@@ -8,6 +8,12 @@ import { resolveAISettingsForUser } from '@/lib/ai/server-settings';
 
 const VALID_MESSAGE_ROLES = new Set(['user', 'assistant', 'system']);
 const VALID_ACTIONS = new Set(['approve', 'reject']);
+const MAX_MESSAGES = 100;
+const MAX_MESSAGE_LENGTH = 50_000;
+const MAX_TOTAL_MESSAGE_LENGTH = 200_000;
+const MAX_GRAPH_NODES = 500;
+const MAX_GRAPH_EDGES = 2_000;
+const MAX_THREAD_ID_LENGTH = 128;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -17,6 +23,12 @@ function assertChatMessages(value: unknown): asserts value is ChatMessage[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error('messages must be a non-empty array');
   }
+
+  if (value.length > MAX_MESSAGES) {
+    throw new Error(`messages must contain at most ${MAX_MESSAGES} items`);
+  }
+
+  let totalLength = 0;
 
   value.forEach((message, index) => {
     if (!isRecord(message)) {
@@ -33,7 +45,16 @@ function assertChatMessages(value: unknown): asserts value is ChatMessage[] {
     if (typeof message.content !== 'string') {
       throw new Error(`messages[${index}].content must be a string`);
     }
+
+    if (message.content.length > MAX_MESSAGE_LENGTH) {
+      throw new Error(`messages[${index}].content is too long`);
+    }
+    totalLength += message.content.length;
   });
+
+  if (totalLength > MAX_TOTAL_MESSAGE_LENGTH) {
+    throw new Error('messages total content is too long');
+  }
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -98,6 +119,10 @@ function assertOptionalNonEmptyString(value: unknown, context: string): void {
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`${context} must be a non-empty string`);
   }
+
+  if (value.length > MAX_THREAD_ID_LENGTH || !/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error(`${context} has an invalid format`);
+  }
 }
 
 function assertGraphStateSnapshot(
@@ -109,6 +134,17 @@ function assertGraphStateSnapshot(
     !Array.isArray(value.edges)
   ) {
     throw new Error('initialState must include nodes and edges arrays');
+  }
+
+  if (value.nodes.length > MAX_GRAPH_NODES) {
+    throw new Error(
+      `initialState.nodes must contain at most ${MAX_GRAPH_NODES} items`
+    );
+  }
+  if (value.edges.length > MAX_GRAPH_EDGES) {
+    throw new Error(
+      `initialState.edges must contain at most ${MAX_GRAPH_EDGES} items`
+    );
   }
 
   const nodeIds = new Set<string>();
@@ -222,12 +258,18 @@ export async function* chatWithAgent(
   );
 
   const agent = Agent.getInstance();
+  // 客户端 threadId 只作为公开会话标识；数据库 key 必须绑定当前用户，
+  // 防止仅凭另一个用户的 threadId 恢复或批准其 LangGraph 状态。
+  const checkpointThreadId = threadId
+    ? `${encodeURIComponent(session.user.id)}:${threadId}`
+    : undefined;
   const generator = agent.streamMessage(
     messages,
     resolvedSettings,
     initialState,
     threadId,
-    action
+    action,
+    checkpointThreadId
   );
 
   for await (const part of generator) {

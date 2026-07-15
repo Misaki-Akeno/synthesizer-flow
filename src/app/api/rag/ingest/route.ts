@@ -3,20 +3,19 @@ import { upsertDocuments } from '@/lib/rag/vectorStore';
 import { splitMarkdown } from '@/lib/rag/markdownSplitter';
 import { auth } from '@/lib/auth/auth';
 import { hasPermission, PERMISSIONS } from '@/lib/auth/rbac';
+import { readBoundedJsonBody } from '@/lib/http/readJsonBody';
 
 export const runtime = 'nodejs';
+
+const MAX_INGEST_ITEMS = 50;
+const MAX_DOCUMENT_LENGTH = 200_000;
+const MAX_TOTAL_TEXT_LENGTH = 1_000_000;
+const MAX_CHUNKS = 2_000;
+const MAX_REQUEST_BODY_BYTES = 1_500_000;
 
 function logIngestDebug(message: string, data?: unknown): void {
   if (process.env.NODE_ENV === 'development') {
     console.info(message, data ?? '');
-  }
-}
-
-async function readJsonBody(req: Request): Promise<unknown> {
-  try {
-    return await req.json();
-  } catch {
-    return null;
   }
 }
 
@@ -35,10 +34,14 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await readJsonBody(req);
-    if (body === null) {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    const bodyResult = await readBoundedJsonBody(req, MAX_REQUEST_BODY_BYTES);
+    if (!bodyResult.success) {
+      return NextResponse.json(
+        { error: bodyResult.error },
+        { status: bodyResult.status }
+      );
     }
+    const body = bodyResult.data;
 
     const bodyRecord =
       typeof body === 'object' && body !== null
@@ -58,6 +61,12 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    if (items.length > MAX_INGEST_ITEMS) {
+      return NextResponse.json(
+        { error: `items must contain at most ${MAX_INGEST_ITEMS} documents` },
+        { status: 413 }
+      );
+    }
 
     // basic validation
     const invalid = items.findIndex((it: unknown) => {
@@ -70,6 +79,7 @@ export async function POST(req: Request) {
       return (
         typeof t !== 'string' ||
         !t.trim() ||
+        t.length > MAX_DOCUMENT_LENGTH ||
         (id !== undefined && (typeof id !== 'string' || !id.trim())) ||
         (meta !== undefined &&
           (typeof meta !== 'object' || meta === null || Array.isArray(meta)))
@@ -81,6 +91,17 @@ export async function POST(req: Request) {
           error: `items[${invalid}] must include non-empty text, optional non-empty string id, and optional object meta`,
         },
         { status: 400 }
+      );
+    }
+
+    const totalTextLength = (items as Array<{ text: string }>).reduce(
+      (total, item) => total + item.text.length,
+      0
+    );
+    if (totalTextLength > MAX_TOTAL_TEXT_LENGTH) {
+      return NextResponse.json(
+        { error: 'ingest payload text is too large' },
+        { status: 413 }
       );
     }
 
@@ -120,6 +141,13 @@ export async function POST(req: Request) {
           meta: newMeta,
         });
       });
+
+      if (chunkedItems.length > MAX_CHUNKS) {
+        return NextResponse.json(
+          { error: 'ingest payload produced too many chunks' },
+          { status: 413 }
+        );
+      }
     }
 
     logIngestDebug(

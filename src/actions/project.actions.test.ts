@@ -10,6 +10,7 @@ const mockDbState = vi.hoisted(() => ({
   selectResults: [] as unknown[][],
   insertValues: [] as unknown[],
   updateSets: [] as unknown[],
+  updateResults: [[{ revision: 2 }]] as unknown[][],
   deleteCalls: 0,
 }));
 
@@ -24,7 +25,7 @@ const mockDb = vi.hoisted(() => {
     return chain;
   };
 
-  return {
+  const db = {
     select: vi.fn(() =>
       createSelectChain(mockDbState.selectResults.shift() ?? [])
     ),
@@ -36,8 +37,11 @@ const mockDb = vi.hoisted(() => {
     update: vi.fn(() => ({
       set: vi.fn((value: unknown) => {
         mockDbState.updateSets.push(value);
+        const result = mockDbState.updateResults.shift() ?? [];
         return {
-          where: vi.fn(async () => undefined),
+          where: vi.fn(() => ({
+            returning: vi.fn(async () => result),
+          })),
         };
       }),
     })),
@@ -46,7 +50,13 @@ const mockDb = vi.hoisted(() => {
         mockDbState.deleteCalls += 1;
       }),
     })),
+    transaction: vi.fn(),
   };
+
+  db.transaction.mockImplementation(
+    async (callback: (tx: typeof db) => Promise<unknown>) => callback(db)
+  );
+  return db;
 });
 
 vi.mock('@/lib/auth/auth', () => ({
@@ -105,6 +115,7 @@ describe('project actions', () => {
     mockDbState.selectResults = [];
     mockDbState.insertValues = [];
     mockDbState.updateSets = [];
+    mockDbState.updateResults = [[{ revision: 2 }]];
     mockDbState.deleteCalls = 0;
   });
 
@@ -157,11 +168,33 @@ describe('project actions', () => {
     mockAuth.mockResolvedValue(userSession);
     mockDbState.selectResults = [[{ role: 'editor' }]];
 
-    const result = await saveProject('Updated', validCanvas, 'project-1');
+    const result = await saveProject('Updated', validCanvas, {
+      projectId: 'project-1',
+    });
 
-    expect(result).toEqual({ success: true, projectId: 'project-1' });
+    expect(result).toEqual({
+      success: true,
+      projectId: 'project-1',
+      revision: 2,
+    });
     expect(mockDbState.updateSets).toHaveLength(1);
     expect(mockDbState.insertValues).toHaveLength(0);
+  });
+
+  it('rejects stale project revisions instead of overwriting newer data', async () => {
+    mockAuth.mockResolvedValue(userSession);
+    mockDbState.selectResults = [[{ role: 'editor' }]];
+    mockDbState.updateResults = [[]];
+
+    const result = await saveProject('Updated', validCanvas, {
+      projectId: 'project-1',
+      expectedRevision: 4,
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: 'Project was modified elsewhere. Reload and try again.',
+    });
   });
 
   it('rejects blank project names before writing to the database', async () => {
@@ -186,12 +219,15 @@ describe('project actions', () => {
     expect(mockDbState.insertValues[0]).toMatchObject({
       name: 'New Project',
     });
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
   });
 
   it('rejects blank project ids instead of creating an accidental copy', async () => {
     mockAuth.mockResolvedValue(userSession);
 
-    const result = await saveProject('Updated', validCanvas, '   ');
+    const result = await saveProject('Updated', validCanvas, {
+      projectId: '   ',
+    });
 
     expect(result).toEqual({
       success: false,
@@ -205,7 +241,9 @@ describe('project actions', () => {
     mockAuth.mockResolvedValue(userSession);
     mockDbState.selectResults = [[{ role: 'viewer' }]];
 
-    const result = await saveProject('Updated', validCanvas, 'project-1');
+    const result = await saveProject('Updated', validCanvas, {
+      projectId: 'project-1',
+    });
 
     expect(result).toEqual({
       success: false,
@@ -218,7 +256,9 @@ describe('project actions', () => {
   it('denies preset saves for non-admin users', async () => {
     mockAuth.mockResolvedValue(userSession);
 
-    const result = await saveProject('Preset', validCanvas, undefined, true);
+    const result = await saveProject('Preset', validCanvas, {
+      isPreset: true,
+    });
 
     expect(result).toEqual({
       success: false,
@@ -231,7 +271,10 @@ describe('project actions', () => {
     mockAuth.mockResolvedValue(adminSession);
     mockDbState.selectResults = [[{ id: 'project-1', isPreset: false }]];
 
-    const result = await saveProject('Preset', validCanvas, 'project-1', true);
+    const result = await saveProject('Preset', validCanvas, {
+      projectId: 'project-1',
+      isPreset: true,
+    });
 
     expect(result).toEqual({
       success: false,
@@ -264,7 +307,7 @@ describe('project actions', () => {
       success: false,
       error: 'Project not found or access denied',
     });
-    expect(mockDbState.deleteCalls).toBe(0);
+    expect(mockDbState.updateSets).toHaveLength(0);
   });
 
   it('allows admins to delete built-in presets', async () => {
@@ -282,6 +325,6 @@ describe('project actions', () => {
     const result = await deleteProjectAction('preset-1');
 
     expect(result).toEqual({ success: true });
-    expect(mockDbState.deleteCalls).toBe(1);
+    expect(mockDbState.updateSets).toHaveLength(1);
   });
 });

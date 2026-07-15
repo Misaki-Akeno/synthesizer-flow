@@ -112,6 +112,9 @@ export abstract class ModuleBase {
   // 存储内部订阅关系
   private internalSubscriptions: Subscription[] = [];
 
+  // 生命周期终态。异步初始化完成时可据此避免“已销毁实例复活”。
+  private disposed = false;
+
   // 存储数组类型的多个输入源的值
   // Map<inputPortName, Map<bindingKey, any[]>>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -320,8 +323,7 @@ export abstract class ModuleBase {
         }
       });
       this.internalSubscriptions.push(subscription);
-    }
- else {
+    } else {
       console.warn(
         `Port type ${portType} not compatible with parameter type ${paramType}`
       );
@@ -405,7 +407,10 @@ export abstract class ModuleBase {
       } else if (value !== '') {
         console.warn(`Invalid option: ${value} for parameter ${paramKey}`);
       }
-    } else if (meta.type === ParameterType.STRING && typeof value === 'string') {
+    } else if (
+      meta.type === ParameterType.STRING &&
+      typeof value === 'string'
+    ) {
       // 字符串类型，直接更新
       this.parameters[paramKey].next(value);
     } else {
@@ -625,8 +630,8 @@ export abstract class ModuleBase {
             sourceModuleId,
             sourcePortName
           );
-          const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
-            key.startsWith(prefix)
+          const hasRemainingBindings = Object.keys(this.subscriptions).some(
+            (key) => key.startsWith(prefix)
           );
           if (!hasRemainingBindings) {
             this.inputPorts[inputPortName].next(null);
@@ -653,8 +658,8 @@ export abstract class ModuleBase {
         if (found) {
           if (isAudioPort) {
             this.handleAudioDisconnect(inputPortName, sourceModuleId);
-            const hasRemainingBindings = Object.keys(this.subscriptions).some((key) =>
-              key.startsWith(prefix)
+            const hasRemainingBindings = Object.keys(this.subscriptions).some(
+              (key) => key.startsWith(prefix)
             );
             if (!hasRemainingBindings) {
               this.inputPorts[inputPortName].next(null);
@@ -861,10 +866,22 @@ export abstract class ModuleBase {
   }
 
   /**
+   * 返回模块是否已经进入销毁状态。
+   */
+  public isDisposed(): boolean {
+    return this.disposed;
+  }
+
+  /**
    * 释放模块资源
    * 取消所有订阅并清理资源
    */
   public dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+
     // 取消所有外部订阅
     Object.values(this.subscriptions).forEach((subscription) => {
       subscription.unsubscribe();

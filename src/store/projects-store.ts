@@ -16,7 +16,7 @@ import {
   getBuiltInPresets,
 } from '@/actions/project.actions';
 import { nanoid } from 'nanoid';
-import { getBrowserStorage } from './persist-storage';
+import { getIndexedDbStorage } from './persist-storage';
 
 // 创建项目管理器专用日志记录器
 const logger = createModuleLogger('ProjectManager');
@@ -31,6 +31,9 @@ export interface ProjectConfig {
   lastModified: string; // 最后修改时间
   data?: string; // JSON 格式的画布数据 (列表模式下可能为空)
   tags?: string[]; // 项目标签
+  metadata?: Record<string, unknown>; // 封面、标签等开放扩展信息
+  schemaVersion?: number; // 服务端项目数据结构版本
+  revision?: number; // 服务端乐观并发版本
   isBuiltIn?: boolean; // 标记是否为内置预设
 }
 
@@ -144,12 +147,16 @@ export const useProjectStore = create<ProjectPersistState>()(
             const mappedProjects: ProjectConfig[] = userRes.data.map((p) => ({
               id: p.id,
               name: p.name,
+              description: p.description ?? undefined,
               created: p.createdAt
                 ? new Date(p.createdAt).toISOString()
                 : new Date().toISOString(),
               lastModified: p.updatedAt
                 ? new Date(p.updatedAt).toISOString()
                 : new Date().toISOString(),
+              metadata: p.metadata as Record<string, unknown>,
+              schemaVersion: p.schemaVersion,
+              revision: p.revision,
               data: undefined, // 列表不返回数据
               isBuiltIn: false,
             }));
@@ -163,22 +170,20 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           if (presetRes.success && presetRes.data) {
             const mappedPresets: ProjectConfig[] = presetRes.data.map((p) => {
-              // DB 中 data 是 object (jsonb)，需要 stringify
-              const dataStr =
-                typeof p.data === 'object'
-                  ? JSON.stringify(p.data)
-                  : String(p.data);
               return {
                 id: p.id,
                 name: p.name,
-                description: '系统预设', // 暂时硬编码
+                description: p.description ?? undefined,
                 created: p.createdAt
                   ? new Date(p.createdAt).toISOString()
                   : new Date().toISOString(),
                 lastModified: p.updatedAt
                   ? new Date(p.updatedAt).toISOString()
                   : new Date().toISOString(),
-                data: jsonUtils.makeJsonUrlSafe(dataStr),
+                metadata: p.metadata as Record<string, unknown>,
+                schemaVersion: p.schemaVersion,
+                revision: p.revision,
+                data: undefined,
                 isBuiltIn: true,
               };
             });
@@ -224,26 +229,25 @@ export const useProjectStore = create<ProjectPersistState>()(
           }
 
           const { currentProject } = get();
-          // 如果当前项目有ID且不是内置的，且名字没变（或者是显式保存），则更新
-          // 这里简化逻辑：如果名字和当前项目名字一样，就更新当前项目ID，否则新建
+          // 当前非预设项目始终按 ID 更新；改名不应隐式创建副本。
           let projectIdToUpdate: string | undefined = undefined;
 
           if (
             currentProject &&
             !currentProject.isBuiltIn &&
-            !isLocalImportedProject(currentProject) &&
-            currentProject.name === name
+            !isLocalImportedProject(currentProject)
           ) {
             projectIdToUpdate = currentProject.id;
           }
 
-          const result = await saveProject(
-            name,
-            dataToSave,
-            projectIdToUpdate,
-            false,
-            description
-          );
+          const result = await saveProject(name, dataToSave, {
+            projectId: projectIdToUpdate,
+            description,
+            expectedRevision: projectIdToUpdate
+              ? currentProject?.revision
+              : undefined,
+            metadata: currentProject?.metadata,
+          });
 
           if (result.success && result.projectId) {
             // 保存成功，更新当前项目状态（包括 data，这里保持 string 格式以便本地缓存）
@@ -257,9 +261,15 @@ export const useProjectStore = create<ProjectPersistState>()(
               id: result.projectId,
               name,
               description,
-              created: currentProject?.created || now,
+              created:
+                projectIdToUpdate && currentProject?.created
+                  ? currentProject.created
+                  : now,
               lastModified: now,
               data: canvasData, // 保持 string
+              metadata: currentProject?.metadata,
+              schemaVersion: currentProject?.schemaVersion ?? 1,
+              revision: result.revision,
               isBuiltIn: false,
             };
 
@@ -295,13 +305,10 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           // 强制新建，不检查ID更新（为了简单，总算创建新预设）
           // 传入 isPreset = true
-          const result = await saveProject(
-            name,
-            dataToSave,
-            undefined,
-            true,
-            description
-          );
+          const result = await saveProject(name, dataToSave, {
+            isPreset: true,
+            description,
+          });
 
           if (result.success && result.projectId) {
             await get().fetchProjects({ force: true });
@@ -334,6 +341,7 @@ export const useProjectStore = create<ProjectPersistState>()(
                 projectConfig = {
                   id: res.data.id,
                   name: res.data.name,
+                  description: res.data.description ?? undefined,
                   created: res.data.createdAt
                     ? new Date(res.data.createdAt).toISOString()
                     : new Date().toISOString(),
@@ -341,6 +349,9 @@ export const useProjectStore = create<ProjectPersistState>()(
                     ? new Date(res.data.updatedAt).toISOString()
                     : new Date().toISOString(),
                   isBuiltIn: res.data.isPreset,
+                  metadata: res.data.metadata as Record<string, unknown>,
+                  schemaVersion: res.data.schemaVersion,
+                  revision: res.data.revision,
                   data:
                     typeof res.data.data === 'object'
                       ? JSON.stringify(res.data.data)
@@ -371,13 +382,21 @@ export const useProjectStore = create<ProjectPersistState>()(
           // 如果没有数据（或者是用户项目，只有元数据），需要从 DB 获取
           let fullData = projectConfig.data;
 
-          if (!fullData && !projectConfig.isBuiltIn) {
+          if (!fullData) {
             // 从 DB 获取详情
             const result = await getProjectById(projectConfig.id);
             if (result.success && result.data) {
               // DB 返回的 data 是 jsonb (object)
               // store 需要 string
               fullData = JSON.stringify(result.data.data);
+              projectConfig = {
+                ...projectConfig,
+                description: result.data.description ?? undefined,
+                metadata: result.data.metadata as Record<string, unknown>,
+                schemaVersion: result.data.schemaVersion,
+                revision: result.data.revision,
+                lastModified: new Date(result.data.updatedAt).toISOString(),
+              };
             } else {
               logger.error('无法从服务器获取项目详情', result.error);
               set({ isLoading: false });
@@ -413,7 +432,6 @@ export const useProjectStore = create<ProjectPersistState>()(
               currentProject: {
                 ...projectConfig,
                 data: jsonData, // 更新为完整数据
-                lastModified: new Date().toISOString(),
               },
             });
             logger.success(`项目"${projectConfig.name}"加载成功`);
@@ -545,11 +563,33 @@ export const useProjectStore = create<ProjectPersistState>()(
       partialize: (state) => ({
         currentProject: state.currentProject,
         userProjects: state.userProjects,
-        builtInProjects: state.builtInProjects,
+        builtInProjects: state.builtInProjects.map((project) => ({
+          ...project,
+          data: undefined,
+        })),
         projectsLastFetchedAt: state.projectsLastFetchedAt,
       }),
+      version: 3,
+      migrate: (persistedState) => {
+        if (!persistedState || typeof persistedState !== 'object') {
+          return persistedState as ProjectPersistState;
+        }
+
+        const state = persistedState as Partial<ProjectPersistState>;
+        return {
+          ...state,
+          builtInProjects: (state.builtInProjects ?? []).map((project) => ({
+            ...project,
+            data: undefined,
+          })),
+        } as ProjectPersistState;
+      },
       storage: createJSONStorage(() =>
-        getBrowserStorage(() => window.localStorage)
+        getIndexedDbStorage({
+          databaseName: 'synthesizerflow',
+          storeName: 'project-cache',
+          getFallbackStorage: () => window.localStorage,
+        })
       ),
       onRehydrateStorage: () => (state) => {
         if (state) {

@@ -1,65 +1,255 @@
 {
-    "Playground": {
-        "title": "Synthesizer Playground",
-        "description": "A playground for building synthesizers"
+  "Playground": {
+    "title": "Synthesizer Playground",
+    "description": "A playground for building synthesizers"
+  },
+  "Settings": {
+    "tabs": {
+      "general": "General & Canvas",
+      "ai": "AI Models"
     },
-    "Settings": {
-        "tabs": {
-            "general": "General & Canvas",
-            "ai": "AI Models"
-        },
-        "general": {
-            "title": "General & Canvas Settings",
-            "description": "Adjust application display, language, and canvas interactions",
-            "darkMode": {
-                "label": "Dark Mode",
-                "description": "Enable dark mode theme"
-            },
-            "language": {
-                "label": "Language",
-                "description": "Select application language",
-                "en-US": "English",
-                "zh-CN": "简体中文"
-            },
-            "autoSave": {
-                "label": "Auto Save",
-                "description": "Automatically save canvas state"
-            },
-            "snapToGrid": {
-                "label": "Snap to Grid",
-                "description": "Snap modules to the grid"
-            },
-            "gridSize": "Grid Size: {size}px"
-        },
-        "ai": {
-            "title": "AI Model Settings",
-            "description": "Configure AI model connections to enhance application features",
-            "modelName": {
-                "label": "Model Name",
-                "placeholder": "e.g., gpt-4, claude-3",
-                "description": "Specify the AI model name to use"
-            },
-            "apiKey": {
-                "label": "API Key",
-                "placeholder": "Enter your API key",
-                "placeholderSaved": "Key saved; leave blank to keep using it",
-                "errorEmpty": "API Key cannot be empty",
-                "description": "Your API key is encrypted and stored on the server",
-                "descriptionSaved": "A server-side key is saved. Enter and save a new key to replace it"
-            },
-            "apiEndpoint": {
-                "label": "API Endpoint (Optional)",
-                "placeholder": "https://api.example.com/v1",
-                "description": "If you use a custom API endpoint, specify it here"
-            },
-            "save": "Save AI Settings",
-            "saving": "Saving..."
-        },
-        "toast": {
-            "generalUpdated": "General settings updated",
-            "aiUpdated": "AI settings updated",
-            "aiSaveFailed": "Failed to save AI settings",
-            "languageUpdated": "Language changed"
-        }
+    "general": {
+      "title": "General & Canvas Settings",
+      "description": "Adjust application display, language, and canvas interactions",
+      "darkMode": {
+        "label": "Dark Mode",
+        "description": "Enable dark mode theme"
+      },
+      "language": {
+        "label": "Language",
+        "description": "Select application language",
+        "en-US": "English",
+        "zh-CN": "简体中文"
+      },
+      "autoSave": {
+        "label": "Auto Save",
+        "description": "Automatically save canvas state"
+      },
+      "snapToGrid": {
+        "label": "Snap to Grid",
+        "description": "Snap modules to the grid"
+      },
+      "gridSize": "Grid Size: {size}px"
+    },
+    "ai": {
+      "title": "AI Model Settings",
+      "description": "Configure AI model connections to enhance application features",
+      "modelName": {
+        "label": "Model Name",
+        "placeholder": "e.g., gpt-4, claude-3",
+        "description": "Specify the AI model name to use"
+      },
+      "apiKey": {
+        "label": "API Key",
+        "placeholder": "Enter your API key",
+        "placeholderSaved": "Key saved; leave blank to keep using it",
+        "errorEmpty": "API Key cannot be empty",
+        "description": "Your API key is encrypted and stored on the server",
+        "descriptionSaved": "A server-side key is saved. Enter and save a new key to replace it"
+      },
+      "apiEndpoint": {
+        "label": "API Endpoint (Optional)",
+        "placeholder": "https://api.example.com/v1",
+        "description": "If you use a custom API endpoint, specify it here"
+      },
+      "save": "Save AI Settings",
+      "saving": "Saving..."
+    },
+    "toast": {
+      "generalUpdated": "General settings updated",
+      "aiUpdated": "AI settings updated",
+      "aiSaveFailed": "Failed to save AI settings",
+      "languageUpdated": "Language changed"
     }
+  },
+  "Workbench": {
+    "navigation": {
+      "projects": "Project Manager",
+      "modules": "Module Browser",
+      "devTools": "Developer Tools",
+      "settings": "Settings",
+      "help": "Help"
+    },
+    "header": {
+      "file": "File",
+      "edit": "Edit",
+      "view": "View",
+      "help": "Help",
+      "menu": "Menu",
+      "newProject": "New project",
+      "openProject": "Open project",
+      "save": "Save",
+      "saveAs": "Save as",
+      "exit": "Exit",
+      "undo": "Undo",
+      "redo": "Redo",
+      "cut": "Cut",
+      "copy": "Copy",
+      "paste": "Paste",
+      "selectAll": "Select all",
+      "fitView": "Fit view",
+      "resetZoom": "Reset zoom",
+      "properties": "Properties panel",
+      "aiPanel": "AI assistant panel",
+      "darkMode": "Dark mode",
+      "documentation": "Documentation",
+      "tutorial": "Tutorial",
+      "shortcuts": "Keyboard shortcuts",
+      "repository": "GitHub repository",
+      "about": "About",
+      "settings": "Settings",
+      "comingSoon": "Coming soon",
+      "comingSoonDescription": "This feature is still in development.",
+      "close": "Close",
+      "descriptions": {
+        "newProject": "Create a new synthesizer project",
+        "openProject": "Open an existing synthesizer project",
+        "save": "Save the current project",
+        "saveAs": "Save the current project as a new file",
+        "exit": "Exit the application",
+        "cut": "Cut the selection to the clipboard",
+        "copy": "Copy the selection to the clipboard",
+        "paste": "Paste from the clipboard",
+        "selectAll": "Select every module",
+        "fitView": "Fit every module in the viewport",
+        "resetZoom": "Reset the zoom level",
+        "darkMode": "Toggle dark mode",
+        "documentation": "Open the documentation",
+        "tutorial": "Open the getting-started tutorial",
+        "shortcuts": "View keyboard shortcuts",
+        "about": "About Synthesizer Flow",
+        "settings": "Application settings"
+      }
+    },
+    "welcome": {
+      "title": "Welcome to Synthesizer Flow",
+      "description": "Start building your modular audio workflow. Choose an option:",
+      "newProject": "New project",
+      "newProjectDescription": "Start with a blank canvas",
+      "loadExample": "Load an example",
+      "loadExampleDescription": "Explore a built-in sound preset"
+    },
+    "search": {
+      "placeholder": "Search modules...",
+      "submit": "Search modules"
+    },
+    "user": {
+      "user": "User",
+      "menuFor": "User menu: {name}",
+      "loadingStatus": "Loading user status",
+      "openLoginMenu": "Open sign-in menu",
+      "signedInAs": "Signed in as {name}",
+      "loading": "Loading...",
+      "clickToLogin": "Click to sign in",
+      "authenticating": "Authenticating...",
+      "upgrade": "Upgrade to Pro",
+      "account": "Account",
+      "billing": "Billing",
+      "notifications": "Notifications",
+      "logout": "Sign out",
+      "signedOut": "Signed out",
+      "signInToSave": "Sign in to save your projects",
+      "login": "Sign in",
+      "preparingLogin": "Preparing sign-in",
+      "preparingLoginDescription": "Please wait while the sign-in page opens...",
+      "loginFailed": "Sign-in failed",
+      "loginFailedDescription": "Could not reach the authentication service. Try again later.",
+      "loggingOut": "Signing out",
+      "loggingOutDescription": "Finishing your sign-out...",
+      "loggedOut": "Signed out",
+      "loggedOutDescription": "You have signed out successfully.",
+      "logoutFailed": "Sign-out failed",
+      "logoutFailedDescription": "Something went wrong while signing out. Try again."
+    },
+    "panels": {
+      "properties": "Properties",
+      "chat": "AI Assistant",
+      "midiEditor": "MIDI Editor",
+      "close": "Close panel",
+      "maximize": "Maximize panel",
+      "restore": "Restore panel"
+    },
+    "about": {
+      "title": "About Synthesizer Flow",
+      "description": "A web-based modular audio synthesizer",
+      "body": "Build and perform sounds by visually connecting audio modules.",
+      "source": "Project source",
+      "repository": "GitHub repository",
+      "close": "Close",
+      "visit": "Visit GitHub"
+    },
+    "settings": {
+      "title": "Settings",
+      "description": "Synthesizer Flow application settings"
+    },
+    "properties": {
+      "empty": "Select a module to inspect its properties.",
+      "name": "Module name",
+      "type": "Type: {type}",
+      "noParameters": "This module has no configurable parameters.",
+      "namePlaceholder": "Enter a module display name"
+    },
+    "midi": {
+      "selectModule": "Select a MIDI Clip module to edit.",
+      "summary": "{notes} notes · {bars} bars · {numerator}/{denominator}",
+      "select": "Select",
+      "draw": "Draw",
+      "erase": "Erase",
+      "stop": "Stop",
+      "play": "Play",
+      "bpm": "BPM",
+      "bars": "Bars",
+      "quantize": "Quantize",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "key": "Key",
+      "mpeLanes": "MPE lanes",
+      "mpeDescription": "Velocity, pressure, timbre, and pitch bend",
+      "inspector": "Inspector",
+      "noNoteSelected": "No note selected",
+      "pitch": "Pitch",
+      "start": "Start",
+      "duration": "Duration",
+      "channel": "Channel",
+      "auto": "Auto",
+      "velocity": "Velocity",
+      "pressure": "Pressure",
+      "timbre": "Timbre",
+      "pitchBend": "Pitch bend",
+      "activeLane": "Active lane: {lane}"
+    },
+    "chat": {
+      "start": "Start chatting with the AI assistant. Try asking what is on the canvas.",
+      "configureApi": "Configure an AI model API key in Settings first.",
+      "settingsPath": "Open Settings > AI Models",
+      "unknownError": "Unknown error",
+      "requestError": "Sorry, the request failed: {message}",
+      "requiresApproval": "Your approval is required to continue.",
+      "approvalRequired": "Approval required",
+      "reject": "Reject",
+      "approve": "Approve",
+      "approved": "Action approved",
+      "rejected": "Action rejected",
+      "thinking": "AI is thinking...",
+      "newConversation": "New conversation",
+      "history": "History",
+      "archiveTitle": "Conversation archive",
+      "saveCurrent": "Save current state",
+      "inputPlaceholder": "Type a message...",
+      "configurePlaceholder": "Configure an API key in Settings first",
+      "autoSaving": "Saving the previous conversation...",
+      "autoSaved": "Previous conversation saved",
+      "autoSaveFailed": "Failed to save the previous conversation",
+      "loginRequired": "Sign in first",
+      "checkpointSaved": "Archive saved",
+      "checkpointSaveFailed": "Save failed",
+      "checkpointSaveError": "Could not save the archive",
+      "invalidCheckpoint": "The archived canvas is invalid",
+      "restoreCanvasFailed": "Could not restore the canvas",
+      "checkpointLoaded": "Archive loaded",
+      "checkpointRestoreError": "Could not restore the archive",
+      "toolCalls": "Tool calls ({count})",
+      "result": "Result"
+    }
+  }
 }

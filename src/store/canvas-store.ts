@@ -47,6 +47,9 @@ interface FlowState {
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
+  beginHistoryTransaction: () => void;
+  commitHistoryTransaction: () => void;
+  cancelHistoryTransaction: () => void;
   undo: () => void;
   redo: () => void;
   updateModuleParameter: (
@@ -188,7 +191,10 @@ function restoreEdgeBindings(edges: Edge[]): void {
   });
 }
 
-function createCanvasSnapshot(nodes: FlowNode[], edges: Edge[]): SerializedCanvas {
+function createCanvasSnapshot(
+  nodes: FlowNode[],
+  edges: Edge[]
+): SerializedCanvas {
   return serializationManager.serializeCanvas(nodes, edges);
 }
 
@@ -222,6 +228,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
   // 设置节点获取函数
   moduleManager.setNodesGetter(() => get().nodes);
   const draggingNodeIds = new Set<string>();
+  let historyTransaction: { snapshot: SerializedCanvas; depth: number } | null =
+    null;
 
   const applyCanvasSnapshot = (snapshot: SerializedCanvas) => {
     // 撤销/重做会完整重建模块实例，确保模块注册表、参数和连接状态一致。
@@ -242,11 +250,18 @@ export const useFlowStore = create<FlowState>((set, get) => {
   };
 
   const recordHistory = () => {
+    if (historyTransaction) {
+      return;
+    }
+
     const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
     const { past } = get().history;
     const lastSnapshot = past[past.length - 1];
 
-    if (lastSnapshot && areCanvasSnapshotsEqual(lastSnapshot, currentSnapshot)) {
+    if (
+      lastSnapshot &&
+      areCanvasSnapshotsEqual(lastSnapshot, currentSnapshot)
+    ) {
       set(getHistoryState(past, []));
       return;
     }
@@ -404,7 +419,57 @@ export const useFlowStore = create<FlowState>((set, get) => {
       });
     },
 
+    beginHistoryTransaction: () => {
+      if (historyTransaction) {
+        historyTransaction.depth += 1;
+        return;
+      }
+
+      historyTransaction = {
+        snapshot: cloneCanvasSnapshot(
+          createCanvasSnapshot(get().nodes, get().edges)
+        ),
+        depth: 1,
+      };
+    },
+
+    commitHistoryTransaction: () => {
+      if (!historyTransaction) {
+        return;
+      }
+
+      historyTransaction.depth -= 1;
+      if (historyTransaction.depth > 0) {
+        return;
+      }
+
+      const initialSnapshot = historyTransaction.snapshot;
+      historyTransaction = null;
+      const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
+
+      if (areCanvasSnapshotsEqual(initialSnapshot, currentSnapshot)) {
+        return;
+      }
+
+      const nextPast = [
+        ...get().history.past,
+        cloneCanvasSnapshot(initialSnapshot),
+      ].slice(-MAX_HISTORY_SIZE);
+      set(getHistoryState(nextPast, []));
+    },
+
+    cancelHistoryTransaction: () => {
+      if (!historyTransaction) {
+        return;
+      }
+
+      const initialSnapshot = historyTransaction.snapshot;
+      historyTransaction = null;
+      applyCanvasSnapshot(initialSnapshot);
+    },
+
     undo: () => {
+      historyTransaction = null;
       const { past, future } = get().history;
       const previousSnapshot = past[past.length - 1];
 
@@ -424,6 +489,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
 
     redo: () => {
+      historyTransaction = null;
       const { past, future } = get().history;
       const nextSnapshot = future[0];
 
@@ -606,6 +672,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
     // 从JSON格式导入画布
     importCanvasFromJson: (jsonString, projectId = 'imported-project') => {
       try {
+        historyTransaction = null;
         const parseResult = validateAndParseJson<SerializedCanvas>(
           jsonString,
           validateSerializedCanvas

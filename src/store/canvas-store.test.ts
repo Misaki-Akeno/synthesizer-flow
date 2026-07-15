@@ -381,9 +381,12 @@ describe('canvas store history', () => {
 
     useFlowStore.getState().undo();
 
-    expect(useFlowStore.getState().nodes.map((node) => node.id).sort()).toEqual(
-      ['calculator', 'number']
-    );
+    expect(
+      useFlowStore
+        .getState()
+        .nodes.map((node) => node.id)
+        .sort()
+    ).toEqual(['calculator', 'number']);
     expect(useFlowStore.getState().edges).toHaveLength(1);
     expect(moduleManager.getModule('calculator')?.getInputValue('a')).toBe(7);
     expect(
@@ -413,6 +416,29 @@ describe('canvas store history', () => {
     expect(moduleManager.getModule('number')?.getParameterValue('value')).toBe(
       42
     );
+  });
+
+  it('coalesces continuous parameter edits into one undo step', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+
+    useFlowStore.getState().beginHistoryTransaction();
+    useFlowStore.getState().updateModuleParameter('number', 'value', 130);
+    useFlowStore.getState().updateModuleParameter('number', 'value', 140);
+    useFlowStore.getState().updateModuleParameter('number', 'value', 150);
+    useFlowStore.getState().commitHistoryTransaction();
+
+    expect(moduleManager.getModule('number')?.getParameterValue('value')).toBe(
+      150
+    );
+
+    useFlowStore.getState().undo();
+
+    expect(moduleManager.getModule('number')?.getParameterValue('value')).toBe(
+      120
+    );
+    expect(useFlowStore.getState().canUndo).toBe(true);
   });
 
   it('undoes replacement connections on single-value input ports', () => {

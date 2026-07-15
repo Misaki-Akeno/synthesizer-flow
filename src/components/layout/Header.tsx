@@ -61,21 +61,28 @@ import {
 } from '@/components/ui/shadcn/dialog';
 import { Button } from '@/components/ui/shadcn/button';
 import { useFlowStore } from '@/store/canvas-store';
+import { useTranslations } from 'next-intl';
+import { useShallow } from 'zustand/react/shallow';
 
 interface HeaderProps {
   className?: string;
 }
 
 export function Header({ className }: HeaderProps) {
+  const t = useTranslations('Workbench.header');
   const router = useRouter();
   const searchParams = useSearchParams();
   const [devNoticeOpen, setDevNoticeOpen] = useState(false);
   const [devNoticeTitle, setDevNoticeTitle] = useState('');
   const [devNoticeDescription, setDevNoticeDescription] = useState('');
-  const undo = useFlowStore((state) => state.undo);
-  const redo = useFlowStore((state) => state.redo);
-  const canUndo = useFlowStore((state) => state.canUndo);
-  const canRedo = useFlowStore((state) => state.canRedo);
+  const { undo, redo, canUndo, canRedo } = useFlowStore(
+    useShallow((state) => ({
+      undo: state.undo,
+      redo: state.redo,
+      canUndo: state.canUndo,
+      canRedo: state.canRedo,
+    }))
+  );
 
   const toggleRightPanel = (panel: string) => {
     const currentPanel = searchParams.get('auxPanel');
@@ -119,310 +126,342 @@ export function Header({ className }: HeaderProps) {
 
         {/* 桌面视图的菜单栏 - 使用Menubar组件 */}
         <Menubar className="hidden lg:flex border-none bg-transparent">
-            {/* 文件菜单 */}
-            <MenubarMenu>
-              <MenubarTrigger className="font-medium text-xs">
-                文件
-              </MenubarTrigger>
-              <MenubarContent className="min-w-[12rem]">
-                <MenubarItem
-                  onClick={() =>
-                    handleMenuItemClick('新建项目', '创建一个新的合成器项目')
-                  }
-                >
-                  <FilePlus2 className="mr-2 h-4 w-4" />
-                  <span>新建项目</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+N
-                  </div>
-                </MenubarItem>
-                <MenubarItem
-                  onClick={() =>
-                    handleMenuItemClick('打开项目', '打开已有的合成器项目')
-                  }
-                >
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  <span>打开项目</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+O
-                  </div>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem
-                  onClick={() => handleMenuItemClick('保存项目', '保存当前项目')}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  <span>保存</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+S
-                  </div>
-                </MenubarItem>
-                <MenubarItem
-                  onClick={() =>
-                    handleMenuItemClick('另存为', '将当前项目另存为新文件')
-                  }
-                >
-                  <FileSymlink className="mr-2 h-4 w-4" />
-                  <span>另存为</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+Shift+S
-                  </div>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem
-                  onClick={() => handleMenuItemClick('退出', '退出应用程序')}
-                >
-                  <FileX className="mr-2 h-4 w-4" />
-                  <span>退出</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Alt+F4
-                  </div>
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
+          {/* 文件菜单 */}
+          <MenubarMenu>
+            <MenubarTrigger className="font-medium text-xs">
+              {t('file')}
+            </MenubarTrigger>
+            <MenubarContent className="min-w-[12rem]">
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(
+                    t('newProject'),
+                    t('descriptions.newProject')
+                  )
+                }
+              >
+                <FilePlus2 className="mr-2 h-4 w-4" />
+                <span>{t('newProject')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+N
+                </div>
+              </MenubarItem>
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(
+                    t('openProject'),
+                    t('descriptions.openProject')
+                  )
+                }
+              >
+                <FolderOpen className="mr-2 h-4 w-4" />
+                <span>{t('openProject')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+O
+                </div>
+              </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('save'), t('descriptions.save'))
+                }
+              >
+                <Save className="mr-2 h-4 w-4" />
+                <span>{t('save')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+S
+                </div>
+              </MenubarItem>
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('saveAs'), t('descriptions.saveAs'))
+                }
+              >
+                <FileSymlink className="mr-2 h-4 w-4" />
+                <span>{t('saveAs')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+Shift+S
+                </div>
+              </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('exit'), t('descriptions.exit'))
+                }
+              >
+                <FileX className="mr-2 h-4 w-4" />
+                <span>{t('exit')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Alt+F4
+                </div>
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
 
-            {/* 编辑菜单 */}
-            <MenubarMenu>
-              <MenubarTrigger className="font-medium text-xs">
-                编辑
-              </MenubarTrigger>
-              <MenubarContent className="min-w-[12rem]">
-                <MenubarItem
-                  disabled={!canUndo}
-                  onClick={undo}
-                >
-                  <Undo2 className="mr-2 h-4 w-4" />
-                  <span>撤销</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+Z
-                  </div>
-                </MenubarItem>
-                <MenubarItem
-                  disabled={!canRedo}
-                  onClick={redo}
-                >
-                  <Redo2 className="mr-2 h-4 w-4" />
-                  <span>重做</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+Y
-                  </div>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem
-                  onClick={() =>
-                    handleMenuItemClick('剪切', '将选中内容剪切到剪贴板')
-                  }
-                >
-                  <Scissors className="mr-2 h-4 w-4" />
-                  <span>剪切</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+X
-                  </div>
-                </MenubarItem>
-                <MenubarItem
-                  onClick={() =>
-                    handleMenuItemClick('复制', '将选中内容复制到剪贴板')
-                  }
-                >
-                  <Copy className="mr-2 h-4 w-4" />
-                  <span>复制</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+C
-                  </div>
-                </MenubarItem>
-                <MenubarItem
-                  onClick={() => handleMenuItemClick('粘贴', '从剪贴板粘贴内容')}
-                >
-                  <ClipboardPaste className="mr-2 h-4 w-4" />
-                  <span>粘贴</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+V
-                  </div>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem
-                  onClick={() => handleMenuItemClick('选择全部', '选择所有模块')}
-                >
-                  <MousePointer className="mr-2 h-4 w-4" />
-                  <span>选择全部</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+A
-                  </div>
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
+          {/* 编辑菜单 */}
+          <MenubarMenu>
+            <MenubarTrigger className="font-medium text-xs">
+              {t('edit')}
+            </MenubarTrigger>
+            <MenubarContent className="min-w-[12rem]">
+              <MenubarItem disabled={!canUndo} onClick={undo}>
+                <Undo2 className="mr-2 h-4 w-4" />
+                <span>{t('undo')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+Z
+                </div>
+              </MenubarItem>
+              <MenubarItem disabled={!canRedo} onClick={redo}>
+                <Redo2 className="mr-2 h-4 w-4" />
+                <span>{t('redo')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+Y
+                </div>
+              </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('cut'), t('descriptions.cut'))
+                }
+              >
+                <Scissors className="mr-2 h-4 w-4" />
+                <span>{t('cut')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+X
+                </div>
+              </MenubarItem>
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('copy'), t('descriptions.copy'))
+                }
+              >
+                <Copy className="mr-2 h-4 w-4" />
+                <span>{t('copy')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+C
+                </div>
+              </MenubarItem>
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('paste'), t('descriptions.paste'))
+                }
+              >
+                <ClipboardPaste className="mr-2 h-4 w-4" />
+                <span>{t('paste')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+V
+                </div>
+              </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(
+                    t('selectAll'),
+                    t('descriptions.selectAll')
+                  )
+                }
+              >
+                <MousePointer className="mr-2 h-4 w-4" />
+                <span>{t('selectAll')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+A
+                </div>
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
 
-            {/* 视图菜单 */}
-            <MenubarMenu>
-              <MenubarTrigger className="font-medium text-xs">
-                视图
-              </MenubarTrigger>
-              <MenubarContent className="min-w-[12rem]">
-                <MenubarItem
-                  onClick={() =>
-                    handleMenuItemClick('缩放适配', '缩放视图以适应所有模块')
-                  }
-                >
-                  <ZoomIn className="mr-2 h-4 w-4" />
-                  <span>缩放适配</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+0
-                  </div>
-                </MenubarItem>
-                <MenubarItem
-                  onClick={() =>
-                    handleMenuItemClick('重置缩放', '将缩放级别重置为默认值')
-                  }
-                >
-                  <ZoomOut className="mr-2 h-4 w-4" />
-                  <span>重置缩放</span>
-                  <div className="ml-auto text-xs text-muted-foreground">
-                    Ctrl+R
-                  </div>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem onClick={() => toggleRightPanel('properties')}>
-                  <LayoutPanelTop className="mr-2 h-4 w-4" />
-                  <span>属性面板</span>
-                </MenubarItem>
-                <MenubarItem onClick={() => toggleRightPanel('llm_chat')}>
-                  <MessageCircle className="mr-2 h-4 w-4" />
-                  <span>大模型面板</span>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem
-                  onClick={() => handleMenuItemClick('深色模式', '切换深色模式')}
-                >
-                  <Moon className="mr-2 h-4 w-4" />
-                  <span>深色模式</span>
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
+          {/* 视图菜单 */}
+          <MenubarMenu>
+            <MenubarTrigger className="font-medium text-xs">
+              {t('view')}
+            </MenubarTrigger>
+            <MenubarContent className="min-w-[12rem]">
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('fitView'), t('descriptions.fitView'))
+                }
+              >
+                <ZoomIn className="mr-2 h-4 w-4" />
+                <span>{t('fitView')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+0
+                </div>
+              </MenubarItem>
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(
+                    t('resetZoom'),
+                    t('descriptions.resetZoom')
+                  )
+                }
+              >
+                <ZoomOut className="mr-2 h-4 w-4" />
+                <span>{t('resetZoom')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Ctrl+R
+                </div>
+              </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem onClick={() => toggleRightPanel('properties')}>
+                <LayoutPanelTop className="mr-2 h-4 w-4" />
+                <span>{t('properties')}</span>
+              </MenubarItem>
+              <MenubarItem onClick={() => toggleRightPanel('llm_chat')}>
+                <MessageCircle className="mr-2 h-4 w-4" />
+                <span>{t('aiPanel')}</span>
+              </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('darkMode'), t('descriptions.darkMode'))
+                }
+              >
+                <Moon className="mr-2 h-4 w-4" />
+                <span>{t('darkMode')}</span>
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
 
-            {/* 帮助菜单 */}
-            <MenubarMenu>
-              <MenubarTrigger className="font-medium text-xs">
-                帮助
-              </MenubarTrigger>
-              <MenubarContent className="min-w-[12rem]">
-                <MenubarItem
-                  onClick={() => handleMenuItemClick('文档', '查看使用文档')}
-                >
-                  <BookOpen className="mr-2 h-4 w-4" />
-                  <span>文档</span>
-                  <div className="ml-auto text-xs text-muted-foreground">F1</div>
-                </MenubarItem>
-                <MenubarItem
-                  onClick={() => handleMenuItemClick('教程', '查看入门教程')}
-                >
-                  <FileQuestion className="mr-2 h-4 w-4" />
-                  <span>教程</span>
-                </MenubarItem>
-                <MenubarItem
-                  onClick={() => handleMenuItemClick('快捷键', '查看快捷键列表')}
-                >
-                  <Keyboard className="mr-2 h-4 w-4" />
-                  <span>快捷键</span>
-                </MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem
-                  onClick={() =>
-                    window.open(
-                      'https://github.com/Misaki-Akeno/synthesizer-flow',
-                      '_blank'
-                    )
-                  }
-                >
-                  <Github className="mr-2 h-4 w-4" />
-                  <span>GitHub 仓库</span>
-                </MenubarItem>
-                <MenubarItem
-                  onClick={() =>
-                    handleMenuItemClick('关于', '关于 SynthesizerFlow')
-                  }
-                >
-                  <Info className="mr-2 h-4 w-4" />
-                  <span>关于</span>
-                </MenubarItem>
-              </MenubarContent>
-            </MenubarMenu>
+          {/* 帮助菜单 */}
+          <MenubarMenu>
+            <MenubarTrigger className="font-medium text-xs">
+              {t('help')}
+            </MenubarTrigger>
+            <MenubarContent className="min-w-[12rem]">
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(
+                    t('documentation'),
+                    t('descriptions.documentation')
+                  )
+                }
+              >
+                <BookOpen className="mr-2 h-4 w-4" />
+                <span>{t('documentation')}</span>
+                <div className="ml-auto text-xs text-muted-foreground">F1</div>
+              </MenubarItem>
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('tutorial'), t('descriptions.tutorial'))
+                }
+              >
+                <FileQuestion className="mr-2 h-4 w-4" />
+                <span>{t('tutorial')}</span>
+              </MenubarItem>
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(
+                    t('shortcuts'),
+                    t('descriptions.shortcuts')
+                  )
+                }
+              >
+                <Keyboard className="mr-2 h-4 w-4" />
+                <span>{t('shortcuts')}</span>
+              </MenubarItem>
+              <MenubarSeparator />
+              <MenubarItem
+                onClick={() =>
+                  window.open(
+                    'https://github.com/Misaki-Akeno/synthesizer-flow',
+                    '_blank'
+                  )
+                }
+              >
+                <Github className="mr-2 h-4 w-4" />
+                <span>{t('repository')}</span>
+              </MenubarItem>
+              <MenubarItem
+                onClick={() =>
+                  handleMenuItemClick(t('about'), t('descriptions.about'))
+                }
+              >
+                <Info className="mr-2 h-4 w-4" />
+                <span>{t('about')}</span>
+              </MenubarItem>
+            </MenubarContent>
+          </MenubarMenu>
         </Menubar>
 
         {/* 移动视图的折叠菜单 */}
         <div className="lg:hidden">
           <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Menu className="h-4 w-4" />
-                  <span className="sr-only">菜单</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-[12rem]">
-                <DropdownMenuItem
-                  onClick={() =>
-                    handleMenuItemClick('新建项目', '创建一个新的合成器项目')
-                  }
-                >
-                  <FilePlus2 className="mr-2 h-4 w-4" />
-                  <span>新建项目</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    handleMenuItemClick('打开项目', '打开已有的合成器项目')
-                  }
-                >
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  <span>打开项目</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleMenuItemClick('保存项目', '保存当前项目')}
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  <span>保存</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={!canUndo}
-                  onClick={undo}
-                >
-                  <Undo2 className="mr-2 h-4 w-4" />
-                  <span>撤销</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={!canRedo}
-                  onClick={redo}
-                >
-                  <Redo2 className="mr-2 h-4 w-4" />
-                  <span>重做</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => toggleRightPanel('properties')}>
-                  <LayoutPanelTop className="mr-2 h-4 w-4" />
-                  <span>属性面板</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => toggleRightPanel('llm_chat')}>
-                  <MessageCircle className="mr-2 h-4 w-4" />
-                  <span>大模型面板</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() =>
-                    window.open(
-                      'https://github.com/Misaki-Akeno/synthesizer-flow',
-                      '_blank'
-                    )
-                  }
-                >
-                  <Github className="mr-2 h-4 w-4" />
-                  <span>GitHub 仓库</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleMenuItemClick('设置', '应用程序设置')}
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>设置</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Menu className="h-4 w-4" />
+                <span className="sr-only">{t('menu')}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-[12rem]">
+              <DropdownMenuItem
+                onClick={() =>
+                  handleMenuItemClick(
+                    t('newProject'),
+                    t('descriptions.newProject')
+                  )
+                }
+              >
+                <FilePlus2 className="mr-2 h-4 w-4" />
+                <span>{t('newProject')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  handleMenuItemClick(
+                    t('openProject'),
+                    t('descriptions.openProject')
+                  )
+                }
+              >
+                <FolderOpen className="mr-2 h-4 w-4" />
+                <span>{t('openProject')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  handleMenuItemClick(t('save'), t('descriptions.save'))
+                }
+              >
+                <Save className="mr-2 h-4 w-4" />
+                <span>{t('save')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={!canUndo} onClick={undo}>
+                <Undo2 className="mr-2 h-4 w-4" />
+                <span>{t('undo')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={!canRedo} onClick={redo}>
+                <Redo2 className="mr-2 h-4 w-4" />
+                <span>{t('redo')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => toggleRightPanel('properties')}>
+                <LayoutPanelTop className="mr-2 h-4 w-4" />
+                <span>{t('properties')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => toggleRightPanel('llm_chat')}>
+                <MessageCircle className="mr-2 h-4 w-4" />
+                <span>{t('aiPanel')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() =>
+                  window.open(
+                    'https://github.com/Misaki-Akeno/synthesizer-flow',
+                    '_blank'
+                  )
+                }
+              >
+                <Github className="mr-2 h-4 w-4" />
+                <span>{t('repository')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  handleMenuItemClick(t('settings'), t('descriptions.settings'))
+                }
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                <span>{t('settings')}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
@@ -444,11 +483,11 @@ export function Header({ className }: HeaderProps) {
                 onClick={() => toggleRightPanel('properties')}
               >
                 <LayoutPanelTop className="h-4 w-4" />
-                <span className="sr-only">属性</span>
+                <span className="sr-only">{t('properties')}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>属性面板</p>
+              <p>{t('properties')}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -463,11 +502,11 @@ export function Header({ className }: HeaderProps) {
                 onClick={() => toggleRightPanel('llm_chat')}
               >
                 <MessageCircle className="h-4 w-4" />
-                <span className="sr-only">大模型面板</span>
+                <span className="sr-only">{t('aiPanel')}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>大模型面板</p>
+              <p>{t('aiPanel')}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -478,21 +517,21 @@ export function Header({ className }: HeaderProps) {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>{devNoticeTitle}</DialogTitle>
-            <DialogDescription>功能开发中</DialogDescription>
+            <DialogDescription>{t('comingSoon')}</DialogDescription>
           </DialogHeader>
           <div className="py-4 flex flex-col items-center justify-center">
             <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-md border border-yellow-200 dark:border-yellow-700 text-center">
               <p className="text-yellow-800 dark:text-yellow-200 font-medium">
-                功能开发中
+                {t('comingSoon')}
               </p>
               <p className="text-yellow-700 dark:text-yellow-300 text-sm mt-1">
-                {devNoticeDescription || '此功能正在开发中，敬请期待！'}
+                {devNoticeDescription || t('comingSoonDescription')}
               </p>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDevNoticeOpen(false)}>
-              关闭
+              {t('close')}
             </Button>
           </DialogFooter>
         </DialogContent>

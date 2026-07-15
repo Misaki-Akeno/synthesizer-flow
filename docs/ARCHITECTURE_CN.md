@@ -7,6 +7,7 @@
 Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用了 **"双向状态同步"** 模式，将基于 Web Audio API 的即时音频合成能力与基于 Server-side 的 AI Agent 决策能力相结合。
 
 系统主要由三个部分组成：
+
 1.  **Frontend (Client)**: 负责 UI 渲染、用户交互、以及核心的音频信号处理 (Tone.js)。
 2.  **Backend (Server)**: 基于 Next.js Server Actions，提供业务逻辑、数据库访问及 Agent 运行环境。
 3.  **AI Agent**: 运行在服务端的智能体，维护一个虚拟的"影子状态"来感知和操作前端画布。
@@ -49,6 +50,7 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 音频模块系统采用 **类响应式架构**，基类定义在 `src/core/base/ModuleBase.ts`。
 
 #### 2.3.1 端口与参数系统 (RxJS Core)
+
 为了实现高性能的实时控制，模块内部广泛采用 **RxJS** 的 `BehaviorSubject`：
 
 - **Ports (端口)**:
@@ -65,6 +67,7 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
   - UI 组件直接订阅这些 Subject，实现无 React Render 开销的实时数值更新。
 
 #### 2.3.2 音频实现模式 (Tone.js Integration)
+
 以 `AdvancedOscillatorModule` (`src/core/modules/audio/AdvancedOscillatorModule.ts`) 为例：
 
 - **复音管理 (Polyphony)**:
@@ -91,6 +94,7 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 后端主要依托 Next.js 的 Server Actions 和 API Routes，结合 Postgres 提供持久化服务。
 
 ### 3.1 核心技术栈
+
 - **Runtime**: Node.js
 - **Database**: PostgreSQL
 - **ORM**: Drizzle ORM
@@ -98,21 +102,26 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 - **Vector Search**: pgvector
 
 ### 3.2 数据库模型 (`src/db/schema.ts`)
+
 数据库设计涵盖了四个关键领域：
 
 1.  **用户与鉴权**:
-    - `users`, `accounts`, `sessions`: 标准 NextAuth 表结构，支持 OAuth 登录。
+    - `users`, `accounts`, `sessions`: NextAuth 表结构，支持 OAuth 登录、角色与审计时间；会话过期时间有独立索引，便于清理。
 
 2.  **项目数据**:
-    - `projects`: 存储画布的 JSON 快照 (`data` 字段)，支持完整的项目保存与恢复。
-    - `users_to_projects`: 多对多关联表，管理用户对项目的访问权限。
+    - `projects`: 存储画布 JSON 快照；`schema_version` 管理数据升级，`revision` 提供乐观并发控制，`metadata` 承载标签、封面等开放扩展信息，`archived_at` 支持软归档。
+    - `users_to_projects`: 多对多关联表，管理访问角色，并保留协作关系的元数据与审计时间。
+    - 新建项目及所有者关系在同一事务内写入；保存时校验 `revision`，避免多个标签页或未来协作功能静默覆盖数据。
 
 3.  **RAG 知识库**:
-    - `rag_documents`: 存储文本片段及其向量表示 (`embedding` 字段, 1536维)，使用 HNSW 索引加速检索。
+    - `rag_documents`: 存储文本片段及其可配置维度的向量表示，使用 HNSW 索引加速检索。
+    - `namespace` 隔离知识库，`source_id`、`content_hash`、`chunk_index` 支持来源追踪、去重与可重复入库。
 
 4.  **Agent 状态持久化**:
-    - `checkpoints`: 简单的对话历史快照。
+    - `checkpoints`: 带版本号、扩展元数据和更新时间的对话历史快照。
     - `langgraph_checkpoints` & `langgraph_writes`: 复杂的 LangGraph 状态机持久化，支持 Agent 的长期记忆和状态恢复。
+
+迁移策略优先把可预见的基础能力收敛进单次迁移；业务形态仍不确定的字段放入 JSONB，并由 `schema_version` 驱动应用层升级，减少后续零碎 DDL。
 
 ---
 
@@ -148,4 +157,5 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 5.  **前端同步**: 前端接收到响应，解析 `clientOperations`，并通过 Zustand Store 真正执行 `addNode`，此时才会触发浏览器的 AudioContext 创建声音并在 Canvas 上渲染 UI。
 
 ### 4.3 检索增强生成 (RAG)
+
 Agent 集成了 RAG 能力 (`rag_search` 工具)，直接在服务端调用 `searchDocuments` 查询 Postgres 向量数据库，无需外部 API 调用。这使得 Agent 能够查询项目文档、音频合成原理等知识来辅助用户。

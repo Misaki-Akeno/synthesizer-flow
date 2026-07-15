@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getBrowserStorage } from './persist-storage';
+import { getBrowserStorage, getIndexedDbStorage } from './persist-storage';
 
 function createMemoryStorage(): Storage {
   const values = new Map<string, string>();
@@ -49,5 +49,23 @@ describe('getBrowserStorage', () => {
 
     expect(resolved.getItem('theme')).toBeNull();
     expect(resolved).not.toBe(storage);
+  });
+});
+
+describe('getIndexedDbStorage', () => {
+  it('falls back to browser storage when IndexedDB is unavailable', async () => {
+    const storage = createMemoryStorage();
+    vi.stubGlobal('indexedDB', undefined);
+
+    const resolved = getIndexedDbStorage({
+      databaseName: 'test',
+      storeName: 'state',
+      getFallbackStorage: () => storage,
+    });
+
+    await resolved.setItem('project', 'large-canvas');
+
+    expect(await resolved.getItem('project')).toBe('large-canvas');
+    vi.unstubAllGlobals();
   });
 });

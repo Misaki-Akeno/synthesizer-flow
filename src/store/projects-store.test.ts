@@ -64,7 +64,11 @@ describe('project store', () => {
     vi.clearAllMocks();
     mockGetBuiltInPresets.mockResolvedValue({ success: true, data: [] });
     mockGetUserProjects.mockResolvedValue({ success: true, data: [] });
-    mockSaveProject.mockResolvedValue({ success: true, projectId: 'saved-1' });
+    mockSaveProject.mockResolvedValue({
+      success: true,
+      projectId: 'saved-1',
+      revision: 1,
+    });
     resetStores();
   });
 
@@ -155,11 +159,59 @@ describe('project store', () => {
       expect.objectContaining({
         version: '1.0',
       }),
-      undefined,
-      false,
-      undefined
+      {
+        projectId: undefined,
+        description: undefined,
+        expectedRevision: undefined,
+        metadata: undefined,
+      }
     );
     expect(useProjectStore.getState().currentProject?.id).toBe('saved-1');
     expect(useFlowStore.getState().currentProjectId).toBe('saved-1');
+  });
+
+  it('updates the same server project when its name changes', async () => {
+    const created = '2026-01-01T00:00:00.000Z';
+    mockSaveProject.mockResolvedValue({
+      success: true,
+      projectId: 'existing-1',
+      revision: 2,
+    });
+    useProjectStore.setState({
+      currentProject: {
+        id: 'existing-1',
+        name: '旧名称',
+        created,
+        lastModified: created,
+        data: useFlowStore.getState().exportCanvasToJson(),
+        revision: 1,
+        isBuiltIn: false,
+      },
+    });
+
+    const saved = await useProjectStore
+      .getState()
+      .saveCurrentCanvas('新名称', '更新描述');
+
+    expect(saved).toBe(true);
+    expect(mockSaveProject).toHaveBeenCalledWith(
+      '新名称',
+      expect.objectContaining({
+        version: '1.0',
+      }),
+      {
+        projectId: 'existing-1',
+        description: '更新描述',
+        expectedRevision: 1,
+        metadata: undefined,
+      }
+    );
+    expect(useProjectStore.getState().currentProject).toEqual(
+      expect.objectContaining({
+        id: 'existing-1',
+        name: '新名称',
+        created,
+      })
+    );
   });
 });

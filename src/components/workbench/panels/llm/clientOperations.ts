@@ -1,5 +1,5 @@
 import type { Edge, EdgeChange } from '@xyflow/react';
-import type { ClientOperation } from '@/agent';
+import type { ClientOperation } from '@/agent/core/types';
 
 type ConnectionOperationData = Extract<
   ClientOperation,

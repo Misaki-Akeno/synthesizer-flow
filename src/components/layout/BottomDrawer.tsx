@@ -1,15 +1,24 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/shadcn/button';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { MidiClipEditorPanel } from '@/components/workbench/panels/midi/MidiClipEditorPanel';
+import { useTranslations } from 'next-intl';
 import {
   WorkbenchPanel,
   WorkbenchPanelBody,
   WorkbenchPanelHeader,
 } from '@/components/layout/WorkbenchPanel';
+
+const MidiClipEditorPanel = dynamic(
+  () =>
+    import('@/components/workbench/panels/midi/MidiClipEditorPanel').then(
+      (module) => module.MidiClipEditorPanel
+    ),
+  { loading: () => <div className="h-full animate-pulse bg-muted/20" /> }
+);
 
 interface BottomDrawerProps {
   className?: string;
@@ -24,6 +33,7 @@ export function BottomDrawer({
   onToggleMaximize,
   onClosePanel,
 }: BottomDrawerProps) {
+  const t = useTranslations('Workbench');
   const router = useRouter();
   const searchParams = useSearchParams();
   const bottomPanel = searchParams.get('bottomPanel');
@@ -42,7 +52,9 @@ export function BottomDrawer({
   return (
     <WorkbenchPanel className={cn('border-t', className)}>
       <WorkbenchPanelHeader
-        title={bottomPanel === 'midi-editor' ? 'MIDI Editor' : bottomPanel}
+        title={
+          bottomPanel === 'midi-editor' ? t('panels.midiEditor') : bottomPanel
+        }
         actions={
           <>
             {onToggleMaximize && (
@@ -51,9 +63,15 @@ export function BottomDrawer({
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-foreground"
                 onClick={onToggleMaximize}
-                aria-label={isMaximized ? 'Restore bottom panel' : 'Maximize bottom panel'}
+                aria-label={
+                  isMaximized ? t('panels.restore') : t('panels.maximize')
+                }
               >
-                {isMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                {isMaximized ? (
+                  <Minimize2 size={15} />
+                ) : (
+                  <Maximize2 size={15} />
+                )}
               </Button>
             )}
             <Button
@@ -61,7 +79,7 @@ export function BottomDrawer({
               size="icon"
               className="h-7 w-7 text-muted-foreground hover:text-foreground"
               onClick={closePanel}
-              aria-label="Close bottom panel"
+              aria-label={t('panels.close')}
             >
               <X size={15} />
             </Button>

@@ -51,7 +51,14 @@ function mockInsertChain(): void {
   mockDb.insert.mockReturnValue({ values } as never);
 }
 
-function insertedValues(): Array<{ id: string; textSnippet: string }> {
+function insertedValues(): Array<{
+  id: string;
+  textSnippet: string;
+  namespace: string;
+  sourceId?: string;
+  contentHash: string;
+  chunkIndex?: number;
+}> {
   const insertResult = mockDb.insert.mock.results[0]?.value as {
     values: ReturnType<typeof vi.fn>;
   };
@@ -88,6 +95,25 @@ describe('upsertDocuments', () => {
     await upsertDocuments([{ text: 'Oscillator docs', meta: { a: 1, b: 2 } }]);
 
     expect(insertedValues()[0].id).toBe(firstId);
+  });
+
+  it('stores namespace and source metadata for future knowledge-base isolation', async () => {
+    await upsertDocuments(
+      [
+        {
+          text: 'Oscillator docs',
+          meta: { sourceId: 'manual/oscillator.md', chunkIndex: 3 },
+        },
+      ],
+      { namespace: ' user-1 ' }
+    );
+
+    expect(insertedValues()[0]).toMatchObject({
+      namespace: 'user-1',
+      sourceId: 'manual/oscillator.md',
+      chunkIndex: 3,
+      contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
   });
 
   it('rejects document embeddings with unexpected dimensions', async () => {

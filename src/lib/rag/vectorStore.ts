@@ -3,7 +3,7 @@ import { embedTexts } from './openaiEmbedder';
 import { env } from '@/lib/env';
 import { db } from '@/db/client';
 import { ragDocuments } from '@/db/schema';
-import { count, sql } from 'drizzle-orm';
+import { count, eq, sql } from 'drizzle-orm';
 import { normalizeTopK } from './searchParams';
 import { resolveRagVectorDimension } from './vectorDimension';
 
@@ -15,9 +15,40 @@ export interface VectorDoc {
   textSnippet: string;
   meta?: Meta;
   model: string;
+  namespace: string;
+  sourceId?: string;
+  contentHash: string;
+  chunkIndex?: number;
 }
 
 const EMBEDDING_DIM = resolveRagVectorDimension(env.RAG_EMBEDDINGS_DIM);
+const DEFAULT_NAMESPACE = 'global';
+
+function normalizeNamespace(namespace?: string): string {
+  const normalized = namespace?.trim();
+  return normalized ? normalized.slice(0, 128) : DEFAULT_NAMESPACE;
+}
+
+function readOptionalMetaString(
+  meta: Meta,
+  key: string,
+  maxLength: number
+): string | undefined {
+  const value = meta?.[key];
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim();
+  return normalized ? normalized.slice(0, maxLength) : undefined;
+}
+
+function readOptionalChunkIndex(meta: Meta): number | undefined {
+  const value = meta?.chunkIndex;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
 
 function normalizeForStableStringify(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -73,9 +104,10 @@ function assertEmbeddingDimension(
 
 export async function upsertDocuments(
   docs: Array<{ id?: string; text: string; meta?: Meta }>,
-  options?: { embeddingModel?: string }
+  options?: { embeddingModel?: string; namespace?: string }
 ) {
   if (!docs?.length) return { inserted: 0 };
+  const namespace = normalizeNamespace(options?.namespace);
   const model =
     options?.embeddingModel ??
     env.RAG_EMBEDDINGS_MODEL ??
@@ -120,6 +152,10 @@ export async function upsertDocuments(
     textSnippet: c.text,
     meta: c.meta,
     model,
+    namespace,
+    sourceId: readOptionalMetaString(c.meta, 'sourceId', 255),
+    contentHash: createHash('sha256').update(c.text).digest('hex'),
+    chunkIndex: readOptionalChunkIndex(c.meta),
   }));
 
   try {
@@ -133,6 +169,10 @@ export async function upsertDocuments(
           embedding: doc.embedding,
           meta: doc.meta,
           model: doc.model,
+          namespace: doc.namespace,
+          sourceId: doc.sourceId,
+          contentHash: doc.contentHash,
+          chunkIndex: doc.chunkIndex,
           updatedAt: now,
         }))
       )
@@ -143,11 +183,18 @@ export async function upsertDocuments(
           embedding: sql`excluded.embedding`,
           meta: sql`excluded.meta`,
           model: sql`excluded.model`,
+          namespace: sql`excluded.namespace`,
+          sourceId: sql`excluded.source_id`,
+          contentHash: sql`excluded.content_hash`,
+          chunkIndex: sql`excluded.chunk_index`,
           updatedAt: sql`excluded.updated_at`,
         },
       });
 
-    const totalResult = await db.select({ count: count() }).from(ragDocuments);
+    const totalResult = await db
+      .select({ count: count() })
+      .from(ragDocuments)
+      .where(eq(ragDocuments.namespace, namespace));
     const total = Number(totalResult[0]?.count || 0);
     return { inserted: newDocs.length, total };
   } catch (e) {
@@ -159,20 +206,30 @@ export async function upsertDocuments(
   }
 }
 
-export async function searchDocuments(query: string, topK = 5) {
-  return searchHybridDocuments(query, topK);
+export async function searchDocuments(
+  query: string,
+  topK = 5,
+  options?: { namespace?: string }
+) {
+  return searchHybridDocuments(query, topK, options);
 }
 
 /**
  * Hybrid search using Reciprocal Rank Fusion (RRF)
  * Combines HNSW Vector Search and PostgreSQL Full-Text Search (BM25-like)
  */
-export async function searchHybridDocuments(query: string, topK = 5) {
+export async function searchHybridDocuments(
+  query: string,
+  topK = 5,
+  options?: { namespace?: string }
+) {
   const limit = normalizeTopK(topK);
+  const namespace = normalizeNamespace(options?.namespace);
   // Skip if nothing in store
   const anyDoc = await db
     .select({ id: ragDocuments.id })
     .from(ragDocuments)
+    .where(eq(ragDocuments.namespace, namespace))
     .limit(1);
   if (!anyDoc.length)
     return {
@@ -210,6 +267,7 @@ export async function searchHybridDocuments(query: string, topK = 5) {
         score: sql<number>`1 - (${ragDocuments.embedding} <=> ${queryVector}::${vectorType})`,
       })
       .from(ragDocuments)
+      .where(eq(ragDocuments.namespace, namespace))
       .orderBy(sql`${ragDocuments.embedding} <=> ${queryVector}::${vectorType}`)
       .limit(fetchCount),
 
@@ -224,7 +282,7 @@ export async function searchHybridDocuments(query: string, topK = 5) {
       })
       .from(ragDocuments)
       .where(
-        sql`to_tsvector('english', ${ragDocuments.textSnippet}) @@ websearch_to_tsquery('english', ${query})`
+        sql`${ragDocuments.namespace} = ${namespace} AND to_tsvector('english', ${ragDocuments.textSnippet}) @@ websearch_to_tsquery('english', ${query})`
       )
       .orderBy(
         sql`ts_rank_cd(to_tsvector('english', ${ragDocuments.textSnippet}), websearch_to_tsquery('english', ${query})) DESC`

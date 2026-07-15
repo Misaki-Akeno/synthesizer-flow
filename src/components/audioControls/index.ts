@@ -1,7 +1,10 @@
+'use client';
+
+import dynamic from 'next/dynamic';
+import { createElement } from 'react';
 import XYPad from './XYPad';
 import PianoKeyboard from './PianoKeyboard';
 import SequenceEditor from './SequenceEditor';
-import Oscilloscope from './Oscilloscope';
 import {
   ParameterControl,
   NumberParameterControl,
@@ -12,6 +15,14 @@ import {
 import { InputPort, OutputPort } from './ModulePorts';
 import { ModuleEnableToggle } from './ModuleEnableToggle';
 import ModuleButton from './ModuleButton';
+
+const Oscilloscope = dynamic(() => import('./Oscilloscope'), {
+  ssr: false,
+  loading: () =>
+    createElement('div', {
+      className: 'h-[200px] w-[300px] animate-pulse bg-muted/20',
+    }),
+});
 
 // 导出组件
 export {

@@ -362,7 +362,9 @@ describe('checkpoint actions', () => {
     const result = await updateCheckpointTitle('checkpoint-1', '  New title  ');
 
     expect(result).toEqual({ success: true });
-    expect(mockDbState.updateSets).toEqual([{ title: 'New title' }]);
+    expect(mockDbState.updateSets).toEqual([
+      { title: 'New title', updatedAt: expect.any(Date) },
+    ]);
     expect(mockDbState.updateWhere).toEqual([
       {
         op: 'and',

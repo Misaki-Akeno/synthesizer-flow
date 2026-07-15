@@ -296,7 +296,7 @@ export async function updateCheckpointTitle(id: string, title: string) {
 
     await db
       .update(checkpoints)
-      .set({ title: trimmedTitle })
+      .set({ title: trimmedTitle, updatedAt: new Date() })
       .where(
         and(
           eq(checkpoints.id, checkpointId),
