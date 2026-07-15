@@ -195,6 +195,7 @@ export function ChatInterface() {
             response.message.content ||
             currentAssistantMessage ||
             t('requiresApproval'),
+          toolCalls,
           approval: { status: 'pending' },
         };
         return newMessages;

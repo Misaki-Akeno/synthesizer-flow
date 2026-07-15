@@ -501,6 +501,18 @@ describe('ToolExecutor', () => {
       expect(searchDocuments).toHaveBeenNthCalledWith(2, 'query', 3);
       expect(searchDocuments).toHaveBeenNthCalledWith(3, 'query', 1);
     });
+
+    it('supports an isolated knowledge search dependency for evals', async () => {
+      const isolatedSearch = vi.fn().mockResolvedValue({ matches: [] });
+      const isolatedExecutor = new ToolExecutor(mockInitialState, {
+        searchDocuments: isolatedSearch,
+      });
+
+      const result = await isolatedExecutor.ragSearch('offline query', 4);
+
+      expect(result).toEqual({ success: true, data: { matches: [] } });
+      expect(isolatedSearch).toHaveBeenCalledWith('offline query', 4);
+    });
   });
 });
 

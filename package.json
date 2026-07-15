@@ -16,6 +16,7 @@
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "agent:bench": "vitest run --config vitest.agent-bench.config.ts",
     "drizzle:generate": "drizzle-kit generate --config drizzle.config.ts",
     "drizzle:migrate": "drizzle-kit migrate --config drizzle.config.ts"
   },

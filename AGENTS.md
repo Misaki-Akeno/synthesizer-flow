@@ -88,6 +88,7 @@ src/
 │   ├── graph/             # LangGraph workflow
 │   ├── tools/             # Capability-grouped Agent tools
 │   ├── skills/            # Module guides + runtime schema discovery
+│   ├── evals/             # Golden Set schema, scorer, runner, live bench
 │   ├── prompts/           # System prompts
 │   └── drizzleCheckpointer.ts  # State persistence
 ├── db/                    # Database layer
@@ -312,6 +313,7 @@ npx vitest run src/path/to/file.test.ts
 - **LangGraph Workflow**: Multi-step agent workflow with registry-driven approval routing
 - **Tool Registry**: Tools are grouped into inspection, modules, connections, knowledge, and skills capabilities
 - **Agent Skills**: Module guides combine curated usage advice with parameter and port schemas extracted from real module classes
+- **Agent Evals**: Golden Set benchmarks score tool traces, arguments, client operations, approvals, and response constraints
 - **Checkpointer**: Database-backed state persistence for conversations
 
 ### Tool System
@@ -332,6 +334,15 @@ Destructive approval policy belongs to the tool registry, not the LangGraph work
 - Keep parameter defaults, constraints, and ports in module classes; Skills extract them at load time to avoid schema drift
 - Use lightweight `skill_list` summaries for discovery and `skill_load` for progressive disclosure
 - `module_add` requires the corresponding `module:<type>` Skill to be loaded in the current request
+
+### Agent Evals
+
+- Keep the versioned Golden Set in `src/agent/evals/golden-set.json`
+- Validate all datasets through `parseGoldenSet`; duplicate ids and cases without measurable criteria are invalid
+- Use deterministic criteria in `scorer.ts`; do not add LLM-as-judge behavior to the core quality gate
+- Run live benchmarks with `npm run agent:bench`; configure them through `AGENT_EVAL_*` environment variables
+- The live target uses the production Graph, Prompt, Skills, and Tools, but replaces Drizzle checkpoints with `MemorySaver` and disables database-backed knowledge search
+- Reports are written to `artifacts/agent-evals/latest.json`, which must remain untracked
 
 ### MCP (Model Context Protocol)
 

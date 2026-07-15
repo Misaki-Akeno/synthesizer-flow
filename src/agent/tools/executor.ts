@@ -4,7 +4,6 @@
  */
 
 import { createModuleLogger } from '@/lib/logger';
-import { searchDocuments } from '@/lib/rag/vectorStore';
 import { normalizeTopK } from '@/lib/rag/searchParams';
 import { ClientOperation, GraphStateSnapshot } from '../core/types';
 import { moduleClassMap } from '../../core/modules/index';
@@ -16,6 +15,23 @@ import {
 import { createEdgeId, createNodeId } from '../../core/utils/nodeId';
 
 const logger = createModuleLogger('ToolExecutor');
+
+export type AgentKnowledgeSearch = (
+  query: string,
+  limit: number
+) => Promise<unknown>;
+
+export interface ToolExecutorDependencies {
+  searchDocuments?: AgentKnowledgeSearch;
+}
+
+async function searchKnowledgeBase(
+  query: string,
+  limit: number
+): Promise<unknown> {
+  const { searchDocuments } = await import('@/lib/rag/vectorStore');
+  return searchDocuments(query, limit);
+}
 
 type ParameterValueReader = {
   getValue: () => unknown;
@@ -106,8 +122,13 @@ export class ToolExecutor {
   private nodes: FlowNode[];
   private edges: FlowEdge[];
   private operations: ClientOperation[] = [];
+  private readonly searchDocuments: AgentKnowledgeSearch;
 
-  constructor(initialState: GraphStateSnapshot) {
+  constructor(
+    initialState: GraphStateSnapshot,
+    dependencies: ToolExecutorDependencies = {}
+  ) {
+    this.searchDocuments = dependencies.searchDocuments ?? searchKnowledgeBase;
     // 使用浅拷贝但保留 module 实例引用，同时复制 parameters 防止修改污染原始数据
     this.nodes = initialState.nodes.map((node) => ({
       ...node,
@@ -743,7 +764,7 @@ export class ToolExecutor {
     }
 
     try {
-      const results = await searchDocuments(query, normalizeTopK(topK));
+      const results = await this.searchDocuments(query, normalizeTopK(topK));
       return { success: true, data: results };
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'RAG 搜索失败';

@@ -178,3 +178,13 @@ Synthesizer Flow 是一个模块化音频合成器应用，其核心架构采用
 ### 4.3 检索增强生成 (RAG)
 
 Agent 集成了 RAG 能力 (`knowledge_search` 工具)，直接在服务端调用 `searchDocuments` 查询 Postgres 向量数据库，无需外部 API 调用。RAG 用于概念与项目文档；模块的精确参数、端口和操作指南由 Skills 提供。
+
+### 4.4 Agent Golden Set 评测
+
+`src/agent/evals` 提供版本化 Golden Set、确定性评分器、重复采样 runner 和真实模型 bench：
+
+- Golden case 可以断言工具序列、局部参数、客户端操作、HIL 审批状态及回答文本约束。
+- 每个 case 同时设置单次得分阈值和多次采样稳定性阈值；全局质量门槛基于 case 通过率与平均得分。
+- live target 复用生产环境的 Graph、System Prompt、工具注册表与 Skills，只把 Drizzle checkpointer 替换为 `MemorySaver`。
+- bench 的知识检索使用无数据库桩，保证不会读取或污染开发数据库；RAG 专项评测未来可通过独立 target 接入固定语料。
+- `npm run agent:bench` 运行真实提供商评测，并输出 JSON 报告、平均延迟和 p95 延迟。

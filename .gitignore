@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+/artifacts/agent-evals/
 
 # next.js
 /.next/

@@ -7,23 +7,86 @@ import {
 } from '@langchain/core/messages';
 import type { AISettings } from '@/store/settings-store';
 import { createModuleLogger } from '@/lib/logger';
-import { ChatMessage, ChatResponse, GraphStateSnapshot } from './types';
+import {
+  ChatMessage,
+  ChatResponse,
+  GraphStateSnapshot,
+  ToolCall,
+} from './types';
 import { createGraph } from '../graph/workflow';
 import { ToolExecutor } from '../tools/executor';
 import { createAgentToolRegistry } from '../tools/definitions';
-import { DrizzleCheckpointer } from '../drizzleCheckpointer';
 import { createAIChatModel } from '@/lib/ai/modelFactory';
+import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
 
 const logger = createModuleLogger('Agent');
+
+export interface AgentDependencies {
+  createModel: typeof createAIChatModel;
+  createCheckpointer: () => BaseCheckpointSaver | Promise<BaseCheckpointSaver>;
+  createExecutor: (initialState: GraphStateSnapshot) => ToolExecutor;
+}
+
+const DEFAULT_AGENT_DEPENDENCIES: AgentDependencies = {
+  createModel: createAIChatModel,
+  createCheckpointer: async () => {
+    const { DrizzleCheckpointer } = await import('../drizzleCheckpointer');
+    return new DrizzleCheckpointer();
+  },
+  createExecutor: (initialState) => new ToolExecutor(initialState),
+};
+
+function collectToolCalls(
+  allMessages: BaseMessage[],
+  scopedMessages: BaseMessage[]
+): ToolCall[] {
+  return scopedMessages
+    .filter(
+      (message) =>
+        message._getType() === 'ai' &&
+        (message as AIMessage).tool_calls &&
+        (message as AIMessage).tool_calls!.length > 0
+    )
+    .flatMap((message) =>
+      ((message as AIMessage).tool_calls || []).map((toolCall) => {
+        const toolMessage = allMessages.find(
+          (candidate) =>
+            candidate._getType() === 'tool' &&
+            (candidate as ToolMessage).tool_call_id === toolCall.id
+        ) as ToolMessage | undefined;
+
+        return {
+          id: toolCall.id || 'unknown',
+          type: 'function' as const,
+          function: {
+            name: toolCall.name,
+            arguments: JSON.stringify(toolCall.args),
+          },
+          result: toolMessage
+            ? typeof toolMessage.content === 'string'
+              ? toolMessage.content
+              : JSON.stringify(toolMessage.content)
+            : undefined,
+        };
+      })
+    );
+}
 
 export class Agent {
   private static instance: Agent;
 
+  private constructor(private readonly dependencies: AgentDependencies) {}
+
   static getInstance(): Agent {
     if (!this.instance) {
-      this.instance = new Agent();
+      this.instance = new Agent(DEFAULT_AGENT_DEPENDENCIES);
     }
     return this.instance;
+  }
+
+  /** 创建隔离运行时，供评测或集成测试注入内存依赖。 */
+  static create(overrides: Partial<AgentDependencies> = {}): Agent {
+    return new Agent({ ...DEFAULT_AGENT_DEPENDENCIES, ...overrides });
   }
 
   async sendMessage(
@@ -81,14 +144,14 @@ export class Agent {
       });
 
       // 通过统一工厂创建模型，Agent 不感知具体提供商 SDK。
-      const model = await createAIChatModel(settings, {
+      const model = await this.dependencies.createModel(settings, {
         temperature: 0,
         streaming: true,
       });
 
       // Initialize Tool Executor and Graph
-      const checkpointer = new DrizzleCheckpointer();
-      const executor = new ToolExecutor(initialState);
+      const checkpointer = await this.dependencies.createCheckpointer();
+      const executor = this.dependencies.createExecutor(initialState);
       const toolRegistry = createAgentToolRegistry(executor);
       const graph = createGraph(toolRegistry, checkpointer);
 
@@ -159,6 +222,7 @@ export class Agent {
       const initialMessageCount = inputs.length;
       const finalMessages = state.values.messages;
       const newMessages = finalMessages.slice(initialMessageCount);
+      const allToolCalls = collectToolCalls(finalMessages, newMessages);
 
       if (state.next && state.next.includes('unsafe_tools')) {
         yield {
@@ -168,8 +232,8 @@ export class Agent {
               role: 'assistant',
               content: '',
             },
-            toolCalls: [],
-            hasToolUse: false,
+            toolCalls: allToolCalls.length > 0 ? allToolCalls : undefined,
+            hasToolUse: allToolCalls.length > 0,
             clientOperations: [],
             approvalRequired: true,
             threadId,
@@ -189,34 +253,6 @@ export class Agent {
         typeof lastMessage.content === 'string'
           ? lastMessage.content
           : JSON.stringify(lastMessage.content);
-
-      const allToolCalls = newMessages
-        .filter(
-          (m: BaseMessage) =>
-            m._getType() === 'ai' &&
-            (m as AIMessage).tool_calls &&
-            (m as AIMessage).tool_calls!.length > 0
-        )
-        .flatMap((m: BaseMessage) =>
-          ((m as AIMessage).tool_calls || []).map((tc) => {
-            const toolMessage = finalMessages.find(
-              (msg: BaseMessage) =>
-                msg._getType() === 'tool' &&
-                (msg as ToolMessage).tool_call_id === tc.id
-            ) as ToolMessage | undefined;
-
-            return {
-              id: tc.id || 'unknown',
-              type: 'function' as const,
-              function: { name: tc.name, arguments: JSON.stringify(tc.args) },
-              result: toolMessage
-                ? typeof toolMessage.content === 'string'
-                  ? toolMessage.content
-                  : JSON.stringify(toolMessage.content)
-                : undefined,
-            };
-          })
-        );
 
       yield {
         type: 'done',

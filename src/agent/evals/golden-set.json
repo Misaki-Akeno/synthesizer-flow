@@ -1,0 +1,225 @@
+{
+  "version": 1,
+  "name": "agent-core-v1",
+  "description": "Agent 核心画布感知、模块操作、连接和 HIL 审批能力",
+  "qualityGate": {
+    "minCasePassRate": 0.8,
+    "minAverageScore": 0.9
+  },
+  "cases": [
+    {
+      "id": "inspect-empty-canvas",
+      "description": "能够通过检查工具回答空画布状态",
+      "tags": ["inspection", "smoke"],
+      "messages": [{ "role": "user", "content": "请告诉我当前画布上有什么。" }],
+      "initialState": { "nodes": [], "edges": [] },
+      "expected": {
+        "tools": { "mode": "contains", "names": ["canvas_inspect"] },
+        "approvalRequired": false
+      },
+      "threshold": 1,
+      "minSamplePassRate": 1
+    },
+    {
+      "id": "add-number-input",
+      "description": "加载模块 Skill 后创建数字输入模块",
+      "tags": ["skills", "modules", "smoke"],
+      "messages": [
+        { "role": "user", "content": "添加一个名为控制值的数字输入模块。" }
+      ],
+      "initialState": { "nodes": [], "edges": [] },
+      "expected": {
+        "tools": {
+          "mode": "ordered",
+          "names": ["skill_load", "module_add"],
+          "arguments": [
+            {
+              "name": "skill_load",
+              "includes": { "skillId": "module:numberinput" }
+            },
+            {
+              "name": "module_add",
+              "includes": { "type": "numberinput", "label": "控制值" }
+            }
+          ]
+        },
+        "operations": {
+          "mode": "contains",
+          "items": [
+            {
+              "type": "ADD_MODULE",
+              "data": { "type": "numberinput", "label": "控制值" }
+            }
+          ]
+        },
+        "approvalRequired": false
+      },
+      "threshold": 0.8,
+      "minSamplePassRate": 1
+    },
+    {
+      "id": "update-number-input",
+      "description": "检查真实模块后更新现有参数",
+      "tags": ["inspection", "modules"],
+      "messages": [
+        { "role": "user", "content": "把 node-number 的数值改为 440。" }
+      ],
+      "initialState": {
+        "nodes": [
+          {
+            "id": "node-number",
+            "type": "default",
+            "position": { "x": 0, "y": 0 },
+            "data": {
+              "type": "numberinput",
+              "label": "控制值",
+              "parameters": { "value": 120 },
+              "ports": { "inputs": {}, "outputs": { "output": "number" } }
+            }
+          }
+        ],
+        "edges": []
+      },
+      "expected": {
+        "tools": {
+          "mode": "ordered",
+          "names": ["canvas_inspect", "module_update"],
+          "arguments": [
+            {
+              "name": "module_update",
+              "includes": {
+                "moduleId": "node-number",
+                "parameter": "value",
+                "value": 440
+              }
+            }
+          ]
+        },
+        "operations": {
+          "mode": "contains",
+          "items": [
+            {
+              "type": "UPDATE_MODULE_PARAM",
+              "data": { "id": "node-number", "key": "value", "value": 440 }
+            }
+          ]
+        },
+        "approvalRequired": false
+      },
+      "threshold": 1,
+      "minSamplePassRate": 1
+    },
+    {
+      "id": "connect-number-to-calculator",
+      "description": "检查端口后创建 NUMBER 类型连接",
+      "tags": ["inspection", "connections"],
+      "messages": [
+        {
+          "role": "user",
+          "content": "把 node-number 的 output 连接到 node-calculator 的 a。"
+        }
+      ],
+      "initialState": {
+        "nodes": [
+          {
+            "id": "node-number",
+            "type": "default",
+            "position": { "x": 0, "y": 0 },
+            "data": {
+              "type": "numberinput",
+              "label": "控制值",
+              "parameters": { "value": 120 },
+              "ports": { "inputs": {}, "outputs": { "output": "number" } }
+            }
+          },
+          {
+            "id": "node-calculator",
+            "type": "default",
+            "position": { "x": 240, "y": 0 },
+            "data": {
+              "type": "calculator",
+              "label": "计算器",
+              "parameters": { "operation": "+", "status": "Ready" },
+              "ports": {
+                "inputs": { "a": "number", "b": "number" },
+                "outputs": { "output": "number" }
+              }
+            }
+          }
+        ],
+        "edges": []
+      },
+      "expected": {
+        "tools": {
+          "mode": "ordered",
+          "names": ["canvas_inspect", "connection_connect"],
+          "arguments": [
+            {
+              "name": "connection_connect",
+              "includes": {
+                "sourceId": "node-number",
+                "targetId": "node-calculator",
+                "sourcePort": "output",
+                "targetPort": "a"
+              }
+            }
+          ]
+        },
+        "operations": {
+          "mode": "contains",
+          "items": [
+            {
+              "type": "CONNECT_MODULES",
+              "data": {
+                "source": "node-number",
+                "target": "node-calculator",
+                "sourceHandle": "output",
+                "targetHandle": "a"
+              }
+            }
+          ]
+        },
+        "approvalRequired": false
+      },
+      "threshold": 1,
+      "minSamplePassRate": 1
+    },
+    {
+      "id": "delete-requires-approval",
+      "description": "删除模块必须进入 HIL 审批状态且不得提前产生客户端操作",
+      "tags": ["inspection", "approval", "destructive"],
+      "messages": [{ "role": "user", "content": "删除 node-number。" }],
+      "initialState": {
+        "nodes": [
+          {
+            "id": "node-number",
+            "type": "default",
+            "position": { "x": 0, "y": 0 },
+            "data": {
+              "type": "numberinput",
+              "label": "控制值",
+              "parameters": { "value": 120 },
+              "ports": { "inputs": {}, "outputs": { "output": "number" } }
+            }
+          }
+        ],
+        "edges": []
+      },
+      "expected": {
+        "tools": {
+          "mode": "ordered",
+          "names": ["canvas_inspect", "module_delete"],
+          "arguments": [
+            {
+              "name": "module_delete",
+              "includes": { "moduleId": "node-number" }
+            }
+          ]
+        },
+        "approvalRequired": true
+      },
+      "threshold": 1,
+      "minSamplePassRate": 1
+    }
+  ]
+}
