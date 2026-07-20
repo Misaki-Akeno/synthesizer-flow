@@ -52,14 +52,25 @@ import { createSerializableCanvasSnapshot } from './canvasSnapshot';
 import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 import { createThreadId } from './threadId';
 import { useTranslations } from 'next-intl';
+import { WorkbenchPanelHeader } from '@/components/layout/WorkbenchPanel';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/shadcn/tooltip';
 
 function getCurrentCanvasSnapshot() {
   const state = useFlowStore.getState();
   return createSerializableCanvasSnapshot(state.nodes, state.edges);
 }
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  onRequestClose: () => void;
+}
+
+export function ChatInterface({ onRequestClose }: ChatInterfaceProps) {
   const t = useTranslations('Workbench.chat');
+  const tWorkbench = useTranslations('Workbench');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -626,151 +637,48 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 聊天记录区域 */}
-      <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="p-4 space-y-4">
-            {displayMessages.length === 0 ? (
-              <div className="text-center text-gray-500 dark:text-gray-400">
-                {hasApiKey ? (
-                  t('start')
-                ) : (
-                  <div>
-                    <p>{t('configureApi')}</p>
-                    <p className="text-xs mt-2">{t('settingsPath')}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              displayMessages.map((msg, index) => (
-                <div
-                  key={index}
-                  className={`p-3 rounded-lg max-w-full ${
-                    msg.role === 'user'
-                      ? 'bg-blue-100 dark:bg-blue-900 ml-8'
-                      : 'bg-gray-100 dark:bg-gray-800 mr-8'
-                  }`}
+    <div className="flex h-full min-h-0 flex-col">
+      <WorkbenchPanelHeader
+        title={tWorkbench('panels.chat')}
+        actions={
+          <div
+            className="flex items-center gap-0.5"
+            data-testid="chat-header-actions"
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={resetConversation}
+                  aria-label={t('newConversation')}
                 >
-                  <div className="prose dark:prose-invert prose-sm max-w-none break-words overflow-x-hidden">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        code({
-                          inline,
-                          className,
-                          children,
-                          ...props
-                        }: React.ComponentPropsWithoutRef<'code'> & {
-                          inline?: boolean;
-                        }) {
-                          const match = /language-(\w+)/.exec(className || '');
-                          return !inline && match ? (
-                            <div className="w-full overflow-x-auto rounded-md">
-                              <SyntaxHighlighter
-                                {...props}
-                                style={oneDark}
-                                language={match[1]}
-                                PreTag="div"
-                                customStyle={{ margin: 0, borderRadius: 0 }}
-                              >
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            </div>
-                          ) : (
-                            <code {...props} className={className}>
-                              {children}
-                            </code>
-                          );
-                        },
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
-                    {msg.toolCalls && msg.toolCalls.length > 0 && (
-                      <ToolCallsDisplay toolCalls={msg.toolCalls} />
-                    )}
-                    {/* Approval UI */}
-                    {msg.approval && (
-                      <div className="mt-2 p-3 border rounded-md bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
-                        {msg.approval.status === 'pending' && (
-                          <div className="flex flex-col gap-2">
-                            <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200 flex items-center">
-                              <Loader2 className="h-3 w-3 mr-2 animate-pulse" />
-                              {t('approvalRequired')}
-                            </p>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() =>
-                                  sendMessage('reject', messages.indexOf(msg))
-                                }
-                                disabled={isLoading}
-                              >
-                                {t('reject')}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="default"
-                                className="bg-green-600 hover:bg-green-700 text-white"
-                                onClick={() =>
-                                  sendMessage('approve', messages.indexOf(msg))
-                                }
-                                disabled={isLoading}
-                              >
-                                {t('approve')}
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                        {msg.approval.status === 'approved' && (
-                          <div className="flex items-center text-green-600 dark:text-green-400 font-medium text-sm">
-                            <Check className="w-4 h-4 mr-2" />
-                            <span>{t('approved')}</span>
-                          </div>
-                        )}
-                        {msg.approval.status === 'rejected' && (
-                          <div className="flex items-center text-red-600 dark:text-red-400 font-medium text-sm">
-                            <X className="w-4 h-4 mr-2" />
-                            <span>{t('rejected')}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-            {isLoading && (
-              <div className="flex items-center justify-center">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="ml-2 text-sm text-gray-500">
-                  {t('thinking')}
-                </span>
-              </div>
-            )}
-            {/* 用于自动滚动到底部的空白元素 */}
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
-      </div>
+                  <Plus size={15} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {t('newConversation')}
+              </TooltipContent>
+            </Tooltip>
 
-      {/* 输入区域 - 固定在底部，不随滚动区域滚动 */}
-      <div className="border-t p-4 flex flex-col gap-2">
-        {/* 工具开关控制 */}
-        <div className="flex justify-between items-center mb-2">
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={resetConversation}>
-              <Plus className="h-4 w-4 mr-1" /> {t('newConversation')}
-            </Button>
             {session?.user && (
               <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <History className="h-4 w-4 mr-1" /> {t('history')}
-                  </Button>
-                </DialogTrigger>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        aria-label={t('history')}
+                      >
+                        <History size={15} />
+                      </Button>
+                    </DialogTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">{t('history')}</TooltipContent>
+                </Tooltip>
                 <DialogContent className="sm:max-w-[350px]">
                   <DialogHeader>
                     <DialogTitle>{t('archiveTitle')}</DialogTitle>
@@ -782,45 +690,205 @@ export function ChatInterface() {
                       className="w-full"
                     >
                       {isSaving ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <Save className="h-4 w-4 mr-2" />
+                        <Save className="mr-2 h-4 w-4" />
                       )}
                       {t('saveCurrent')}
                     </Button>
-                    <div className="border-t my-2" />
+                    <div className="my-2 border-t" />
                     <CheckpointList onRestore={handleRestoreCheckpoint} />
                   </div>
                 </DialogContent>
               </Dialog>
             )}
+
+            <div className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={onRequestClose}
+                  aria-label={tWorkbench('panels.close')}
+                >
+                  <X size={15} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {tWorkbench('panels.close')}
+              </TooltipContent>
+            </Tooltip>
           </div>
+        }
+      />
+
+      <div className="flex min-h-0 flex-1 flex-col p-4">
+        {/* 聊天记录区域 */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="space-y-4 p-4">
+              {displayMessages.length === 0 ? (
+                <div className="text-center text-gray-500 dark:text-gray-400">
+                  {hasApiKey ? (
+                    t('start')
+                  ) : (
+                    <div>
+                      <p>{t('configureApi')}</p>
+                      <p className="text-xs mt-2">{t('settingsPath')}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                displayMessages.map((msg, index) => (
+                  <div
+                    key={index}
+                    className={`p-3 rounded-lg max-w-full ${
+                      msg.role === 'user'
+                        ? 'bg-blue-100 dark:bg-blue-900 ml-8'
+                        : 'bg-gray-100 dark:bg-gray-800 mr-8'
+                    }`}
+                  >
+                    <div className="prose dark:prose-invert prose-sm max-w-none break-words overflow-x-hidden">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code({
+                            inline,
+                            className,
+                            children,
+                            ...props
+                          }: React.ComponentPropsWithoutRef<'code'> & {
+                            inline?: boolean;
+                          }) {
+                            const match = /language-(\w+)/.exec(
+                              className || ''
+                            );
+                            return !inline && match ? (
+                              <div className="w-full overflow-x-auto rounded-md">
+                                <SyntaxHighlighter
+                                  {...props}
+                                  style={oneDark}
+                                  language={match[1]}
+                                  PreTag="div"
+                                  customStyle={{ margin: 0, borderRadius: 0 }}
+                                >
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                              </div>
+                            ) : (
+                              <code {...props} className={className}>
+                                {children}
+                              </code>
+                            );
+                          },
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                      {msg.toolCalls && msg.toolCalls.length > 0 && (
+                        <ToolCallsDisplay toolCalls={msg.toolCalls} />
+                      )}
+                      {/* Approval UI */}
+                      {msg.approval && (
+                        <div className="mt-2 p-3 border rounded-md bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800">
+                          {msg.approval.status === 'pending' && (
+                            <div className="flex flex-col gap-2">
+                              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200 flex items-center">
+                                <Loader2 className="h-3 w-3 mr-2 animate-pulse" />
+                                {t('approvalRequired')}
+                              </p>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() =>
+                                    sendMessage('reject', messages.indexOf(msg))
+                                  }
+                                  disabled={isLoading}
+                                >
+                                  {t('reject')}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                  onClick={() =>
+                                    sendMessage(
+                                      'approve',
+                                      messages.indexOf(msg)
+                                    )
+                                  }
+                                  disabled={isLoading}
+                                >
+                                  {t('approve')}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                          {msg.approval.status === 'approved' && (
+                            <div className="flex items-center text-green-600 dark:text-green-400 font-medium text-sm">
+                              <Check className="w-4 h-4 mr-2" />
+                              <span>{t('approved')}</span>
+                            </div>
+                          )}
+                          {msg.approval.status === 'rejected' && (
+                            <div className="flex items-center text-red-600 dark:text-red-400 font-medium text-sm">
+                              <X className="w-4 h-4 mr-2" />
+                              <span>{t('rejected')}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+              {isLoading && (
+                <div className="flex items-center justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="ml-2 text-sm text-gray-500">
+                    {t('thinking')}
+                  </span>
+                </div>
+              )}
+              {/* 用于自动滚动到底部的空白元素 */}
+              <div ref={messagesEndRef} />
+            </div>
+          </ScrollArea>
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder={
-              hasApiKey ? t('inputPlaceholder') : t('configurePlaceholder')
-            }
-            disabled={isLoading || !hasApiKey || isApprovalPending} // Disable input during approval?
-            className="flex-1"
-          />
-          <Button
-            onClick={() => sendMessage()}
-            disabled={
-              isLoading || !input.trim() || !hasApiKey || isApprovalPending
-            }
-            size="icon"
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
+        {/* 输入区域 - 固定在底部，不随滚动区域滚动 */}
+        <div
+          className="flex flex-col gap-2 border-t pt-4"
+          data-testid="chat-composer"
+        >
+          <div className="flex items-center space-x-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder={
+                hasApiKey ? t('inputPlaceholder') : t('configurePlaceholder')
+              }
+              disabled={isLoading || !hasApiKey || isApprovalPending} // Disable input during approval?
+              className="flex-1"
+            />
+            <Button
+              onClick={() => sendMessage()}
+              disabled={
+                isLoading || !input.trim() || !hasApiKey || isApprovalPending
+              }
+              size="icon"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

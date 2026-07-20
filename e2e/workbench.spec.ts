@@ -64,3 +64,19 @@ test('模块浏览器可以滚动到列表底部并添加模块', async ({ page 
 
   await expect(page.locator('[data-module-type="speaker"]')).toHaveCount(1);
 });
+
+test('AI 助手操作位于面板标题栏而不是输入区', async ({ page }) => {
+  await openBlankWorkbench(page);
+  await page.getByRole('button', { name: 'AI 助手面板' }).click();
+
+  const headerActions = page.getByTestId('chat-header-actions');
+  await expect(
+    headerActions.getByRole('button', { name: '新建对话' })
+  ).toBeVisible();
+  await expect(
+    headerActions.getByRole('button', { name: '关闭面板' })
+  ).toBeVisible();
+  await expect(
+    page.getByTestId('chat-composer').getByRole('button', { name: '新建对话' })
+  ).toHaveCount(0);
+});
