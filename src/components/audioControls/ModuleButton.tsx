@@ -23,8 +23,6 @@ interface ModuleButtonProps {
   size?: 'default' | 'sm' | 'lg' | 'icon';
   // 自定义CSS类名
   className?: string;
-  // 模块自定义属性
-  module?: unknown;
 }
 
 /**

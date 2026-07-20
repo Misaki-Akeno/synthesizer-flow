@@ -103,7 +103,7 @@ describe('ToolExecutor', () => {
       expect(result.error).toContain('未找到模块');
     });
 
-    it('should prefer runtime module parameter values when available', () => {
+    it('should use the serializable graph snapshot as its only state', () => {
       const runtimeExecutor = new ToolExecutor({
         nodes: [
           {
@@ -113,12 +113,9 @@ describe('ToolExecutor', () => {
               type: 'numberinput',
               label: 'Runtime Number',
               parameters: { value: 440 },
-              module: {
-                parameters: {
-                  value: { getValue: () => 880 },
-                },
-                inputPortTypes: {},
-                outputPortTypes: { output: 'number' },
+              ports: {
+                inputs: {},
+                outputs: { output: 'number' },
               },
             },
             position: { x: 0, y: 0 },
@@ -130,7 +127,7 @@ describe('ToolExecutor', () => {
       const result = runtimeExecutor.getModuleDetails('runtime-node');
 
       expect(result.success).toBe(true);
-      expect(result.data?.module.parameters).toEqual({ value: 880 });
+      expect(result.data?.module.parameters).toEqual({ value: 440 });
       expect(result.data?.module.ports.outputs).toEqual({ output: 'number' });
     });
   });

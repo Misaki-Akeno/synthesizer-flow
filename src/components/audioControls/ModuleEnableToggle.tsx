@@ -1,21 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { AudioModuleBase } from '@/core/base/AudioModuleBase';
+import React from 'react';
 
 // 模块启用/禁用切换按钮组件
-export const ModuleEnableToggle = ({ module }: { module: AudioModuleBase }) => {
-  const [enabled, setEnabled] = useState(module.isEnabled());
-
-  useEffect(() => {
-    const subscription = module.enabled.subscribe((value) => {
-      setEnabled(value);
-    });
-
-    return () => subscription.unsubscribe();
-  }, [module]);
-
+export const ModuleEnableToggle = ({
+  enabled,
+  onToggle,
+}: {
+  enabled: boolean;
+  onToggle: () => void;
+}) => {
   const toggleEnabled = (e: React.MouseEvent) => {
     e.stopPropagation();
-    module.toggleEnabled();
+    onToggle();
   };
 
   return (

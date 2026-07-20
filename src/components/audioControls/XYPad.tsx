@@ -1,9 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ModuleBase } from '@/core/base/ModuleBase';
 
 interface XYPadProps {
-  // 模块实例
-  module?: ModuleBase;
   // 模块参数值
   paramValues: Record<string, number | boolean | string>;
   // 参数更新回调

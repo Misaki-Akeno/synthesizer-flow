@@ -3,13 +3,16 @@
 import React, { useMemo } from 'react';
 import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
-import { ModuleBase } from '@/core/base/ModuleBase';
-import { getClipLengthTicks, midiToNoteName, parseMidiClipJson } from '@/core/midi/utils';
+import {
+  getClipLengthTicks,
+  midiToNoteName,
+  parseMidiClipJson,
+} from '@/core/midi/utils';
 import { Play, Square, PanelBottomOpen, Music2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 interface SequenceEditorProps {
-  module?: ModuleBase;
+  moduleId?: string;
   paramValues: Record<string, number | boolean | string>;
   onParamChange: (paramKey: string, value: number | boolean | string) => void;
   clipParam?: string;
@@ -18,7 +21,7 @@ interface SequenceEditorProps {
 }
 
 const SequenceEditor: React.FC<SequenceEditorProps> = ({
-  module,
+  moduleId,
   paramValues,
   onParamChange,
   clipParam = 'clip',
@@ -47,8 +50,8 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
   const openEditor = () => {
     const params = new URLSearchParams(searchParams);
     params.set('bottomPanel', 'midi-editor');
-    if (module?.id) {
-      params.set('moduleId', module.id);
+    if (moduleId) {
+      params.set('moduleId', moduleId);
     }
     router.replace(`?${params.toString()}`, { scroll: false });
   };

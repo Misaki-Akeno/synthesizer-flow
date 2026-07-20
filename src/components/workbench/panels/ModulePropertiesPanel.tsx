@@ -2,11 +2,11 @@
 
 import { useMemo, useState, useCallback } from 'react';
 import type { KeyboardEvent } from 'react';
-import { ParameterType, ModuleBase } from '@/core/base/ModuleBase';
-import { useModuleSubscription } from '@/core/hooks/useModuleSubscription';
+import { ParameterType } from '@/core/base/ModuleBase';
+import { useRuntimeModule } from '@/core/hooks/useRuntimeModule';
 import { useFlowStore } from '@/store/canvas-store';
 import { ParameterControl } from '@/components/audioControls';
-import type { FlowNode } from '@/core/services/ModuleManager';
+import type { FlowNode } from '@/core/graph/types';
 import { Input } from '@/components/ui/shadcn/input';
 import { useTranslations } from 'next-intl';
 
@@ -46,12 +46,10 @@ export function ModulePropertiesPanel({
   );
 
   const selectedNode = useMemo(() => {
-    return nodes.find((node) => node.selected && node.data?.module);
+    return nodes.find((node) => node.selected);
   }, [nodes]) as FlowNode | undefined;
 
-  const moduleInstance = selectedNode?.data?.module as ModuleBase | undefined;
-
-  const { paramValues } = useModuleSubscription(moduleInstance);
+  const snapshot = useRuntimeModule(selectedNode?.id);
 
   const commitRename = useCallback(
     (value: string) => {
@@ -71,7 +69,7 @@ export function ModulePropertiesPanel({
     [renameNode, selectedNode]
   );
 
-  if (!selectedNode || !moduleInstance) {
+  if (!selectedNode || !snapshot) {
     return <div className="text-sm text-muted-foreground">{t('empty')}</div>;
   }
 
@@ -84,8 +82,8 @@ export function ModulePropertiesPanel({
 
   const groupedParameters: Record<string, ParameterItem[]> = { '': [] };
 
-  Object.keys(moduleInstance.parameters).forEach((paramKey) => {
-    const meta = moduleInstance.getParameterMeta(paramKey);
+  Object.keys(snapshot.parameters).forEach((paramKey) => {
+    const meta = snapshot.parameterMeta[paramKey];
 
     if (meta.uiOptions?.hide) {
       return;
@@ -107,10 +105,7 @@ export function ModulePropertiesPanel({
       }
     })();
 
-    const value =
-      paramValues[paramKey] ??
-      moduleInstance.parameters[paramKey]?.getValue?.() ??
-      fallbackValue;
+    const value = snapshot.parameters[paramKey] ?? fallbackValue;
 
     const parameterItem: ParameterItem = {
       key: paramKey,
@@ -147,12 +142,12 @@ export function ModulePropertiesPanel({
           </div>
           <ModuleNameInput
             key={selectedNode.id}
-            initialName={selectedNode.data?.label || moduleInstance.name || ''}
+            initialName={selectedNode.data.label || snapshot.name || ''}
             onCommit={commitRename}
           />
         </div>
         <div className="text-xs text-muted-foreground">
-          {t('type', { type: moduleInstance.moduleType })}
+          {t('type', { type: snapshot.type })}
         </div>
       </div>
 

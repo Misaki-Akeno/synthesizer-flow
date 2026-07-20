@@ -6,13 +6,9 @@
 import { createModuleLogger } from '@/lib/logger';
 import { normalizeTopK } from '@/lib/rag/searchParams';
 import { ClientOperation, GraphStateSnapshot } from '../core/types';
-import { moduleClassMap } from '../../core/modules/index';
-import {
-  ModuleBase,
-  ParameterType,
-  PortType,
-} from '../../core/base/ModuleBase';
+import { ParameterType, PortType } from '../../core/base/ModuleBase';
 import { createEdgeId, createNodeId } from '../../core/utils/nodeId';
+import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
 
 const logger = createModuleLogger('ToolExecutor');
 
@@ -33,16 +29,6 @@ async function searchKnowledgeBase(
   return searchDocuments(query, limit);
 }
 
-type ParameterValueReader = {
-  getValue: () => unknown;
-};
-
-type RuntimeModuleSnapshot = {
-  parameters?: unknown;
-  inputPortTypes?: unknown;
-  outputPortTypes?: unknown;
-};
-
 // 定义基本类型 (保持与Store兼容)
 interface FlowNode {
   id: string;
@@ -55,7 +41,6 @@ interface FlowNode {
       inputs?: Record<string, string>;
       outputs?: Record<string, string>;
     };
-    module?: RuntimeModuleSnapshot; // 模拟时可能不包含完整模块实例
   };
   position: { x: number; y: number };
   selected?: boolean;
@@ -67,23 +52,6 @@ interface FlowEdge {
   target: string;
   sourceHandle?: string;
   targetHandle?: string;
-}
-
-function hasParameterValueReader(
-  value: unknown
-): value is ParameterValueReader {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'getValue' in value &&
-    typeof value.getValue === 'function'
-  );
-}
-
-function isRuntimeModuleSnapshot(
-  value: unknown
-): value is RuntimeModuleSnapshot {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function toUnknownRecord(value: unknown): Record<string, unknown> {
@@ -102,19 +70,6 @@ function toPortRecord(value: unknown): Record<string, string> {
   );
 }
 
-function readRuntimeParameters(
-  moduleParameters: unknown,
-  fallback: Record<string, unknown> = {}
-): Record<string, unknown> {
-  const parameters = { ...fallback };
-
-  Object.entries(toUnknownRecord(moduleParameters)).forEach(([key, param]) => {
-    parameters[key] = hasParameterValueReader(param) ? param.getValue() : param;
-  });
-
-  return parameters;
-}
-
 /**
  * 工具执行器类
  */
@@ -129,16 +84,13 @@ export class ToolExecutor {
     dependencies: ToolExecutorDependencies = {}
   ) {
     this.searchDocuments = dependencies.searchDocuments ?? searchKnowledgeBase;
-    // 使用浅拷贝但保留 module 实例引用，同时复制 parameters 防止修改污染原始数据
+    // Agent 只维护纯数据 shadow graph，不保留客户端运行时引用。
     this.nodes = initialState.nodes.map((node) => ({
       ...node,
       data: {
         ...node.data,
         parameters: { ...(node.data.parameters || {}) },
-        // 保留 module 实例引用以便调用方法 (如 getValue)
-        module: isRuntimeModuleSnapshot(node.data.module)
-          ? node.data.module
-          : undefined,
+        ports: node.data.ports,
       },
       position: { ...node.position },
     }));
@@ -192,11 +144,13 @@ export class ToolExecutor {
     // 优先使用 snapshot 中传递过来的端口信息
     let ports = node.data?.ports;
 
-    if (!ports && node.data?.module) {
-      // 如果 snapshot 没有 ports 但有 module 实例 (e.g. 单元测试环境)，则从 module 获取
+    if (!ports) {
+      const definition = moduleDefinitionRegistry.resolve(
+        node.data.type || node.type || ''
+      );
       ports = {
-        inputs: toPortRecord(node.data.module.inputPortTypes),
-        outputs: toPortRecord(node.data.module.outputPortTypes),
+        inputs: toPortRecord(definition?.inputPortTypes),
+        outputs: toPortRecord(definition?.outputPortTypes),
       };
     }
 
@@ -242,11 +196,7 @@ export class ToolExecutor {
       (edge) => edge.source === moduleId
     );
 
-    // Extract parameters from the module instance if available (source of truth)
-    const parameters = readRuntimeParameters(
-      node.data?.module?.parameters,
-      node.data?.parameters || {}
-    );
+    const parameters = { ...(node.data?.parameters || {}) };
 
     const ports = this.getNodePorts(node);
 
@@ -324,8 +274,8 @@ export class ToolExecutor {
     position?: { x: number; y: number }
   ) {
     const normalizedType = type.toLowerCase();
-    const ModuleClass = moduleClassMap[normalizedType];
-    if (!ModuleClass) {
+    const definition = moduleDefinitionRegistry.resolve(normalizedType);
+    if (!definition) {
       return {
         success: false,
         error: `未知模块类型: ${type}`,
@@ -339,28 +289,17 @@ export class ToolExecutor {
 
     const nodeId = createNodeId(this.nodes.map((node) => node.id));
 
-    // 尝试实例化真实模块以获取准确的端口和参数信息
-    let moduleInstance: ModuleBase | undefined;
-    try {
-      // 实例化模块 (仅用于获取元数据，不需要 AudioContext)
-      // 注意：在服务端/Agent环境，window undefined，AudioModuleBase 会跳过 Tone.js 初始化
-      moduleInstance = new ModuleClass(nodeId, label);
-    } catch (e) {
-      logger.warn(`Failed to instantiate module ${type} for metadata`, e);
-      return {
-        success: false,
-        error: `无法创建模块: ${type}`,
-      };
-    }
-
     const newNode: FlowNode = {
       id: nodeId,
       type: 'default',
       data: {
         label,
         type: normalizedType,
-        parameters: {},
-        module: moduleInstance, // 存储实例以便 getModuleDetails 使用
+        parameters: { ...definition.defaultParameters },
+        ports: {
+          inputs: { ...definition.inputPortTypes },
+          outputs: { ...definition.outputPortTypes },
+        },
       },
       position: pos,
     };
@@ -422,16 +361,18 @@ export class ToolExecutor {
       return { success: false, error: '参数名不能为空' };
     }
 
-    const moduleInstance = node.data?.module as ModuleBase | undefined;
-    if (moduleInstance?.parameters) {
-      if (!moduleInstance.parameters[paramKey]) {
+    const definition = moduleDefinitionRegistry.resolve(
+      node.data.type || node.type || ''
+    );
+    const meta = definition?.parameterMeta[paramKey];
+    if (definition) {
+      if (!meta) {
         return {
           success: false,
           error: `参数不存在: ${node.id}.${paramKey}`,
         };
       }
 
-      const meta = moduleInstance.getParameterMeta(paramKey);
       if (meta.type === ParameterType.NUMBER && typeof value !== 'number') {
         return {
           success: false,
@@ -514,17 +455,7 @@ export class ToolExecutor {
     if (!node.data) node.data = {};
     if (!node.data.parameters) node.data.parameters = {};
 
-    const moduleInstance = node.data.module as ModuleBase | undefined;
-    if (moduleInstance?.parameters) {
-      moduleInstance.updateParameter(
-        paramKey,
-        value as number | boolean | string
-      );
-      node.data.parameters[paramKey] =
-        moduleInstance.getParameterValue(paramKey);
-    } else {
-      node.data.parameters[paramKey] = value;
-    }
+    node.data.parameters[paramKey] = value;
 
     this.operations.push({
       type: 'UPDATE_MODULE_PARAM',

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { ModuleBase, PortType } from '@/core/base/ModuleBase';
+import { PORT_COLORS, PortType } from '@/core/base/ModuleBase';
 
 // 输入端口组件
 export const InputPort = ({
@@ -8,17 +8,15 @@ export const InputPort = ({
   value,
   portType,
   index,
-  module,
   isSelected,
 }: {
   portKey: string;
   value: unknown;
   portType: PortType;
   index: number;
-  module: ModuleBase;
   isSelected: boolean;
 }) => {
-  const portColor = module.getPortColor(portType);
+  const portColor = PORT_COLORS[portType];
   const portPosition = 40 + index * 28; // 端口间距调整为28px
 
   // 确定显示的值
@@ -87,17 +85,15 @@ export const OutputPort = ({
   value,
   portType,
   index,
-  module,
   isSelected,
 }: {
   portKey: string;
   value: unknown;
   portType: PortType;
   index: number;
-  module: ModuleBase;
   isSelected: boolean;
 }) => {
-  const portColor = module.getPortColor(portType);
+  const portColor = PORT_COLORS[portType];
   const portPosition = 40 + index * 28; // 端口间距调整为28px
 
   // 确定显示的值

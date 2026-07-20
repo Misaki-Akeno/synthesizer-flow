@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/shadcn/tooltip';
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/store/canvas-store';
+import { useRuntimeModule } from '@/core/hooks/useRuntimeModule';
 import { MidiClip, MidiNote } from '@/core/midi/types';
 import {
   clamp,
@@ -124,6 +125,7 @@ export function MidiClipEditorPanel() {
   const node = useFlowStore((state) =>
     state.nodes.find((item) => item.id === moduleId)
   );
+  const snapshot = useRuntimeModule(moduleId ?? undefined);
   const updateModuleParameter = useFlowStore(
     (state) => state.updateModuleParameter
   );
@@ -135,9 +137,9 @@ export function MidiClipEditorPanel() {
   const [dragState, setDragState] = useState<DragState | null>(null);
 
   const initialClip = useMemo(() => {
-    const value = node?.data.module?.getParameterValue('clip');
+    const value = snapshot?.parameters.clip;
     return parseMidiClipJson(typeof value === 'string' ? value : '');
-  }, [node]);
+  }, [snapshot?.parameters.clip]);
   const [clip, setClip] = useState<MidiClip>(initialClip);
   const clipRef = useRef<MidiClip>(initialClip);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(
@@ -159,8 +161,8 @@ export function MidiClipEditorPanel() {
     : (snapOptions[2]?.value ?? Math.round(clip.ppq / 4));
   const selectedNote =
     clip.notes.find((note) => note.id === selectedNoteId) ?? null;
-  const bpmValue = node?.data.module?.getParameterValue('bpm');
-  const runningValue = node?.data.module?.getParameterValue('running');
+  const bpmValue = snapshot?.parameters.bpm;
+  const runningValue = snapshot?.parameters.running;
   const bpm =
     typeof bpmValue === 'number' && Number.isFinite(bpmValue) ? bpmValue : 120;
   const isRunning = typeof runningValue === 'boolean' ? runningValue : false;
@@ -519,7 +521,7 @@ export function MidiClipEditorPanel() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [duplicateSelectedNote, removeSelectedNote]);
 
-  if (!moduleId || !node?.data.module) {
+  if (!moduleId || !node || !snapshot) {
     return (
       <div className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">
         {t('selectModule')}

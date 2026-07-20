@@ -1,14 +1,14 @@
-import { memo, useState } from 'react';
-import { ModuleBase, ParameterType, PortType } from '@/core/base/ModuleBase';
+import { memo } from 'react';
+import type { ComponentType } from 'react';
+import { ParameterType, PortType } from '@/core/base/ModuleBase';
+import type { FlowNodeData } from '@/core/graph/types';
+import { useRuntimeModule } from '@/core/hooks/useRuntimeModule';
 import { useFlowStore } from '@/store/canvas-store';
-import { useModuleSubscription } from '@/core/hooks/useModuleSubscription';
-import React from 'react';
-import { AudioModuleBase } from '@/core/base/AudioModuleBase';
 import CustomUIComponents, {
-  ParameterControl,
   InputPort,
-  OutputPort,
   ModuleEnableToggle,
+  OutputPort,
+  ParameterControl,
 } from '@/components/audioControls';
 import {
   Accordion,
@@ -22,47 +22,46 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
-// 导入统一的模块元数据和辅助函数
-import { getModuleDescription } from '@/core/modules/index';
+import { getModuleDescription } from '@/core/modules';
 
 interface DefaultNodeProps {
-  data: {
-    label: string;
-    type: string;
-    module?: ModuleBase;
-  };
+  data: FlowNodeData;
   id: string;
   selected?: boolean;
 }
 
-interface CustomUIComponentProps {
-  [key: string]: unknown;
-  xParam?: {
-    paramKey?: string;
-    step?: number;
-    [key: string]: unknown;
-  };
-  yParam?: {
-    paramKey?: string;
-    step?: number;
-    [key: string]: unknown;
-  };
-}
-
-type CustomUIRenderProps = CustomUIComponentProps & {
-  label?: string;
-  module?: ModuleBase;
+interface CustomUIRenderProps extends Record<string, unknown> {
+  moduleId?: string;
   paramValues: Record<string, number | boolean | string>;
   onParamChange: (paramKey: string, value: number | boolean | string) => void;
   onEditStart?: () => void;
   onEditEnd?: () => void;
-};
+}
 
-const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
-  const { module: moduleInstance } = data;
+interface ParameterItem {
+  key: string;
+  type: ParameterType;
+  label: string;
+  describe?: string;
+  readonly?: boolean;
+  meta: {
+    min?: number;
+    max?: number;
+    step?: number;
+    options?: string[];
+  };
+  value: number | boolean | string;
+}
+
+const DefaultNode = ({ data, id, selected }: DefaultNodeProps) => {
+  const snapshot = useRuntimeModule(id);
   const updateModuleParameter = useFlowStore(
     (state) => state.updateModuleParameter
   );
+  const toggleModuleEnabled = useFlowStore(
+    (state) => state.toggleModuleEnabled
+  );
+  const invokeModuleAction = useFlowStore((state) => state.invokeModuleAction);
   const beginHistoryTransaction = useFlowStore(
     (state) => state.beginHistoryTransaction
   );
@@ -70,195 +69,119 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     (state) => state.commitHistoryTransaction
   );
 
-  // 使用自定义Hook获取模块数据
-  const {
-    paramValues,
-    inputPortValues,
-    inputPortTypes,
-    outputPortValues,
-    outputPortTypes,
-  } = useModuleSubscription(moduleInstance);
-
-  // 追踪模块是否启用的状态
-  const [moduleEnabled, setModuleEnabled] = useState(
-    moduleInstance instanceof AudioModuleBase
-      ? moduleInstance.isEnabled()
-      : true
-  );
-
-  // 监听模块的启用状态变化
-  React.useEffect(() => {
-    if (moduleInstance instanceof AudioModuleBase) {
-      const subscription = moduleInstance.enabled.subscribe((enabled) => {
-        setModuleEnabled(enabled);
-      });
-
-      return () => subscription.unsubscribe();
-    }
-  }, [moduleInstance]);
-
-  // 参数更新处理函数
+  const paramValues = snapshot?.parameters ?? data.parameters;
+  const moduleEnabled = snapshot?.enabled ?? data.enabled;
   const handleParameterChange = (
     paramKey: string,
     value: number | boolean | string
-  ) => {
-    if (moduleInstance) {
-      updateModuleParameter(id, paramKey, value);
-    }
-  };
+  ) => updateModuleParameter(id, paramKey, value);
 
-  // 渲染自定义UI组件
   const renderCustomUI = () => {
-    if (!moduleInstance) return null;
+    const customUI = snapshot?.customUI;
+    if (!customUI || !(customUI.type in CustomUIComponents)) return null;
 
-    const customUI = moduleInstance.getCustomUI();
-    if (!customUI) return null;
-
-    const { type, props = {} } = customUI;
-    // 检查type是否为有效的组件类型
-    if (!(type in CustomUIComponents)) {
-      return (
-        <div className="text-xs text-red-500">未知的自定义UI组件: {type}</div>
-      );
-    }
-
-    // 类型断言为字符串类型的键
-    const componentType = type as keyof typeof CustomUIComponents;
+    const componentType = customUI.type as keyof typeof CustomUIComponents;
     const CustomComponent = CustomUIComponents[
       componentType
-    ] as React.ComponentType<CustomUIRenderProps>;
+    ] as ComponentType<CustomUIRenderProps>;
+    const actionProps = Object.fromEntries(
+      customUI.actions
+        .filter((action) => !action.includes('.'))
+        .map((action) => [
+          action,
+          (...args: unknown[]) => invokeModuleAction(id, action, ...args),
+        ])
+    );
+    const props = { ...customUI.props };
 
-    // 处理参数更改的回调函数
-    const handleParamChange = (
-      paramKey: string,
-      value: number | boolean | string
-    ) => {
-      handleParameterChange(paramKey, value);
-    };
-
-    // 增强 props，自动注入 step
-    const enhancedProps = { ...(props as CustomUIComponentProps) };
-    if (componentType === 'XYPad' && moduleInstance) {
-      if (
-        enhancedProps.xParam &&
-        enhancedProps.xParam.paramKey &&
-        !enhancedProps.xParam.step
-      ) {
-        const meta = moduleInstance.getParameterMeta(
-          enhancedProps.xParam.paramKey
-        );
-        if (meta && meta.step) {
-          enhancedProps.xParam.step = meta.step;
+    if (componentType === 'XYPad') {
+      (['xParam', 'yParam'] as const).forEach((axis) => {
+        const config = props[axis];
+        if (
+          config &&
+          typeof config === 'object' &&
+          'paramKey' in config &&
+          typeof config.paramKey === 'string' &&
+          !('step' in config)
+        ) {
+          props[axis] = {
+            ...config,
+            step: snapshot.parameterMeta[config.paramKey]?.step,
+          };
         }
-      }
-      if (
-        enhancedProps.yParam &&
-        enhancedProps.yParam.paramKey &&
-        !enhancedProps.yParam.step
-      ) {
-        const meta = moduleInstance.getParameterMeta(
-          enhancedProps.yParam.paramKey
-        );
-        if (meta && meta.step) {
-          enhancedProps.yParam.step = meta.step;
-        }
-      }
+      });
     }
 
-    // 将模块参数和metaData与UI组件props合并（使用安全类型）
     return (
       <div className="custom-ui-container">
         <CustomComponent
-          module={moduleInstance}
+          moduleId={id}
           paramValues={paramValues}
-          onParamChange={handleParamChange}
+          onParamChange={handleParameterChange}
           onEditStart={beginHistoryTransaction}
           onEditEnd={commitHistoryTransaction}
-          {...enhancedProps}
+          {...props}
+          {...actionProps}
         />
       </div>
     );
   };
 
-  // 处理参数分组和提取信息
-  type ParameterItem = {
-    key: string;
-    type: ParameterType;
-    label: string;
-    describe?: string;
-    readonly?: boolean;
-    meta: {
-      min?: number;
-      max?: number;
-      step?: number;
-      options?: string[];
-    };
-    value: number | boolean | string;
-  };
-
-  // 按组分类的参数
   const groupedParameters: Record<string, ParameterItem[]> = { '': [] };
-
-  if (moduleInstance) {
-    Object.keys(moduleInstance.parameters).forEach((paramKey) => {
-      const meta = moduleInstance.getParameterMeta(paramKey);
-
-      if (meta.uiOptions?.hide) {
-        return;
-      }
-
-      const displayName = (meta.uiOptions?.label as string) || paramKey;
-      const description = meta.uiOptions?.describe as string | undefined;
+  if (snapshot) {
+    Object.entries(snapshot.parameterMeta).forEach(([key, meta]) => {
+      if (meta.uiOptions?.hide) return;
       const group = (meta.uiOptions?.group as string) || '';
-      const readonly = meta.uiOptions?.readonly as boolean | undefined;
-      const value = paramValues[paramKey];
-
-      // 创建参数对象
-      const paramObj: ParameterItem = {
-        key: paramKey,
+      const item: ParameterItem = {
+        key,
         type: meta.type,
-        label: displayName,
-        describe: description,
-        readonly,
+        label: (meta.uiOptions?.label as string) || key,
+        describe: meta.uiOptions?.describe as string | undefined,
+        readonly: meta.uiOptions?.readonly as boolean | undefined,
         meta: {
           min: meta.min,
           max: meta.max,
           step: meta.step,
           options: meta.options,
         },
-        value,
+        value: paramValues[key],
       };
-
-      // 按组分类
-      if (!groupedParameters[group]) {
-        groupedParameters[group] = [];
-      }
-      groupedParameters[group].push(paramObj);
+      (groupedParameters[group] ??= []).push(item);
     });
   }
+  const groups = Object.keys(groupedParameters).filter(
+    (group) => group && groupedParameters[group].length > 0
+  );
 
-  // 检查是否有分组参数
-  const hasGroups =
-    Object.keys(groupedParameters).filter(
-      (g) => g !== '' && groupedParameters[g].length > 0
-    ).length > 0;
+  const renderParameter = (parameter: ParameterItem) => (
+    <ParameterControl
+      key={parameter.key}
+      paramKey={parameter.key}
+      paramType={parameter.type}
+      value={parameter.value}
+      meta={parameter.meta}
+      updateParameter={handleParameterChange}
+      label={parameter.label}
+      description={parameter.describe}
+      readonly={parameter.readonly}
+      onEditStart={beginHistoryTransaction}
+      onEditEnd={commitHistoryTransaction}
+    />
+  );
 
   return (
     <div
       data-testid={`module-node-${id}`}
       data-module-type={data.type}
-      className={`node-container p-3 rounded-md border bg-white shadow-sm min-w-[180px] relative transition-opacity ${
+      className={`node-container relative min-w-[180px] rounded-md border bg-white p-3 shadow-sm transition-opacity ${
         !moduleEnabled ? 'opacity-50' : ''
       }`}
     >
-      {/* 模块标题栏 */}
-      <div className="font-medium text-sm mb-2 pb-1 border-b flex justify-between items-center node-drag-handle cursor-move">
+      <div className="node-drag-handle mb-2 flex cursor-move items-center justify-between border-b pb-1 text-sm font-medium">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="cursor-help">
-                {data.label || moduleInstance?.name || '模块'}
-              </div>
+              <div className="cursor-help">{data.label || '模块'}</div>
             </TooltipTrigger>
             <TooltipContent>
               <p className="max-w-xs break-words text-xs">
@@ -267,96 +190,55 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-
-        {/* 启用/禁用切换按钮 */}
-        {moduleInstance instanceof AudioModuleBase && (
-          <ModuleEnableToggle module={moduleInstance} />
+        {snapshot?.canEnable && (
+          <ModuleEnableToggle
+            enabled={moduleEnabled}
+            onToggle={() => toggleModuleEnabled(id)}
+          />
         )}
       </div>
 
-      {/* 自定义UI组件 */}
       {renderCustomUI()}
-
-      {/* 默认组参数 */}
-      {groupedParameters['']?.map((param) => (
-        <ParameterControl
-          key={param.key}
-          paramKey={param.key}
-          paramType={param.type}
-          value={param.value}
-          meta={param.meta}
-          updateParameter={handleParameterChange}
-          label={param.label}
-          description={param.describe}
-          readonly={param.readonly}
-          onEditStart={beginHistoryTransaction}
-          onEditEnd={commitHistoryTransaction}
-        />
-      ))}
-
-      {/* 带分组的参数 */}
-      {hasGroups && (
+      {groupedParameters[''].map(renderParameter)}
+      {groups.length > 0 && (
         <div className="mt-2">
           <Accordion type="single" collapsible className="w-full">
-            {Object.keys(groupedParameters)
-              .filter(
-                (group) => group !== '' && groupedParameters[group].length > 0
-              )
-              .map((group) => (
-                <AccordionItem value={group} key={group}>
-                  <AccordionTrigger className="text-xs py-2">
-                    {group}
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="pl-1">
-                      {groupedParameters[group].map((param) => (
-                        <ParameterControl
-                          key={param.key}
-                          paramKey={param.key}
-                          paramType={param.type}
-                          value={param.value}
-                          meta={param.meta}
-                          updateParameter={handleParameterChange}
-                          label={param.label}
-                          description={param.describe}
-                          readonly={param.readonly}
-                          onEditStart={beginHistoryTransaction}
-                          onEditEnd={commitHistoryTransaction}
-                        />
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
+            {groups.map((group) => (
+              <AccordionItem value={group} key={group}>
+                <AccordionTrigger className="py-2 text-xs">
+                  {group}
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="pl-1">
+                    {groupedParameters[group].map(renderParameter)}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
           </Accordion>
         </div>
       )}
 
-      {/* 输入端口列表 */}
-      {moduleInstance &&
-        Object.keys(moduleInstance.inputPorts).map((inputKey, index) => (
+      {snapshot &&
+        Object.keys(snapshot.inputPortTypes).map((portKey, index) => (
           <InputPort
-            key={inputKey}
-            portKey={inputKey}
-            value={inputPortValues[inputKey]}
-            portType={inputPortTypes[inputKey] as PortType}
+            key={portKey}
+            portKey={portKey}
+            value={snapshot.inputValues[portKey]}
+            portType={snapshot.inputPortTypes[portKey] as PortType}
             index={index}
-            module={moduleInstance}
-            isSelected={!!selected}
+            isSelected={Boolean(selected)}
           />
         ))}
-
-      {/* 输出端口列表 */}
-      {moduleInstance &&
-        Object.keys(moduleInstance.outputPorts).map((outputKey, index) => (
+      {snapshot &&
+        Object.keys(snapshot.outputPortTypes).map((portKey, index) => (
           <OutputPort
-            key={outputKey}
-            portKey={outputKey}
-            value={outputPortValues[outputKey]}
-            portType={outputPortTypes[outputKey] as PortType}
+            key={portKey}
+            portKey={portKey}
+            value={snapshot.outputValues[portKey]}
+            portType={snapshot.outputPortTypes[portKey] as PortType}
             index={index}
-            module={moduleInstance}
-            isSelected={!!selected}
+            isSelected={Boolean(selected)}
           />
         ))}
     </div>

@@ -1,47 +1,50 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ModuleBase } from '@/core/base/ModuleBase';
 import DefaultNode from './DefaultNode';
 
-const mockUpdateModuleParameter = vi.fn();
+const store = {
+  updateModuleParameter: vi.fn(),
+  toggleModuleEnabled: vi.fn(),
+  invokeModuleAction: vi.fn(),
+  beginHistoryTransaction: vi.fn(),
+  commitHistoryTransaction: vi.fn(),
+};
 
 vi.mock('@/store/canvas-store', () => ({
-  useFlowStore: (selector: (state: unknown) => unknown) =>
-    selector({ updateModuleParameter: mockUpdateModuleParameter }),
+  useFlowStore: (selector: (state: typeof store) => unknown) => selector(store),
 }));
 
-vi.mock('@/core/hooks/useModuleSubscription', () => ({
-  useModuleSubscription: () => ({
-    paramValues: {},
-    inputPortValues: {},
+vi.mock('@/core/hooks/useRuntimeModule', () => ({
+  useRuntimeModule: () => ({
+    id: 'node-1',
+    type: 'button',
+    name: 'Button Module',
+    enabled: true,
+    canEnable: false,
+    parameters: {},
+    parameterMeta: {},
     inputPortTypes: {},
-    outputPortValues: {},
     outputPortTypes: {},
+    inputValues: {},
+    outputValues: {},
+    customUI: {
+      type: 'CommonButton',
+      props: { label: 'Trigger' },
+      actions: [],
+    },
   }),
 }));
 
 describe('DefaultNode', () => {
   it('does not inject a throwing placeholder click handler into custom UI', () => {
-    const moduleInstance = {
-      name: 'Button Module',
-      parameters: {},
-      inputPorts: {},
-      outputPorts: {},
-      getCustomUI: () => ({
-        type: 'CommonButton',
-        props: {
-          label: 'Trigger',
-        },
-      }),
-    } as unknown as ModuleBase;
-
     render(
       <DefaultNode
         id="node-1"
         data={{
           label: 'Button Module',
           type: 'button',
-          module: moduleInstance,
+          parameters: {},
+          enabled: true,
         }}
       />
     );

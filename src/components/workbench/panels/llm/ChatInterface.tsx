@@ -48,10 +48,8 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { getDisconnectEdgeChanges } from './clientOperations';
 import { graphStateToSerializedCanvas } from './checkpointRestore';
-import {
-  createSerializableCanvasSnapshot,
-  readRuntimeParameters,
-} from './canvasSnapshot';
+import { createSerializableCanvasSnapshot } from './canvasSnapshot';
+import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 import { createThreadId } from './threadId';
 import { useTranslations } from 'next-intl';
 
@@ -390,14 +388,15 @@ export function ChatInterface() {
           const nodes = useFlowStore.getState().nodes;
           const node = nodes.find((n) => n.id === moduleId);
 
-          if (node?.data?.module) {
-            const parameters = readRuntimeParameters(
-              node.data.module.parameters
-            );
+          if (node) {
+            const runtimeSnapshot =
+              audioGraphRuntime.getModuleSnapshot(moduleId);
+            const parameters =
+              runtimeSnapshot?.parameters ?? node.data.parameters;
 
             const ports = {
-              inputs: node.data.module.inputPortTypes || {},
-              outputs: node.data.module.outputPortTypes || {},
+              inputs: runtimeSnapshot?.inputPortTypes ?? {},
+              outputs: runtimeSnapshot?.outputPortTypes ?? {},
             };
 
             const currentEdges = useFlowStore.getState().edges;
@@ -452,10 +451,10 @@ export function ChatInterface() {
           const nodes = useFlowStore.getState().nodes;
           const node = nodes.find((n) => n.id === moduleId);
 
-          if (node?.data?.module) {
-            const parameters = readRuntimeParameters(
-              node.data.module.parameters
-            );
+          if (node) {
+            const parameters =
+              audioGraphRuntime.getModuleSnapshot(moduleId)?.parameters ??
+              node.data.parameters;
 
             if (resultObj.data.moduleDetails?.module) {
               resultObj.data.moduleDetails.module.parameters = parameters;

@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { moduleManager } from '@/core/services/ModuleManager';
 import { moduleInitManager } from '@/core/services/ModuleInitManager';
+import { audioGraphController } from '@/core/runtime/AudioGraphController';
+import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 import { parseMidiClipJson } from '@/core/midi/utils';
 import { useFlowStore } from './canvas-store';
 
 function resetCanvasStore(): void {
-  moduleManager.disposeAllModules();
+  audioGraphController.reset();
   moduleInitManager.reset();
   useFlowStore.setState({
     nodes: [],
@@ -249,8 +251,8 @@ describe('canvas store connections', () => {
       .getState()
       .addNode('calculator', 'Calculator', { x: 200, y: 0 }, 'calculator');
 
-    moduleManager.getModule('number-a')?.updateParameter('value', 7);
-    moduleManager.getModule('number-b')?.updateParameter('value', 11);
+    useFlowStore.getState().updateModuleParameter('number-a', 'value', 7);
+    useFlowStore.getState().updateModuleParameter('number-b', 'value', 11);
 
     useFlowStore.getState().onConnect({
       source: 'number-a',
@@ -364,7 +366,7 @@ describe('canvas store history', () => {
       .getState()
       .addNode('calculator', 'Calculator', { x: 200, y: 0 }, 'calculator');
 
-    moduleManager.getModule('number')?.updateParameter('value', 7);
+    useFlowStore.getState().updateModuleParameter('number', 'value', 7);
     useFlowStore.getState().onConnect({
       source: 'number',
       target: 'calculator',
@@ -452,8 +454,8 @@ describe('canvas store history', () => {
       .getState()
       .addNode('calculator', 'Calculator', { x: 200, y: 0 }, 'calculator');
 
-    moduleManager.getModule('number-a')?.updateParameter('value', 7);
-    moduleManager.getModule('number-b')?.updateParameter('value', 11);
+    useFlowStore.getState().updateModuleParameter('number-a', 'value', 7);
+    useFlowStore.getState().updateModuleParameter('number-b', 'value', 11);
 
     useFlowStore.getState().onConnect({
       source: 'number-a',
@@ -506,5 +508,47 @@ describe('canvas store history', () => {
     expect(imported).toBe(true);
     expect(useFlowStore.getState().canUndo).toBe(false);
     expect(useFlowStore.getState().canRedo).toBe(false);
+  });
+});
+
+describe('canvas store incremental runtime updates', () => {
+  beforeEach(() => {
+    resetCanvasStore();
+  });
+
+  it('updates parameters without recreating the module or storing it in React Flow', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    const instance = moduleManager.getModule('number');
+    const createSpy = vi.spyOn(moduleManager, 'createModuleInstance');
+    const disposeSpy = vi.spyOn(moduleManager, 'disposeModule');
+
+    useFlowStore.getState().updateModuleParameter('number', 'value', 220);
+    useFlowStore.getState().updateModuleParameter('number', 'value', 330);
+
+    expect(moduleManager.getModule('number')).toBe(instance);
+    expect(instance?.getParameterValue('value')).toBe(330);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(disposeSpy).not.toHaveBeenCalled();
+    expect(useFlowStore.getState().nodes[0].data).not.toHaveProperty('module');
+  });
+
+  it('does not submit audio patches while only moving a visual node', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    const applySpy = vi.spyOn(audioGraphRuntime, 'applyPatches');
+
+    useFlowStore.getState().onNodesChange([
+      {
+        type: 'position',
+        id: 'number',
+        position: { x: 120, y: 80 },
+        dragging: true,
+      },
+    ]);
+
+    expect(applySpy).not.toHaveBeenCalled();
   });
 });

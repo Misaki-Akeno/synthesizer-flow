@@ -1,61 +1,57 @@
-import { describe, expect, it } from 'vitest';
-import { ModuleBase, PortType } from '@/core/base/ModuleBase';
-import { FlowNode } from '@/core/services/ModuleManager';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { PortType } from '@/core/base/ModuleBase';
+import type { FlowNode } from '@/core/graph/types';
+import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
 import { isValidModuleConnection } from './connectionValidation';
 
-class TestSource extends ModuleBase {
-  constructor(id: string) {
-    super(
-      'test-source',
-      id,
-      id,
-      {},
-      {},
-      {
-        numberOut: { type: PortType.NUMBER, value: 1 },
-        audioOut: { type: PortType.AUDIO, value: null },
-      }
-    );
-  }
-
-  protected setupInternalBindings(): void {}
-}
-
-class TestTarget extends ModuleBase {
-  constructor(id: string) {
-    super(
-      'test-target',
-      id,
-      id,
-      {},
-      {
-        numberIn: { type: PortType.NUMBER, value: 0 },
-        audioIn: { type: PortType.AUDIO, value: null },
-      },
-      {}
-    );
-  }
-
-  protected setupInternalBindings(): void {}
-}
-
-function createNode(id: string, module: ModuleBase): FlowNode {
+function createNode(id: string, type: string): FlowNode {
   return {
     id,
     type: 'default',
     position: { x: 0, y: 0 },
-    data: {
-      module,
-      label: id,
-      type: module.moduleType,
-    },
+    data: { type, label: id, parameters: {}, enabled: true },
   };
 }
 
 describe('isValidModuleConnection', () => {
+  beforeAll(() => {
+    moduleDefinitionRegistry.registerSnapshot({
+      id: 'source',
+      type: 'test-source',
+      name: 'Source',
+      enabled: true,
+      canEnable: false,
+      parameters: {},
+      parameterMeta: {},
+      inputPortTypes: {},
+      outputPortTypes: {
+        numberOut: PortType.NUMBER,
+        audioOut: PortType.AUDIO,
+      },
+      inputValues: {},
+      outputValues: {},
+    });
+    moduleDefinitionRegistry.registerSnapshot({
+      id: 'target',
+      type: 'test-target',
+      name: 'Target',
+      enabled: true,
+      canEnable: false,
+      parameters: {},
+      parameterMeta: {},
+      inputPortTypes: {
+        numberIn: PortType.NUMBER,
+        audioIn: PortType.AUDIO,
+      },
+      outputPortTypes: {},
+      inputValues: {},
+      outputValues: {},
+    });
+  });
+
   const nodes = [
-    createNode('source', new TestSource('source')),
-    createNode('target', new TestTarget('target')),
+    createNode('source', 'test-source'),
+    createNode('target', 'test-target'),
   ];
 
   it('allows existing ports with matching types', () => {
