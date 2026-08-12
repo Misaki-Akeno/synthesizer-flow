@@ -9,7 +9,20 @@ import {
   MidiNote,
 } from './types';
 
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NOTE_NAMES = [
+  'C',
+  'C#',
+  'D',
+  'D#',
+  'E',
+  'F',
+  'F#',
+  'G',
+  'G#',
+  'A',
+  'A#',
+  'B',
+];
 
 let frameSerial = 0;
 let generatedNoteId = 0;
@@ -48,7 +61,9 @@ export function createMidiFrame(
     type: 'midi-frame',
     serial: frameSerial,
     activeNotes: activeNotes.map(normalizeActiveNote),
-    events: events.map(normalizeMidiEvent).filter((event): event is MidiEvent => Boolean(event)),
+    events: events
+      .map(normalizeMidiEvent)
+      .filter((event): event is MidiEvent => Boolean(event)),
   };
 }
 
@@ -152,11 +167,17 @@ export function durationToTicks(duration: string, ppq = DEFAULT_PPQ): number {
   return ppq;
 }
 
-export function ticksPerBar(clip: Pick<MidiClip, 'ppq' | 'timeSignature'>): number {
-  return Math.round(clip.ppq * 4 * (clip.timeSignature[0] / clip.timeSignature[1]));
+export function ticksPerBar(
+  clip: Pick<MidiClip, 'ppq' | 'timeSignature'>
+): number {
+  return Math.round(
+    clip.ppq * 4 * (clip.timeSignature[0] / clip.timeSignature[1])
+  );
 }
 
-export function getClipLengthTicks(clip: Pick<MidiClip, 'ppq' | 'bars' | 'timeSignature'>): number {
+export function getClipLengthTicks(
+  clip: Pick<MidiClip, 'ppq' | 'bars' | 'timeSignature'>
+): number {
   return ticksPerBar(clip) * clip.bars;
 }
 
@@ -167,16 +188,43 @@ export function createDefaultMidiClip(): MidiClip {
     bars: 1,
     timeSignature: [4, 4],
     notes: [
-      { id: 'note_c4', midi: 60, startTick: 0, durationTicks: DEFAULT_PPQ, velocity: 0.8 },
-      { id: 'note_e4', midi: 64, startTick: DEFAULT_PPQ, durationTicks: DEFAULT_PPQ, velocity: 0.8 },
-      { id: 'note_g4', midi: 67, startTick: DEFAULT_PPQ * 2, durationTicks: DEFAULT_PPQ, velocity: 0.8 },
-      { id: 'note_c5', midi: 72, startTick: DEFAULT_PPQ * 3, durationTicks: DEFAULT_PPQ, velocity: 0.8 },
+      {
+        id: 'note_c4',
+        midi: 60,
+        startTick: 0,
+        durationTicks: DEFAULT_PPQ,
+        velocity: 0.8,
+      },
+      {
+        id: 'note_e4',
+        midi: 64,
+        startTick: DEFAULT_PPQ,
+        durationTicks: DEFAULT_PPQ,
+        velocity: 0.8,
+      },
+      {
+        id: 'note_g4',
+        midi: 67,
+        startTick: DEFAULT_PPQ * 2,
+        durationTicks: DEFAULT_PPQ,
+        velocity: 0.8,
+      },
+      {
+        id: 'note_c5',
+        midi: 72,
+        startTick: DEFAULT_PPQ * 3,
+        durationTicks: DEFAULT_PPQ,
+        velocity: 0.8,
+      },
     ],
     events: [],
   };
 }
 
-export function legacyStepsToMidiClip(steps: LegacySequenceStep[], ppq = DEFAULT_PPQ): MidiClip {
+export function legacyStepsToMidiClip(
+  steps: LegacySequenceStep[],
+  ppq = DEFAULT_PPQ
+): MidiClip {
   const notes: MidiNote[] = [];
   let cursor = 0;
 
@@ -230,19 +278,31 @@ export function normalizeMidiClip(value: unknown): MidiClip {
       : DEFAULT_PPQ;
   const timeSignature = normalizeTimeSignature(value.timeSignature);
   const notes = Array.isArray(value.notes)
-    ? value.notes.map(normalizeMidiNote).filter((note): note is MidiNote => Boolean(note))
+    ? value.notes
+        .map(normalizeMidiNote)
+        .filter((note): note is MidiNote => Boolean(note))
     : [];
   const events = Array.isArray(value.events)
-    ? value.events.map(normalizeMidiEvent).filter((event): event is MidiEvent => Boolean(event))
+    ? value.events
+        .map(normalizeMidiEvent)
+        .filter((event): event is MidiEvent => Boolean(event))
     : [];
   const lastTick = notes.reduce(
     (max, note) => Math.max(max, note.startTick + note.durationTicks),
     ppq * 4
   );
   const bars =
-    typeof value.bars === 'number' && Number.isFinite(value.bars) && value.bars > 0
+    typeof value.bars === 'number' &&
+    Number.isFinite(value.bars) &&
+    value.bars > 0
       ? Math.ceil(value.bars)
-      : Math.max(1, Math.ceil(lastTick / Math.round(ppq * 4 * (timeSignature[0] / timeSignature[1]))));
+      : Math.max(
+          1,
+          Math.ceil(
+            lastTick /
+              Math.round(ppq * 4 * (timeSignature[0] / timeSignature[1]))
+          )
+        );
 
   return {
     version: MIDI_CLIP_VERSION,
@@ -274,14 +334,16 @@ function normalizeMidiNote(value: unknown): MidiNote | null {
 
   const midi = clamp(Math.round(value.midi), 0, 127);
   return {
-    id: typeof value.id === 'string' && value.id ? value.id : createMidiNoteId(),
+    id:
+      typeof value.id === 'string' && value.id ? value.id : createMidiNoteId(),
     midi,
     startTick:
       typeof value.startTick === 'number' && Number.isFinite(value.startTick)
         ? Math.max(0, Math.round(value.startTick))
         : 0,
     durationTicks:
-      typeof value.durationTicks === 'number' && Number.isFinite(value.durationTicks)
+      typeof value.durationTicks === 'number' &&
+      Number.isFinite(value.durationTicks)
         ? Math.max(1, Math.round(value.durationTicks))
         : DEFAULT_PPQ,
     velocity: normalize01(value.velocity, 0.8),
@@ -340,7 +402,8 @@ function normalizeMidiEvent(value: unknown): MidiEvent | null {
   if (value.type === 'noteOff' && typeof value.midi === 'number') {
     return {
       type: 'noteOff',
-      noteId: base.noteId || `${base.channel ?? 'note'}_${Math.round(value.midi)}`,
+      noteId:
+        base.noteId || `${base.channel ?? 'note'}_${Math.round(value.midi)}`,
       midi: clamp(Math.round(value.midi), 0, 127),
       channel: base.channel,
       tick: base.tick,
@@ -348,15 +411,43 @@ function normalizeMidiEvent(value: unknown): MidiEvent | null {
   }
 
   if (value.type === 'pitchBend') {
-    return { type: 'pitchBend', noteId: base.noteId, channel: base.channel, value: normalizePitchBend(value.value), tick: base.tick };
+    return {
+      type: 'pitchBend',
+      noteId: base.noteId,
+      channel: base.channel,
+      value: normalizePitchBend(value.value),
+      tick: base.tick,
+    };
   }
 
   if (value.type === 'pressure') {
-    return { type: 'pressure', noteId: base.noteId, channel: base.channel, value: normalize01(value.value, 0), tick: base.tick };
+    return {
+      type: 'pressure',
+      noteId: base.noteId,
+      channel: base.channel,
+      value: normalize01(value.value, 0),
+      tick: base.tick,
+    };
   }
 
   if (value.type === 'timbre') {
-    return { type: 'timbre', noteId: base.noteId, channel: base.channel, value: normalize01(value.value, 0), tick: base.tick };
+    return {
+      type: 'timbre',
+      noteId: base.noteId,
+      channel: base.channel,
+      value: normalize01(value.value, 0),
+      tick: base.tick,
+    };
+  }
+
+  if (value.type === 'controlChange' && typeof value.controller === 'number') {
+    return {
+      type: 'controlChange',
+      controller: clamp(Math.round(value.controller), 0, 127),
+      channel: base.channel,
+      value: normalize01(value.value, 0),
+      tick: base.tick,
+    };
   }
 
   if (value.type === 'allNotesOff') {

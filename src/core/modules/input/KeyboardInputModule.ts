@@ -9,6 +9,7 @@ import {
 import keyboardEventListener from '@/lib/KeyboardEventListener';
 import { MidiActiveNote, MidiEvent } from '@/core/midi/types';
 import { createMidiFrame, midiFrameToLegacyArrays } from '@/core/midi/utils';
+import { midiPerformanceBus } from '@/core/midi/performance-bus';
 
 /**
  * 检查是否在浏览器环境中运行
@@ -339,7 +340,12 @@ export class KeyboardInputModule extends AudioModuleBase {
 
     // 更新输出端口
     this.updateOutputPorts([
-      { type: 'noteOn', noteId, midi: transposedNote, velocity: scaledVelocity },
+      {
+        type: 'noteOn',
+        noteId,
+        midi: transposedNote,
+        velocity: scaledVelocity,
+      },
     ]);
   }
 
@@ -387,7 +393,9 @@ export class KeyboardInputModule extends AudioModuleBase {
       activeNote.velocity = scaledVelocity;
 
       // 更新输出端口
-      this.updateOutputPorts([{ type: 'pressure', noteId, value: scaledVelocity }]);
+      this.updateOutputPorts([
+        { type: 'pressure', noteId, value: scaledVelocity },
+      ]);
     }
   }
 
@@ -395,8 +403,12 @@ export class KeyboardInputModule extends AudioModuleBase {
    * 更新输出端口的值
    */
   private updateOutputPorts(events: MidiEvent[] = []): void {
-    const frame = createMidiFrame(Array.from(this.activeNotes.values()), events);
+    const frame = createMidiFrame(
+      Array.from(this.activeNotes.values()),
+      events
+    );
     this.outputPorts['midi'].next(frame);
+    midiPerformanceBus.publish({ sourceId: this.id, frame });
     const legacy = midiFrameToLegacyArrays(frame);
     this.outputPorts['activeNotes'].next(legacy.notes);
     this.outputPorts['activeVelocities'].next(legacy.velocities);
@@ -425,7 +437,9 @@ export class KeyboardInputModule extends AudioModuleBase {
         height: 120,
         startNote: this.keyboardStartNote,
         noteCount: this.keyboardNoteCount,
-        activeNotes: Array.from(this.activeNotes.values()).map((note) => note.midi),
+        activeNotes: Array.from(this.activeNotes.values()).map(
+          (note) => note.midi
+        ),
         onNoteOn: (note: number, velocity: number) =>
           this.handleNoteOn(note, velocity),
         onNoteOff: (note: number) => this.handleNoteOff(note),

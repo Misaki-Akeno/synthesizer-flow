@@ -6,6 +6,7 @@ import {
   type AutomationLane,
   type AutomationPoint,
   type TransportDocument,
+  type MidiControlMapping,
 } from './types';
 
 const MIN_BPM = 20;
@@ -53,6 +54,34 @@ function normalizeLane(value: unknown): AutomationLane | null {
     parameterKey: lane.parameterKey,
     interpolation: lane.interpolation === 'linear' ? 'linear' : 'step',
     points,
+  };
+}
+
+function normalizeMidiMapping(value: unknown): MidiControlMapping | null {
+  if (!value || typeof value !== 'object') return null;
+  const mapping = value as Partial<MidiControlMapping>;
+  if (
+    typeof mapping.id !== 'string' ||
+    typeof mapping.moduleId !== 'string' ||
+    typeof mapping.parameterKey !== 'string' ||
+    !Number.isFinite(mapping.channel) ||
+    !Number.isFinite(mapping.controller) ||
+    !Number.isFinite(mapping.min) ||
+    !Number.isFinite(mapping.max)
+  ) {
+    return null;
+  }
+  return {
+    id: mapping.id,
+    moduleId: mapping.moduleId,
+    parameterKey: mapping.parameterKey,
+    channel: Math.min(16, Math.max(1, Math.round(mapping.channel as number))),
+    controller: Math.min(
+      127,
+      Math.max(0, Math.round(mapping.controller as number))
+    ),
+    min: mapping.min as number,
+    max: mapping.max as number,
   };
 }
 
@@ -105,6 +134,11 @@ export function normalizeTransportDocument(value: unknown): TransportDocument {
       ? candidate.automationLanes
           .map(normalizeLane)
           .filter((lane): lane is AutomationLane => Boolean(lane))
+      : [],
+    midiMappings: Array.isArray(candidate.midiMappings)
+      ? candidate.midiMappings
+          .map(normalizeMidiMapping)
+          .filter((mapping): mapping is MidiControlMapping => Boolean(mapping))
       : [],
   };
 }

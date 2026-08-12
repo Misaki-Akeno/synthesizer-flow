@@ -69,6 +69,27 @@ export class SequencerModule extends AudioModuleBase {
           hide: true,
         },
       },
+      recordArmed: {
+        type: ParameterType.BOOLEAN,
+        value: false,
+        uiOptions: {
+          label: '录音待命',
+          describe: '全局录音开启时，将外部 MIDI 写入此片段',
+          group: '录音',
+        },
+      },
+      quantizeStrength: {
+        type: ParameterType.NUMBER,
+        value: 0.75,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        uiOptions: {
+          label: '量化强度',
+          describe: '0 保留演奏时值，1 完全吸附网格',
+          group: '录音',
+        },
+      },
       clip: {
         type: ParameterType.STRING,
         value: JSON.stringify(normalizeMidiClip(undefined)),
@@ -294,6 +315,8 @@ export class SequencerModule extends AudioModuleBase {
       this.activeNotes.clear();
       return;
     }
+
+    if (event.type === 'controlChange') return;
 
     this.applyExpressionEvent(event);
   }

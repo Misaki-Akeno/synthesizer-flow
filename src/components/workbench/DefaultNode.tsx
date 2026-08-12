@@ -160,6 +160,7 @@ const DefaultNode = ({ data, id, selected }: DefaultNodeProps) => {
 
   const renderParameter = (parameter: ParameterItem) => (
     <ParameterControl
+      moduleId={id}
       key={parameter.key}
       paramKey={parameter.key}
       paramType={parameter.type}

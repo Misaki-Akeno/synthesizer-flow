@@ -574,6 +574,34 @@ describe('canvas store history', () => {
       [{ tick: 480, value: 48 }]
     );
   });
+
+  it('persists MIDI Learn mappings and applies matching CC values', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    useFlowStore.getState().addMidiMapping({
+      moduleId: 'number',
+      parameterKey: 'value',
+      channel: 1,
+      controller: 21,
+      min: 0,
+      max: 999,
+    });
+
+    useFlowStore.getState().applyMidiControlChange(21, 0.5, 1);
+    expect(useFlowStore.getState().nodes[0].data.parameters.value).toBeCloseTo(
+      499.5
+    );
+
+    const exported = JSON.parse(useFlowStore.getState().exportCanvasToJson());
+    expect(exported.metadata.transport.midiMappings).toEqual([
+      expect.objectContaining({
+        id: 'number:value',
+        controller: 21,
+        channel: 1,
+      }),
+    ]);
+  });
 });
 
 describe('canvas store incremental runtime updates', () => {

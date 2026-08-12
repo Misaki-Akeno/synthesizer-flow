@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Circle,
@@ -39,10 +39,13 @@ import {
 import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 import { ensureAudioContextReady } from '@/core/audio/audio-context';
 import { getClipLengthTicks, parseMidiClipJson } from '@/core/midi/utils';
+import { midiPerformanceBus } from '@/core/midi/performance-bus';
+import { mergeMidiRecording, MidiClipRecorder } from '@/core/midi/recording';
 import { TRANSPORT_PPQ } from '@/core/transport/types';
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/store/canvas-store';
 import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
+import { useMidiLearnStore } from '@/store/midi-learn-store';
 
 const AUTOMATION_FRAME_INTERVAL_MS = 1000 / 30;
 
@@ -80,6 +83,7 @@ export function TransportBar() {
   const t = useTranslations('Workbench.transport');
   const [automationOpen, setAutomationOpen] = useState(false);
   const lastAutomationFrame = useRef(0);
+  const midiRecorders = useRef(new Map<string, MidiClipRecorder>());
   const {
     nodes,
     transport,
@@ -89,6 +93,9 @@ export function TransportBar() {
     setAutomationMode,
     beginAutomationRecording,
     finishAutomationRecording,
+    addMidiMapping,
+    removeMidiMapping,
+    applyMidiControlChange,
     setSequencersRunning,
     applyAutomationAtTick,
     clearAutomationLane,
@@ -103,6 +110,9 @@ export function TransportBar() {
       setAutomationMode: state.setAutomationMode,
       beginAutomationRecording: state.beginAutomationRecording,
       finishAutomationRecording: state.finishAutomationRecording,
+      addMidiMapping: state.addMidiMapping,
+      removeMidiMapping: state.removeMidiMapping,
+      applyMidiControlChange: state.applyMidiControlChange,
       setSequencersRunning: state.setSequencersRunning,
       applyAutomationAtTick: state.applyAutomationAtTick,
       clearAutomationLane: state.clearAutomationLane,
@@ -122,6 +132,85 @@ export function TransportBar() {
     () => getProjectLengthTicks(nodes, transport.timeSignature),
     [nodes, transport.timeSignature]
   );
+
+  const beginMidiRecording = useCallback(() => {
+    midiRecorders.current.clear();
+    const sequencers = useFlowStore
+      .getState()
+      .nodes.filter((node) => node.data.type === 'sequencer');
+    const armed = sequencers.filter(
+      (node) => node.data.parameters.recordArmed === true
+    );
+    const targets =
+      armed.length > 0 ? armed : sequencers.length === 1 ? sequencers : [];
+    targets.forEach((node) => {
+      const value = node.data.parameters.clip;
+      const clip = parseMidiClipJson(typeof value === 'string' ? value : '');
+      midiRecorders.current.set(
+        node.id,
+        new MidiClipRecorder(getClipLengthTicks(clip))
+      );
+    });
+  }, []);
+
+  const finishMidiRecording = useCallback(() => {
+    const state = useFlowStore.getState();
+    const endTick = useTransportRuntimeStore.getState().positionTicks;
+    midiRecorders.current.forEach((recorder, moduleId) => {
+      const node = state.nodes.find((item) => item.id === moduleId);
+      if (!node) return;
+      const clipValue = node.data.parameters.clip;
+      const clip = parseMidiClipJson(
+        typeof clipValue === 'string' ? clipValue : ''
+      );
+      const strength =
+        typeof node.data.parameters.quantizeStrength === 'number'
+          ? node.data.parameters.quantizeStrength
+          : 0.75;
+      const merged = mergeMidiRecording(
+        clip,
+        recorder.finish(endTick),
+        Math.round(clip.ppq / 4),
+        strength
+      );
+      state.updateModuleParameter(moduleId, 'clip', JSON.stringify(merged));
+    });
+    midiRecorders.current.clear();
+  }, []);
+
+  const finishRecording = useCallback(() => {
+    finishMidiRecording();
+    finishAutomationRecording();
+  }, [finishAutomationRecording, finishMidiRecording]);
+
+  useEffect(() => {
+    return midiPerformanceBus.subscribe(({ frame }) => {
+      frame.events.forEach((event) => {
+        if (event.type !== 'controlChange') return;
+        const target = useMidiLearnStore.getState().target;
+        if (target && event.channel) {
+          addMidiMapping({
+            moduleId: target.moduleId,
+            parameterKey: target.parameterKey,
+            channel: event.channel,
+            controller: event.controller,
+            min: target.min,
+            max: target.max,
+          });
+          useMidiLearnStore.getState().cancel();
+        }
+        if (event.channel) {
+          applyMidiControlChange(event.controller, event.value, event.channel);
+        }
+      });
+
+      if (!useTransportRuntimeStore.getState().isRecording) return;
+      const tick = useTransportRuntimeStore.getState().positionTicks;
+      midiRecorders.current.forEach((recorder) => {
+        recorder.recordFrame(frame, tick);
+      });
+    });
+  }, [addMidiMapping, applyMidiControlChange]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -150,6 +239,7 @@ export function TransportBar() {
         lastAutomationFrame.current = now;
       }
       if (result.ended) {
+        finishRecording();
         setSequencersRunning(false);
         return;
       }
@@ -159,6 +249,7 @@ export function TransportBar() {
     return () => window.cancelAnimationFrame(animationFrame);
   }, [
     applyAutomationAtTick,
+    finishRecording,
     isPlaying,
     projectLengthTicks,
     setSequencersRunning,
@@ -176,7 +267,7 @@ export function TransportBar() {
     if (runtime.isPlaying) {
       runtime.pause();
       audioGraphRuntime.pauseTransport();
-      if (runtime.isRecording) finishAutomationRecording();
+      if (runtime.isRecording) finishRecording();
       return;
     }
     runtime.play();
@@ -189,7 +280,7 @@ export function TransportBar() {
 
   const stopPlayback = () => {
     const runtime = useTransportRuntimeStore.getState();
-    if (runtime.isRecording) finishAutomationRecording();
+    if (runtime.isRecording) finishRecording();
     runtime.stop();
     setSequencersRunning(false);
     applyAutomationAtTick(0);
@@ -203,8 +294,12 @@ export function TransportBar() {
     if (transport.automationMode === 'read') return;
     const nextRecording = !runtime.isRecording;
     runtime.setRecording(nextRecording);
-    if (nextRecording) beginAutomationRecording();
-    else finishAutomationRecording();
+    if (nextRecording) {
+      beginAutomationRecording();
+      beginMidiRecording();
+    } else {
+      finishRecording();
+    }
     if (nextRecording && !runtime.isPlaying) {
       runtime.play();
       if (runtime.hasStarted) audioGraphRuntime.resumeTransport();
@@ -381,7 +476,7 @@ export function TransportBar() {
               >
                 <ListMusic className="h-3.5 w-3.5" />
                 <span className="font-mono text-[10px] tabular-nums">
-                  {automationCount}
+                  {automationCount + transport.midiMappings.length}
                 </span>
               </Button>
             </TooltipTrigger>
@@ -501,6 +596,47 @@ export function TransportBar() {
               })
             )}
           </div>
+
+          {transport.midiMappings.length > 0 && (
+            <div className="space-y-2 border-t pt-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('midiMappings')}
+              </div>
+              <div className="max-h-28 space-y-1.5 overflow-auto">
+                {transport.midiMappings.map((mapping) => {
+                  const node = nodes.find(
+                    (item) => item.id === mapping.moduleId
+                  );
+                  return (
+                    <div
+                      key={mapping.id}
+                      className="flex items-center justify-between rounded-lg border bg-muted/25 px-3 py-2"
+                    >
+                      <div className="min-w-0 text-xs">
+                        <span className="font-medium">
+                          {node?.data.label ?? mapping.moduleId}
+                        </span>
+                        <span className="mx-1 text-muted-foreground">·</span>
+                        <span className="text-muted-foreground">
+                          {mapping.parameterKey} ← CH {mapping.channel} / CC{' '}
+                          {mapping.controller}
+                        </span>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeMidiMapping(mapping.id)}
+                        aria-label={t('deleteMidiMapping')}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             {automationCount > 0 && (

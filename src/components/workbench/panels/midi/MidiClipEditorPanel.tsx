@@ -39,8 +39,10 @@ import {
   normalizeMidiClip,
   parseMidiClipJson,
 } from '@/core/midi/utils';
+import { quantizeTickWithStrength } from '@/core/midi/recording';
 import {
   Copy,
+  CircleDot,
   Eraser,
   MousePointer2,
   Pause,
@@ -175,6 +177,11 @@ export function MidiClipEditorPanel() {
   const selectedNote =
     clip.notes.find((note) => note.id === selectedNoteId) ?? null;
   const bpm = transport.bpm;
+  const recordArmed = Boolean(snapshot?.parameters.recordArmed);
+  const quantizeStrength =
+    typeof snapshot?.parameters.quantizeStrength === 'number'
+      ? snapshot.parameters.quantizeStrength
+      : 0.75;
   const isRunning = isTransportPlaying;
   const playheadTick =
     lengthTicks > 0 ? transportPositionTicks % lengthTicks : 0;
@@ -343,13 +350,21 @@ export function MidiClipEditorPanel() {
       notes: clip.notes.map((note) => {
         if (targetId && note.id !== targetId) return note;
         const startTick = clamp(
-          quantizeTick(note.startTick, activeSnapTicks),
+          quantizeTickWithStrength(
+            note.startTick,
+            activeSnapTicks,
+            quantizeStrength
+          ),
           0,
           Math.max(0, lengthTicks - 1)
         );
         const durationTicks = Math.max(
           activeSnapTicks,
-          quantizeTick(note.durationTicks, activeSnapTicks)
+          quantizeTickWithStrength(
+            note.durationTicks,
+            activeSnapTicks,
+            quantizeStrength
+          )
         );
         return {
           ...note,
@@ -358,7 +373,14 @@ export function MidiClipEditorPanel() {
         };
       }),
     });
-  }, [activeSnapTicks, clip, lengthTicks, saveClip, selectedNoteId]);
+  }, [
+    activeSnapTicks,
+    clip,
+    lengthTicks,
+    quantizeStrength,
+    saveClip,
+    selectedNoteId,
+  ]);
 
   const handleGridPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -629,6 +651,20 @@ export function MidiClipEditorPanel() {
           max={64}
           onChange={(value) => saveClip({ ...clip, bars: Math.round(value) })}
         />
+        <NumberField
+          label={t('quantizeStrength')}
+          value={Math.round(quantizeStrength * 100)}
+          min={0}
+          max={100}
+          onChange={(value) => {
+            if (!moduleId) return;
+            updateModuleParameter(
+              moduleId,
+              'quantizeStrength',
+              clamp(value / 100, 0, 1)
+            );
+          }}
+        />
 
         <Select
           value={String(activeSnapTicks)}
@@ -647,6 +683,17 @@ export function MidiClipEditorPanel() {
         </Select>
 
         <ToolbarDivider />
+
+        <ToolButton
+          active={recordArmed}
+          label={recordArmed ? t('disarmRecording') : t('armRecording')}
+          onClick={() => {
+            if (!moduleId) return;
+            updateModuleParameter(moduleId, 'recordArmed', !recordArmed);
+          }}
+        >
+          <CircleDot className="h-4 w-4" />
+        </ToolButton>
 
         <ToolButton label={t('quantize')} onClick={quantizeSelection}>
           <Scissors className="h-4 w-4" />

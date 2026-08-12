@@ -45,6 +45,7 @@ import {
   createDefaultTransportDocument,
   TRANSPORT_PPQ,
   type AutomationMode,
+  type MidiControlMapping,
   type TransportDocument,
 } from '@/core/transport/types';
 import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
@@ -56,6 +57,8 @@ const AUTOMATION_IGNORED_PARAMETERS = new Set([
   'clip',
   'loop',
   'running',
+  'recordArmed',
+  'quantizeStrength',
 ]);
 
 interface FlowState {
@@ -76,6 +79,13 @@ interface FlowState {
   setAutomationMode: (mode: AutomationMode) => void;
   beginAutomationRecording: () => void;
   finishAutomationRecording: () => void;
+  addMidiMapping: (mapping: Omit<MidiControlMapping, 'id'>) => void;
+  removeMidiMapping: (mappingId: string) => void;
+  applyMidiControlChange: (
+    controller: number,
+    value: number,
+    channel: number
+  ) => void;
   setSequencersRunning: (running: boolean) => void;
   applyAutomationAtTick: (tick: number) => void;
   clearAutomationLane: (laneId: string) => void;
@@ -260,6 +270,9 @@ function pruneTransportAutomation(
     ...transport,
     automationLanes: transport.automationLanes.filter((lane) =>
       moduleIds.has(lane.moduleId)
+    ),
+    midiMappings: transport.midiMappings.filter((mapping) =>
+      moduleIds.has(mapping.moduleId)
     ),
   };
 }
@@ -450,6 +463,69 @@ export const useFlowStore = create<FlowState>((set, get) => {
       automationWriteLanes.clear();
       automationTouchUntil.clear();
       set({ transport: simplifyAutomationDocument(get().transport) });
+    },
+
+    addMidiMapping: (mapping) => {
+      const id = `${mapping.moduleId}:${mapping.parameterKey}`;
+      const next: MidiControlMapping = { ...mapping, id };
+      recordHistory();
+      set({
+        transport: {
+          ...get().transport,
+          midiMappings: [
+            ...get().transport.midiMappings.filter((item) => item.id !== id),
+            next,
+          ],
+        },
+      });
+    },
+
+    removeMidiMapping: (mappingId) => {
+      if (!get().transport.midiMappings.some((item) => item.id === mappingId)) {
+        return;
+      }
+      recordHistory();
+      set({
+        transport: {
+          ...get().transport,
+          midiMappings: get().transport.midiMappings.filter(
+            (item) => item.id !== mappingId
+          ),
+        },
+      });
+    },
+
+    applyMidiControlChange: (controller, value, channel) => {
+      const mappings = get().transport.midiMappings.filter(
+        (mapping) =>
+          mapping.controller === controller && mapping.channel === channel
+      );
+      if (mappings.length === 0) return;
+      const updates = new Map<string, Map<string, number>>();
+      mappings.forEach((mapping) => {
+        const moduleUpdates = updates.get(mapping.moduleId) ?? new Map();
+        moduleUpdates.set(
+          mapping.parameterKey,
+          mapping.min +
+            (mapping.max - mapping.min) * Math.max(0, Math.min(1, value))
+        );
+        updates.set(mapping.moduleId, moduleUpdates);
+      });
+      let changed = false;
+      const nodes = get().nodes.map((node) => {
+        const moduleUpdates = updates.get(node.id);
+        if (!moduleUpdates) return node;
+        const parameters = { ...node.data.parameters };
+        moduleUpdates.forEach((nextValue, key) => {
+          if (parameters[key] === nextValue) return;
+          parameters[key] = nextValue;
+          changed = true;
+        });
+        return { ...node, data: { ...node.data, parameters } };
+      });
+      if (!changed) return;
+      const committed = commitGraph(nodes, get().edges);
+      set({ nodes, edges: committed.edges });
     },
 
     setSequencersRunning: (running) => {

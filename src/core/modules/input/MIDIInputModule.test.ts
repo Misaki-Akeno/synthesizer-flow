@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MIDIInputModule } from './MIDIInputModule';
+import { isMidiFrame } from '@/core/midi/utils';
 
 interface MidiInputModuleInternals {
   midiInputs: WebMidi.MIDIInput[];
   connectToDevice: (deviceId: string) => void;
+  handleMIDIMessage: (event: WebMidi.MIDIMessageEvent) => void;
 }
 
 describe('MIDIInputModule lifecycle', () => {
@@ -37,5 +39,31 @@ describe('MIDIInputModule lifecycle', () => {
       'midimessage',
       registeredListener
     );
+  });
+
+  it('holds note-off events while the sustain pedal is down', () => {
+    vi.useFakeTimers();
+    const midiModule = new MIDIInputModule('midi-sustain');
+    const internals = midiModule as unknown as MidiInputModuleInternals;
+    const send = (data: number[]) =>
+      internals.handleMIDIMessage({
+        data,
+      } as unknown as WebMidi.MIDIMessageEvent);
+
+    send([0x90, 60, 100]);
+    send([0xb0, 64, 127]);
+    send([0x80, 60, 0]);
+
+    const held = midiModule.outputPorts.midi.getValue();
+    expect(isMidiFrame(held) && held.activeNotes).toHaveLength(1);
+
+    send([0xb0, 64, 0]);
+    const released = midiModule.outputPorts.midi.getValue();
+    expect(isMidiFrame(released) && released.activeNotes).toHaveLength(0);
+    expect(
+      isMidiFrame(released) &&
+        released.events.some((event) => event.type === 'noteOff')
+    ).toBe(true);
+    midiModule.dispose();
   });
 });

@@ -1,6 +1,6 @@
 import type { ParameterValue } from '@/core/graph/types';
 
-export const TRANSPORT_DOCUMENT_VERSION = 2;
+export const TRANSPORT_DOCUMENT_VERSION = 3;
 export const TRANSPORT_PPQ = 480;
 export const DEFAULT_TRANSPORT_BPM = 120;
 
@@ -24,6 +24,16 @@ export interface TransportLoopRange {
   endTick: number;
 }
 
+export interface MidiControlMapping {
+  id: string;
+  moduleId: string;
+  parameterKey: string;
+  channel: number;
+  controller: number;
+  min: number;
+  max: number;
+}
+
 /**
  * 随工程保存的 Transport 声明数据。
  * 播放位置、播放中和录制中等瞬时状态不进入项目文件。
@@ -36,6 +46,7 @@ export interface TransportDocument {
   loopRange: TransportLoopRange;
   automationMode: AutomationMode;
   automationLanes: AutomationLane[];
+  midiMappings: MidiControlMapping[];
 }
 
 export function createDefaultTransportDocument(): TransportDocument {
@@ -50,5 +61,6 @@ export function createDefaultTransportDocument(): TransportDocument {
     },
     automationMode: 'touch',
     automationLanes: [],
+    midiMappings: [],
   };
 }
