@@ -31,6 +31,10 @@ const EXPECTED_PORTS = {
     inputs: { input: PortType.AUDIO },
     outputs: { output: PortType.AUDIO },
   },
+  masterrecorder: {
+    inputs: { input: PortType.AUDIO },
+    outputs: { output: PortType.AUDIO },
+  },
 };
 
 describe('foundation audio modules', () => {

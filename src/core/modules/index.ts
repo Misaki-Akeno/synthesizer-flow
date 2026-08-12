@@ -19,6 +19,7 @@ import { EnvelopeModule } from './modulation/EnvelopeModule';
 import { MixerModule } from './audio/MixerModule';
 import { NoiseModule } from './audio/NoiseModule';
 import { MasterLimiterModule } from './audio/MasterLimiterModule';
+import { MasterRecorderModule } from './audio/MasterRecorderModule';
 import { ModuleBase, ModuleMetadata } from '../base/ModuleBase';
 
 // 导出所有模块类
@@ -44,6 +45,7 @@ export {
   MixerModule,
   NoiseModule,
   MasterLimiterModule,
+  MasterRecorderModule,
 };
 
 // 定义一个映射表，将模块类型名与对应的模块类关联
@@ -72,6 +74,7 @@ export const moduleClassMap: Record<
   mixer: MixerModule,
   noise: NoiseModule,
   masterlimiter: MasterLimiterModule,
+  masterrecorder: MasterRecorderModule,
 };
 
 // 获取所有模块类的元数据

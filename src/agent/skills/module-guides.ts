@@ -160,6 +160,16 @@ export const MODULE_GUIDES: Record<string, ModuleGuideContent> = {
     cautions: ['限幅器是安全网，不应依赖它修复长期过载的通道增益'],
     tags: ['audio', 'output', 'limiter', 'mastering'],
   },
+  masterrecorder: {
+    useWhen: ['导出主总线演奏或编曲', '快速生成可分享的 WAV 文件'],
+    setup: [
+      '将最终混音接到 input，并把 output 继续接到主限幅器或 Speaker',
+      '设置文件名后点击开始录音',
+      '演奏完成后点击停止并导出',
+    ],
+    cautions: ['录音数据只存在于运行时，停止后请保存浏览器下载的 WAV 文件'],
+    tags: ['audio', 'output', 'recorder', 'wav', 'export'],
+  },
   speaker: {
     useWhen: ['把最终音频送到系统输出', '作为音频链的终点'],
     setup: [
