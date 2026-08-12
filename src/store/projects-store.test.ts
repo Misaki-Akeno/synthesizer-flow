@@ -41,6 +41,7 @@ function resetStores(): void {
     nodes: [],
     edges: [],
     currentProjectId: '',
+    subpatches: [],
     canUndo: false,
     canRedo: false,
     history: {

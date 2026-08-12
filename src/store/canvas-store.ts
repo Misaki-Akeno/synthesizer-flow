@@ -24,7 +24,9 @@ import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 import { serializationManager } from '@/core/services/SerializationManager';
 import type {
   SerializedCanvas,
+  SerializedEdge,
   SerializedModule,
+  SerializedNode,
 } from '@/core/types/SerializationTypes';
 import {
   validateAndParseJson,
@@ -32,7 +34,13 @@ import {
   validateSerializedModule,
 } from '@/core/types/SerializationValidator';
 import { createModuleLogger } from '@/lib/logger';
-import { createNodeId } from '@/core/utils/nodeId';
+import { createNodeId, createSubpatchId } from '@/core/utils/nodeId';
+import {
+  createAutomaticMacroControls,
+  normalizeSubpatchDocuments,
+  SUBPATCH_DOCUMENT_VERSION,
+  type SubpatchDocument,
+} from '@/core/subpatch/types';
 import {
   automationLaneId,
   getAutomationValueAtTick,
@@ -66,6 +74,7 @@ interface FlowState {
   edges: Edge[];
   currentProjectId: string;
   transport: TransportDocument;
+  subpatches: SubpatchDocument[];
   canUndo: boolean;
   canRedo: boolean;
   history: {
@@ -118,12 +127,27 @@ interface FlowState {
   addEdge: (source: string, target: string) => void;
   deleteNode: (nodeId: string) => void;
   renameNode: (nodeId: string, newLabel: string) => void;
+  createSubpatchFromSelection: () => string | null;
+  removeSubpatch: (subpatchId: string) => void;
+  renameSubpatch: (subpatchId: string, name: string) => void;
+  copySelection: () => boolean;
+  pasteSelection: () => string[];
+  duplicateSelection: () => string[];
   exportCanvasToJson: () => string;
   importCanvasFromJson: (jsonString: string, projectId?: string) => boolean;
   getModuleAsJson: (moduleId: string) => unknown | null;
   getModuleAsString: (moduleId: string) => string | null;
   importModuleFromData: (data: unknown) => string | null;
 }
+
+interface CanvasClipboard {
+  nodes: SerializedNode[];
+  edges: SerializedEdge[];
+  subpatches: SubpatchDocument[];
+  pasteCount: number;
+}
+
+let canvasClipboard: CanvasClipboard | null = null;
 
 function validateImportableNodes(nodes: SerializedCanvas['nodes']): boolean {
   const seenIds = new Set<string>();
@@ -217,9 +241,13 @@ function getSingleInputConflicts(
 function createCanvasSnapshot(
   nodes: FlowNode[],
   edges: Edge[],
-  transport: TransportDocument
+  transport: TransportDocument,
+  subpatches: SubpatchDocument[]
 ): SerializedCanvas {
-  return serializationManager.serializeCanvas(nodes, edges, { transport });
+  return serializationManager.serializeCanvas(nodes, edges, {
+    transport,
+    subpatches,
+  });
 }
 
 function cloneCanvasSnapshot(snapshot: SerializedCanvas): SerializedCanvas {
@@ -231,6 +259,7 @@ function comparableSnapshot(snapshot: SerializedCanvas): string {
     nodes: snapshot.nodes,
     edges: snapshot.edges,
     transport: normalizeTransportDocument(snapshot.metadata?.transport),
+    subpatches: snapshot.metadata?.subpatches ?? [],
   });
 }
 
@@ -331,6 +360,10 @@ export const useFlowStore = create<FlowState>((set, get) => {
         normalizeTransportDocument(snapshot.metadata?.transport),
         hydratedNodes
       ),
+      subpatches: normalizeSubpatchDocuments(
+        snapshot.metadata?.subpatches,
+        hydratedNodes
+      ),
     });
   };
 
@@ -339,7 +372,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
     const snapshot = createCanvasSnapshot(
       get().nodes,
       get().edges,
-      get().transport
+      get().transport,
+      get().subpatches
     );
     const { past } = get().history;
     if (
@@ -375,6 +409,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
     edges: [],
     currentProjectId: '',
     transport: createDefaultTransportDocument(),
+    subpatches: [],
     canUndo: false,
     canRedo: false,
     history: { past: [], future: [] },
@@ -641,6 +676,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
           nodes,
           edges: committed.edges,
           transport: pruneTransportAutomation(get().transport, nodes),
+          subpatches: normalizeSubpatchDocuments(get().subpatches, nodes),
         });
       } else {
         set({ nodes });
@@ -726,7 +762,12 @@ export const useFlowStore = create<FlowState>((set, get) => {
       }
       historyTransaction = {
         snapshot: cloneCanvasSnapshot(
-          createCanvasSnapshot(get().nodes, get().edges, get().transport)
+          createCanvasSnapshot(
+            get().nodes,
+            get().edges,
+            get().transport,
+            get().subpatches
+          )
         ),
         depth: 1,
       };
@@ -741,7 +782,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
       const current = createCanvasSnapshot(
         get().nodes,
         get().edges,
-        get().transport
+        get().transport,
+        get().subpatches
       );
       if (comparableSnapshot(initial) === comparableSnapshot(current)) return;
       set(
@@ -769,7 +811,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
       const current = createCanvasSnapshot(
         get().nodes,
         get().edges,
-        get().transport
+        get().transport,
+        get().subpatches
       );
       applyCanvasSnapshot(previous);
       set(
@@ -788,7 +831,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
       const current = createCanvasSnapshot(
         get().nodes,
         get().edges,
-        get().transport
+        get().transport,
+        get().subpatches
       );
       applyCanvasSnapshot(next);
       set(
@@ -934,6 +978,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
         nodes,
         edges: committed.edges,
         transport: pruneTransportAutomation(get().transport, nodes),
+        subpatches: normalizeSubpatchDocuments(get().subpatches, nodes),
       });
     },
 
@@ -949,9 +994,179 @@ export const useFlowStore = create<FlowState>((set, get) => {
       set({ nodes, edges: committed.edges });
     },
 
+    createSubpatchFromSelection: () => {
+      const selectedNodes = get().nodes.filter((node) => node.selected);
+      if (selectedNodes.length < 2) return null;
+
+      recordHistory();
+      const selectedIds = new Set(selectedNodes.map((node) => node.id));
+      const retainedSubpatches = get()
+        .subpatches.map((subpatch) => ({
+          ...subpatch,
+          memberNodeIds: subpatch.memberNodeIds.filter(
+            (nodeId) => !selectedIds.has(nodeId)
+          ),
+          macroControls: subpatch.macroControls.filter(
+            (macro) => !selectedIds.has(macro.moduleId)
+          ),
+        }))
+        .filter((subpatch) => subpatch.memberNodeIds.length >= 2);
+      const id = createSubpatchId(
+        retainedSubpatches.map((subpatch) => subpatch.id)
+      );
+      const subpatch: SubpatchDocument = {
+        version: SUBPATCH_DOCUMENT_VERSION,
+        id,
+        name: `Subpatch ${retainedSubpatches.length + 1}`,
+        memberNodeIds: selectedNodes.map((node) => node.id),
+        macroControls: createAutomaticMacroControls(selectedNodes),
+      };
+      set({
+        subpatches: normalizeSubpatchDocuments(
+          [...retainedSubpatches, subpatch],
+          get().nodes
+        ),
+      });
+      return id;
+    },
+
+    removeSubpatch: (subpatchId) => {
+      if (!get().subpatches.some((subpatch) => subpatch.id === subpatchId)) {
+        return;
+      }
+      recordHistory();
+      set({
+        subpatches: get().subpatches.filter(
+          (subpatch) => subpatch.id !== subpatchId
+        ),
+      });
+    },
+
+    renameSubpatch: (subpatchId, name) => {
+      const nextName = name.trim().slice(0, 80);
+      if (!nextName) return;
+      const subpatch = get().subpatches.find((item) => item.id === subpatchId);
+      if (!subpatch || subpatch.name === nextName) return;
+      recordHistory();
+      set({
+        subpatches: get().subpatches.map((item) =>
+          item.id === subpatchId ? { ...item, name: nextName } : item
+        ),
+      });
+    },
+
+    copySelection: () => {
+      const selectedNodes = get().nodes.filter((node) => node.selected);
+      if (selectedNodes.length === 0) return false;
+      const selectedIds = new Set(selectedNodes.map((node) => node.id));
+      const selectedEdges = get().edges.filter(
+        (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target)
+      );
+      const serialized = serializationManager.serializeCanvas(
+        selectedNodes,
+        selectedEdges
+      );
+      canvasClipboard = {
+        nodes: serialized.nodes,
+        edges: serialized.edges,
+        subpatches: get().subpatches.filter((subpatch) =>
+          subpatch.memberNodeIds.every((nodeId) => selectedIds.has(nodeId))
+        ),
+        pasteCount: 0,
+      };
+      return true;
+    },
+
+    pasteSelection: () => {
+      if (!canvasClipboard || canvasClipboard.nodes.length === 0) return [];
+      recordHistory();
+      canvasClipboard.pasteCount += 1;
+      const offset = 48 * canvasClipboard.pasteCount;
+      const existingIds = new Set(get().nodes.map((node) => node.id));
+      const idMap = new Map<string, string>();
+      canvasClipboard.nodes.forEach((node) => {
+        const id = createNodeId(existingIds);
+        existingIds.add(id);
+        idMap.set(node.id, id);
+      });
+
+      const clipboardCanvas: SerializedCanvas = {
+        version: '2.0',
+        timestamp: Date.now(),
+        nodes: canvasClipboard.nodes.map((node) => ({
+          ...node,
+          id: idMap.get(node.id) as string,
+          position: {
+            x: node.position.x + offset,
+            y: node.position.y + offset,
+          },
+        })),
+        edges: canvasClipboard.edges.map((edge) => ({
+          ...edge,
+          source: idMap.get(edge.source) as string,
+          target: idMap.get(edge.target) as string,
+        })),
+      };
+      const cloned = serializationManager.deserializeCanvas(clipboardCanvas);
+      const nodes = [
+        ...get().nodes.map((node) => ({ ...node, selected: false })),
+        ...cloned.nodes.map((node) => ({ ...node, selected: true })),
+      ];
+      const edges = [
+        ...get().edges,
+        ...cloned.edges.map((edge) => ({
+          ...edge,
+          id: edgeId(
+            edge.source,
+            edge.target,
+            edge.sourceHandle,
+            edge.targetHandle
+          ),
+        })),
+      ];
+      const committed = commitGraph(nodes, edges);
+      const hydratedNodes = hydrateNodesFromRuntime(nodes);
+      adoptGraph(hydratedNodes, committed.edges);
+
+      const existingSubpatchIds = new Set(
+        get().subpatches.map((item) => item.id)
+      );
+      const clonedSubpatches = canvasClipboard.subpatches.map((subpatch) => {
+        const id = createSubpatchId(existingSubpatchIds);
+        existingSubpatchIds.add(id);
+        return {
+          ...subpatch,
+          id,
+          memberNodeIds: subpatch.memberNodeIds.map(
+            (nodeId) => idMap.get(nodeId) as string
+          ),
+          macroControls: subpatch.macroControls.map((macro) => ({
+            ...macro,
+            id: `${idMap.get(macro.moduleId)}:${macro.parameterKey}`,
+            moduleId: idMap.get(macro.moduleId) as string,
+          })),
+        };
+      });
+      set({
+        nodes: hydratedNodes,
+        edges: committed.edges,
+        subpatches: normalizeSubpatchDocuments(
+          [...get().subpatches, ...clonedSubpatches],
+          hydratedNodes
+        ),
+      });
+      return cloned.nodes.map((node) => node.id);
+    },
+
+    duplicateSelection: () => {
+      if (!get().copySelection()) return [];
+      return get().pasteSelection();
+    },
+
     exportCanvasToJson: () =>
       serializationManager.serializeCanvasToJson(get().nodes, get().edges, {
         transport: get().transport,
+        subpatches: get().subpatches,
       }),
 
     importCanvasFromJson: (jsonString, projectId = 'imported-project') => {
@@ -975,6 +1190,10 @@ export const useFlowStore = create<FlowState>((set, get) => {
         edges: committed.edges,
         transport: pruneTransportAutomation(
           normalizeTransportDocument(result.data.metadata?.transport),
+          nodes
+        ),
+        subpatches: normalizeSubpatchDocuments(
+          result.data.metadata?.subpatches,
           nodes
         ),
         currentProjectId: projectId,

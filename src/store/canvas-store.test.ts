@@ -16,6 +16,7 @@ function resetCanvasStore(): void {
     edges: [],
     currentProjectId: '',
     transport: createDefaultTransportDocument(),
+    subpatches: [],
     canUndo: false,
     canRedo: false,
     history: {
@@ -601,6 +602,99 @@ describe('canvas store history', () => {
         channel: 1,
       }),
     ]);
+  });
+
+  it('persists Subpatch macros and restores grouping through history', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Control', { x: 0, y: 0 }, 'number');
+    useFlowStore
+      .getState()
+      .addNode('calculator', 'Math', { x: 260, y: 0 }, 'calculator');
+    useFlowStore.getState().onNodesChange([
+      { type: 'select', id: 'number', selected: true },
+      { type: 'select', id: 'calculator', selected: true },
+    ]);
+
+    const subpatchId = useFlowStore.getState().createSubpatchFromSelection();
+
+    expect(subpatchId).toMatch(/^subpatch_/);
+    expect(useFlowStore.getState().subpatches).toEqual([
+      expect.objectContaining({
+        id: subpatchId,
+        memberNodeIds: ['number', 'calculator'],
+        macroControls: [
+          expect.objectContaining({
+            moduleId: 'number',
+            parameterKey: 'value',
+          }),
+        ],
+      }),
+    ]);
+    const exported = JSON.parse(useFlowStore.getState().exportCanvasToJson());
+    expect(exported.metadata.subpatches[0].id).toBe(subpatchId);
+
+    useFlowStore.getState().undo();
+    expect(useFlowStore.getState().subpatches).toEqual([]);
+    useFlowStore.getState().redo();
+    expect(useFlowStore.getState().subpatches[0].id).toBe(subpatchId);
+
+    useFlowStore.getState().deleteNode('calculator');
+    expect(useFlowStore.getState().subpatches).toEqual([]);
+  });
+
+  it('duplicates a selected graph with internal connections and groups', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Control', { x: 0, y: 0 }, 'number');
+    useFlowStore
+      .getState()
+      .addNode('calculator', 'Math', { x: 260, y: 0 }, 'calculator');
+    useFlowStore.getState().onConnect({
+      source: 'number',
+      target: 'calculator',
+      sourceHandle: 'output',
+      targetHandle: 'a',
+    });
+    useFlowStore.getState().onNodesChange([
+      { type: 'select', id: 'number', selected: true },
+      { type: 'select', id: 'calculator', selected: true },
+    ]);
+    useFlowStore.getState().createSubpatchFromSelection();
+
+    const duplicated = useFlowStore.getState().duplicateSelection();
+
+    expect(duplicated).toHaveLength(2);
+    expect(useFlowStore.getState().nodes).toHaveLength(4);
+    expect(useFlowStore.getState().edges).toHaveLength(2);
+    expect(useFlowStore.getState().subpatches).toHaveLength(2);
+    const duplicatedEdge = useFlowStore
+      .getState()
+      .edges.find((edge) => duplicated.includes(edge.source));
+    expect(duplicatedEdge).toEqual(
+      expect.objectContaining({
+        source: expect.stringMatching(/^node_/),
+        target: expect.stringMatching(/^node_/),
+        sourceHandle: 'output',
+        targetHandle: 'a',
+      })
+    );
+    const duplicatedNodes = duplicated.map(
+      (nodeId) =>
+        useFlowStore.getState().nodes.find((node) => node.id === nodeId)!
+    );
+    expect(duplicatedNodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          position: { x: 48, y: 48 },
+          selected: true,
+        }),
+        expect.objectContaining({
+          position: { x: 308, y: 48 },
+          selected: true,
+        }),
+      ])
+    );
   });
 });
 
