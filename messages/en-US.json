@@ -149,6 +149,22 @@
         "settings": "Application settings"
       }
     },
+    "transport": {
+      "play": "Play",
+      "stop": "Stop and return to start",
+      "record": "Record parameter automation",
+      "stopRecording": "Stop recording",
+      "bpm": "Global tempo",
+      "loop": "Loop playback",
+      "automation": "Automation lanes",
+      "automationTitle": "Parameter automation",
+      "automationDescription": "While recording, knob, slider, and switch changes are written at the current transport position.",
+      "automationEmpty": "No automation yet. Press record, start playback, and move a parameter.",
+      "pointCount": "{count} points",
+      "deleteLane": "Delete automation lane",
+      "clearAll": "Clear all",
+      "done": "Done"
+    },
     "welcome": {
       "title": "Welcome to Synthesizer Flow",
       "description": "Start building your modular audio workflow. Choose an option:",

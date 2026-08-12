@@ -28,6 +28,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/store/canvas-store';
 import { useRuntimeModule } from '@/core/hooks/useRuntimeModule';
+import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
 import { MidiClip, MidiNote } from '@/core/midi/types';
 import {
   clamp,
@@ -129,6 +130,20 @@ export function MidiClipEditorPanel() {
   const updateModuleParameter = useFlowStore(
     (state) => state.updateModuleParameter
   );
+  const transport = useFlowStore((state) => state.transport);
+  const setTransportBpm = useFlowStore((state) => state.setTransportBpm);
+  const setSequencersRunning = useFlowStore(
+    (state) => state.setSequencersRunning
+  );
+  const applyAutomationAtTick = useFlowStore(
+    (state) => state.applyAutomationAtTick
+  );
+  const isTransportPlaying = useTransportRuntimeStore(
+    (state) => state.isPlaying
+  );
+  const transportPositionTicks = useTransportRuntimeStore(
+    (state) => state.positionTicks
+  );
   const rollScrollRef = useRef<HTMLDivElement | null>(null);
   const rollRef = useRef<HTMLDivElement | null>(null);
   const laneRef = useRef<HTMLDivElement | null>(null);
@@ -161,11 +176,13 @@ export function MidiClipEditorPanel() {
     : (snapOptions[2]?.value ?? Math.round(clip.ppq / 4));
   const selectedNote =
     clip.notes.find((note) => note.id === selectedNoteId) ?? null;
-  const bpmValue = snapshot?.parameters.bpm;
-  const runningValue = snapshot?.parameters.running;
-  const bpm =
-    typeof bpmValue === 'number' && Number.isFinite(bpmValue) ? bpmValue : 120;
-  const isRunning = typeof runningValue === 'boolean' ? runningValue : false;
+  const bpm = transport.bpm;
+  const isRunning = isTransportPlaying;
+  const playheadTick =
+    lengthTicks > 0 ? transportPositionTicks % lengthTicks : 0;
+  const playheadX =
+    KEYBOARD_WIDTH +
+    (lengthTicks > 0 ? playheadTick / lengthTicks : 0) * rollWidth;
 
   const normalizeEditorClip = useCallback((nextClip: MidiClip) => {
     return normalizeMidiClip({
@@ -581,7 +598,17 @@ export function MidiClipEditorPanel() {
         <ToolButton
           active={isRunning}
           label={isRunning ? t('stop') : t('play')}
-          onClick={() => updateModuleParameter(moduleId, 'running', !isRunning)}
+          onClick={() => {
+            const runtime = useTransportRuntimeStore.getState();
+            if (runtime.isPlaying) {
+              runtime.stop();
+              setSequencersRunning(false);
+              applyAutomationAtTick(0);
+            } else {
+              runtime.play();
+              setSequencersRunning(true);
+            }
+          }}
         >
           {isRunning ? (
             <Square className="h-4 w-4" />
@@ -595,7 +622,7 @@ export function MidiClipEditorPanel() {
           value={bpm}
           min={20}
           max={320}
-          onChange={(value) => updateModuleParameter(moduleId, 'bpm', value)}
+          onChange={setTransportBpm}
         />
         <NumberField
           label={t('bars')}
@@ -657,6 +684,17 @@ export function MidiClipEditorPanel() {
               height: TIMELINE_HEIGHT + gridHeight,
             }}
           >
+            <div
+              className={cn(
+                'pointer-events-none absolute bottom-0 top-0 z-30 w-px bg-amber-400/90',
+                'shadow-[0_0_8px_rgba(251,191,36,0.65)] transition-opacity',
+                isRunning ? 'opacity-100' : 'opacity-35'
+              )}
+              style={{ left: playheadX }}
+              aria-hidden="true"
+            >
+              <div className="absolute -left-[3px] top-0 h-2 w-[7px] rounded-b-sm bg-amber-400" />
+            </div>
             <div
               className="sticky top-0 z-30 border-b bg-card"
               style={{

@@ -13,7 +13,11 @@ import {
 import { PortType } from '@/core/base/ModuleBase';
 import { createAudioGraphDocument } from '@/core/graph/document';
 import { getAudioConnectionKey } from '@/core/graph/reconciler';
-import { connectionSpecFromEdge, type FlowNode } from '@/core/graph/types';
+import {
+  connectionSpecFromEdge,
+  type FlowNode,
+  type ParameterValue,
+} from '@/core/graph/types';
 import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
 import { audioGraphController } from '@/core/runtime/AudioGraphController';
 import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
@@ -29,14 +33,32 @@ import {
 } from '@/core/types/SerializationValidator';
 import { createModuleLogger } from '@/lib/logger';
 import { createNodeId } from '@/core/utils/nodeId';
+import {
+  getAutomationValueAtTick,
+  normalizeTransportDocument,
+  removeAutomationLane,
+  upsertAutomationPoint,
+} from '@/core/transport/automation';
+import {
+  createDefaultTransportDocument,
+  type TransportDocument,
+} from '@/core/transport/types';
+import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
 
 const logger = createModuleLogger('FlowStore');
 const MAX_HISTORY_SIZE = 100;
+const AUTOMATION_IGNORED_PARAMETERS = new Set([
+  'bpm',
+  'clip',
+  'loop',
+  'running',
+]);
 
 interface FlowState {
   nodes: FlowNode[];
   edges: Edge[];
   currentProjectId: string;
+  transport: TransportDocument;
   canUndo: boolean;
   canRedo: boolean;
   history: {
@@ -44,6 +66,12 @@ interface FlowState {
     future: SerializedCanvas[];
   };
   setCurrentProjectId: (projectId: string) => void;
+  setTransportBpm: (bpm: number) => void;
+  setTransportLoopEnabled: (enabled: boolean) => void;
+  setSequencersRunning: (running: boolean) => void;
+  applyAutomationAtTick: (tick: number) => void;
+  clearAutomationLane: (laneId: string) => void;
+  clearAllAutomation: () => void;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -170,9 +198,10 @@ function getSingleInputConflicts(
 
 function createCanvasSnapshot(
   nodes: FlowNode[],
-  edges: Edge[]
+  edges: Edge[],
+  transport: TransportDocument
 ): SerializedCanvas {
-  return serializationManager.serializeCanvas(nodes, edges);
+  return serializationManager.serializeCanvas(nodes, edges, { transport });
 }
 
 function cloneCanvasSnapshot(snapshot: SerializedCanvas): SerializedCanvas {
@@ -180,7 +209,11 @@ function cloneCanvasSnapshot(snapshot: SerializedCanvas): SerializedCanvas {
 }
 
 function comparableSnapshot(snapshot: SerializedCanvas): string {
-  return JSON.stringify({ nodes: snapshot.nodes, edges: snapshot.edges });
+  return JSON.stringify({
+    nodes: snapshot.nodes,
+    edges: snapshot.edges,
+    transport: normalizeTransportDocument(snapshot.metadata?.transport),
+  });
 }
 
 function historyState(past: SerializedCanvas[], future: SerializedCanvas[]) {
@@ -208,6 +241,19 @@ function hydrateNodesFromRuntime(nodes: FlowNode[]): FlowNode[] {
       },
     };
   });
+}
+
+function pruneTransportAutomation(
+  transport: TransportDocument,
+  nodes: FlowNode[]
+): TransportDocument {
+  const moduleIds = new Set(nodes.map((node) => node.id));
+  return {
+    ...transport,
+    automationLanes: transport.automationLanes.filter((lane) =>
+      moduleIds.has(lane.moduleId)
+    ),
+  };
 }
 
 export const useFlowStore = create<FlowState>((set, get) => {
@@ -255,12 +301,23 @@ export const useFlowStore = create<FlowState>((set, get) => {
     const committed = commitGraph(deserialized.nodes, candidateEdges);
     const hydratedNodes = hydrateNodesFromRuntime(committed.nodes);
     adoptGraph(hydratedNodes, committed.edges);
-    set({ nodes: hydratedNodes, edges: committed.edges });
+    set({
+      nodes: hydratedNodes,
+      edges: committed.edges,
+      transport: pruneTransportAutomation(
+        normalizeTransportDocument(snapshot.metadata?.transport),
+        hydratedNodes
+      ),
+    });
   };
 
   const recordHistory = () => {
     if (historyTransaction) return;
-    const snapshot = createCanvasSnapshot(get().nodes, get().edges);
+    const snapshot = createCanvasSnapshot(
+      get().nodes,
+      get().edges,
+      get().transport
+    );
     const { past } = get().history;
     if (
       past[past.length - 1] &&
@@ -294,11 +351,153 @@ export const useFlowStore = create<FlowState>((set, get) => {
     nodes: [],
     edges: [],
     currentProjectId: '',
+    transport: createDefaultTransportDocument(),
     canUndo: false,
     canRedo: false,
     history: { past: [], future: [] },
 
     setCurrentProjectId: (currentProjectId) => set({ currentProjectId }),
+
+    setTransportBpm: (bpm) => {
+      const nextBpm = Math.min(320, Math.max(20, Math.round(bpm)));
+      if (get().transport.bpm === nextBpm) return;
+      recordHistory();
+      const nodes = get().nodes.map((node) =>
+        node.data.type === 'sequencer'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                parameters: {
+                  ...node.data.parameters,
+                  bpm: nextBpm,
+                },
+              },
+            }
+          : node
+      );
+      const committed = commitGraph(nodes, get().edges);
+      set({
+        nodes,
+        edges: committed.edges,
+        transport: { ...get().transport, bpm: nextBpm },
+      });
+    },
+
+    setTransportLoopEnabled: (loopEnabled) => {
+      if (get().transport.loopEnabled === loopEnabled) return;
+      recordHistory();
+      const nodes = get().nodes.map((node) =>
+        node.data.type === 'sequencer'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                parameters: {
+                  ...node.data.parameters,
+                  loop: loopEnabled,
+                },
+              },
+            }
+          : node
+      );
+      const committed = commitGraph(nodes, get().edges);
+      set({
+        nodes,
+        edges: committed.edges,
+        transport: { ...get().transport, loopEnabled },
+      });
+    },
+
+    setSequencersRunning: (running) => {
+      let changed = false;
+      const { bpm, loopEnabled } = get().transport;
+      const nodes = get().nodes.map((node) => {
+        if (node.data.type !== 'sequencer') return node;
+        const parameters = node.data.parameters;
+        if (
+          parameters.running === running &&
+          parameters.bpm === bpm &&
+          parameters.loop === loopEnabled
+        ) {
+          return node;
+        }
+        changed = true;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            parameters: {
+              ...parameters,
+              running,
+              bpm,
+              loop: loopEnabled,
+            },
+          },
+        };
+      });
+      if (!changed) return;
+      const committed = commitGraph(nodes, get().edges);
+      set({ nodes, edges: committed.edges });
+    },
+
+    applyAutomationAtTick: (tick) => {
+      const { automationLanes } = get().transport;
+      if (automationLanes.length === 0) return;
+      const updates = new Map<string, Map<string, ParameterValue>>();
+      automationLanes.forEach((lane) => {
+        const value = getAutomationValueAtTick(lane, tick);
+        if (value === undefined) return;
+        const snapshot = audioGraphRuntime.getModuleSnapshot(lane.moduleId);
+        const meta = snapshot?.parameterMeta[lane.parameterKey];
+        if (!meta) return;
+        let nextValue = value;
+        if (typeof value === 'number') {
+          nextValue = Math.min(
+            meta.max ?? Number.POSITIVE_INFINITY,
+            Math.max(meta.min ?? Number.NEGATIVE_INFINITY, value)
+          );
+        }
+        const moduleUpdates = updates.get(lane.moduleId) ?? new Map();
+        moduleUpdates.set(lane.parameterKey, nextValue);
+        updates.set(lane.moduleId, moduleUpdates);
+      });
+      if (updates.size === 0) return;
+
+      let changed = false;
+      const nodes = get().nodes.map((node) => {
+        const moduleUpdates = updates.get(node.id);
+        if (!moduleUpdates) return node;
+        const parameters = { ...node.data.parameters };
+        moduleUpdates.forEach((value, key) => {
+          if (parameters[key] === value) return;
+          parameters[key] = value;
+          changed = true;
+        });
+        return parameters === node.data.parameters
+          ? node
+          : { ...node, data: { ...node.data, parameters } };
+      });
+      if (!changed) return;
+      const committed = commitGraph(nodes, get().edges);
+      set({ nodes, edges: committed.edges });
+    },
+
+    clearAutomationLane: (laneId) => {
+      if (!get().transport.automationLanes.some((lane) => lane.id === laneId)) {
+        return;
+      }
+      recordHistory();
+      set({ transport: removeAutomationLane(get().transport, laneId) });
+    },
+
+    clearAllAutomation: () => {
+      if (get().transport.automationLanes.length === 0) return;
+      recordHistory();
+      set({
+        transport: { ...get().transport, automationLanes: [] },
+      });
+    },
 
     onNodesChange: (changes) => {
       if (shouldRecordNodeChanges(changes)) recordHistory();
@@ -317,7 +516,11 @@ export const useFlowStore = create<FlowState>((set, get) => {
 
       if (removedIds.size) {
         const committed = commitGraph(nodes, edges);
-        set({ nodes, edges: committed.edges });
+        set({
+          nodes,
+          edges: committed.edges,
+          transport: pruneTransportAutomation(get().transport, nodes),
+        });
       } else {
         set({ nodes });
       }
@@ -402,7 +605,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
       }
       historyTransaction = {
         snapshot: cloneCanvasSnapshot(
-          createCanvasSnapshot(get().nodes, get().edges)
+          createCanvasSnapshot(get().nodes, get().edges, get().transport)
         ),
         depth: 1,
       };
@@ -414,7 +617,11 @@ export const useFlowStore = create<FlowState>((set, get) => {
       if (historyTransaction.depth > 0) return;
       const initial = historyTransaction.snapshot;
       historyTransaction = null;
-      const current = createCanvasSnapshot(get().nodes, get().edges);
+      const current = createCanvasSnapshot(
+        get().nodes,
+        get().edges,
+        get().transport
+      );
       if (comparableSnapshot(initial) === comparableSnapshot(current)) return;
       set(
         historyState(
@@ -438,7 +645,11 @@ export const useFlowStore = create<FlowState>((set, get) => {
       const { past, future } = get().history;
       const previous = past[past.length - 1];
       if (!previous) return;
-      const current = createCanvasSnapshot(get().nodes, get().edges);
+      const current = createCanvasSnapshot(
+        get().nodes,
+        get().edges,
+        get().transport
+      );
       applyCanvasSnapshot(previous);
       set(
         historyState(
@@ -453,7 +664,11 @@ export const useFlowStore = create<FlowState>((set, get) => {
       const { past, future } = get().history;
       const next = future[0];
       if (!next) return;
-      const current = createCanvasSnapshot(get().nodes, get().edges);
+      const current = createCanvasSnapshot(
+        get().nodes,
+        get().edges,
+        get().transport
+      );
       applyCanvasSnapshot(next);
       set(
         historyState(
@@ -502,7 +717,20 @@ export const useFlowStore = create<FlowState>((set, get) => {
         );
         adoptGraph(nodes, committed.edges);
       }
-      set({ nodes, edges: committed.edges });
+      let transport = get().transport;
+      if (
+        useTransportRuntimeStore.getState().isRecording &&
+        !AUTOMATION_IGNORED_PARAMETERS.has(paramKey)
+      ) {
+        transport = upsertAutomationPoint(
+          transport,
+          nodeId,
+          paramKey,
+          (runtimeValue ?? value) as ParameterValue,
+          useTransportRuntimeStore.getState().positionTicks
+        );
+      }
+      set({ nodes, edges: committed.edges, transport });
     },
 
     toggleModuleEnabled: (nodeId) => {
@@ -566,7 +794,11 @@ export const useFlowStore = create<FlowState>((set, get) => {
         (edge) => edge.source !== nodeId && edge.target !== nodeId
       );
       const committed = commitGraph(nodes, edges);
-      set({ nodes, edges: committed.edges });
+      set({
+        nodes,
+        edges: committed.edges,
+        transport: pruneTransportAutomation(get().transport, nodes),
+      });
     },
 
     renameNode: (nodeId, newLabel) => {
@@ -582,7 +814,9 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
 
     exportCanvasToJson: () =>
-      serializationManager.serializeCanvasToJson(get().nodes, get().edges),
+      serializationManager.serializeCanvasToJson(get().nodes, get().edges, {
+        transport: get().transport,
+      }),
 
     importCanvasFromJson: (jsonString, projectId = 'imported-project') => {
       const result = validateAndParseJson<SerializedCanvas>(
@@ -593,6 +827,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
       if (!validateImportableNodes(result.data.nodes)) return false;
 
       historyTransaction = null;
+      useTransportRuntimeStore.getState().stop();
       const deserialized = serializationManager.deserializeCanvas(result.data);
       ensureDefinitions(deserialized.nodes);
       const edges = filterBindableEdges(deserialized.nodes, deserialized.edges);
@@ -602,6 +837,10 @@ export const useFlowStore = create<FlowState>((set, get) => {
       set({
         nodes,
         edges: committed.edges,
+        transport: pruneTransportAutomation(
+          normalizeTransportDocument(result.data.metadata?.transport),
+          nodes
+        ),
         currentProjectId: projectId,
         ...historyState([], []),
       });

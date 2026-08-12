@@ -60,6 +60,15 @@ export class SequencerModule extends AudioModuleBase {
           hide: true,
         },
       },
+      loop: {
+        type: ParameterType.BOOLEAN,
+        value: true,
+        uiOptions: {
+          label: '循环',
+          describe: '片段播放到末尾后重新开始',
+          hide: true,
+        },
+      },
       clip: {
         type: ParameterType.STRING,
         value: JSON.stringify(normalizeMidiClip(undefined)),
@@ -129,6 +138,7 @@ export class SequencerModule extends AudioModuleBase {
     const schedulingSubscription = combineLatest([
       this.parameters['bpm'],
       this.parameters['running'],
+      this.parameters['loop'],
       this.parameters['clip'],
       this.parameters['transpose'],
     ]).subscribe(() => this.recreateSequence());
@@ -170,7 +180,7 @@ export class SequencerModule extends AudioModuleBase {
       scheduledEvents.map((frame) => [frame.timeSeconds, frame])
     );
 
-    this.sequencePart.loop = true;
+    this.sequencePart.loop = this.getParameterValue('loop') as boolean;
     this.sequencePart.loopEnd = this.ticksToSeconds(
       getClipLengthTicks(clip),
       clip

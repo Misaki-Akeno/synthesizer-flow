@@ -4,6 +4,8 @@ import { moduleInitManager } from '@/core/services/ModuleInitManager';
 import { audioGraphController } from '@/core/runtime/AudioGraphController';
 import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 import { parseMidiClipJson } from '@/core/midi/utils';
+import { createDefaultTransportDocument } from '@/core/transport/types';
+import { useTransportRuntimeStore } from './transport-runtime-store';
 import { useFlowStore } from './canvas-store';
 
 function resetCanvasStore(): void {
@@ -13,12 +15,19 @@ function resetCanvasStore(): void {
     nodes: [],
     edges: [],
     currentProjectId: '',
+    transport: createDefaultTransportDocument(),
     canUndo: false,
     canRedo: false,
     history: {
       past: [],
       future: [],
     },
+  });
+  useTransportRuntimeStore.setState({
+    isPlaying: false,
+    isRecording: false,
+    positionTicks: 0,
+    lastFrameMs: null,
   });
 }
 
@@ -508,6 +517,37 @@ describe('canvas store history', () => {
     expect(imported).toBe(true);
     expect(useFlowStore.getState().canUndo).toBe(false);
     expect(useFlowStore.getState().canRedo).toBe(false);
+  });
+
+  it('persists transport settings and automation in canvas metadata', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    useFlowStore.getState().setTransportBpm(96);
+    useTransportRuntimeStore.setState({
+      isRecording: true,
+      positionTicks: 240,
+    });
+    useFlowStore.getState().updateModuleParameter('number', 'value', 42);
+
+    const exported = useFlowStore.getState().exportCanvasToJson();
+    const parsed = JSON.parse(exported);
+    expect(parsed.metadata.transport).toMatchObject({
+      bpm: 96,
+      automationLanes: [
+        {
+          id: 'number:value',
+          moduleId: 'number',
+          parameterKey: 'value',
+          points: [{ tick: 240, value: 42 }],
+        },
+      ],
+    });
+
+    resetCanvasStore();
+    expect(useFlowStore.getState().importCanvasFromJson(exported)).toBe(true);
+    expect(useFlowStore.getState().transport.bpm).toBe(96);
+    expect(useFlowStore.getState().transport.automationLanes).toHaveLength(1);
   });
 });
 

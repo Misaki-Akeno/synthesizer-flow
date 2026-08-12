@@ -48,6 +48,27 @@ test('可以从 MIDI Clip 打开底部编辑器', async ({ page }) => {
   await expect(page.getByText('MIDI 编辑器', { exact: true })).toBeVisible();
 });
 
+test('全局 Transport 可以播放、停止并打开自动化面板', async ({ page }) => {
+  await openBlankWorkbench(page);
+
+  const transport = page.getByTestId('global-transport');
+  await expect(transport).toBeVisible();
+  await transport.getByRole('button', { name: '播放', exact: true }).click();
+  await expect(
+    transport.getByRole('button', { name: '停止并回到开头', exact: true })
+  ).toBeVisible();
+
+  await transport
+    .getByRole('button', { name: '停止并回到开头', exact: true })
+    .click();
+  await expect(
+    transport.getByRole('button', { name: '播放', exact: true })
+  ).toBeVisible();
+
+  await transport.getByRole('button', { name: '自动化通道' }).click();
+  await expect(page.getByRole('dialog', { name: '参数自动化' })).toBeVisible();
+});
+
 test('模块浏览器可以滚动到列表底部并添加模块', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await openBlankWorkbench(page);

@@ -23,6 +23,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
 import { getModuleDescription } from '@/core/modules';
+import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
+import { cn } from '@/lib/utils';
 
 interface DefaultNodeProps {
   data: FlowNodeData;
@@ -67,6 +69,9 @@ const DefaultNode = ({ data, id, selected }: DefaultNodeProps) => {
   );
   const commitHistoryTransaction = useFlowStore(
     (state) => state.commitHistoryTransaction
+  );
+  const isTransportPlaying = useTransportRuntimeStore(
+    (state) => state.isPlaying
   );
 
   const paramValues = snapshot?.parameters ?? data.parameters;
@@ -173,9 +178,13 @@ const DefaultNode = ({ data, id, selected }: DefaultNodeProps) => {
     <div
       data-testid={`module-node-${id}`}
       data-module-type={data.type}
-      className={`node-container relative min-w-[180px] rounded-md border bg-white p-3 shadow-sm transition-opacity ${
-        !moduleEnabled ? 'opacity-50' : ''
-      }`}
+      className={cn(
+        'node-container relative min-w-[180px] rounded-md border bg-white p-3 shadow-sm transition-[opacity,box-shadow,border-color]',
+        !moduleEnabled && 'opacity-50',
+        data.type === 'sequencer' &&
+          isTransportPlaying &&
+          'border-amber-400/80 shadow-[0_0_0_1px_rgba(251,191,36,0.2),0_8px_26px_rgba(245,158,11,0.16)]'
+      )}
     >
       <div className="node-drag-handle mb-2 flex cursor-move items-center justify-between border-b pb-1 text-sm font-medium">
         <TooltipProvider>

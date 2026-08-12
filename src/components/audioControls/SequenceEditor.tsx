@@ -10,6 +10,8 @@ import {
 } from '@/core/midi/utils';
 import { Play, Square, PanelBottomOpen, Music2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useFlowStore } from '@/store/canvas-store';
+import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
 
 interface SequenceEditorProps {
   moduleId?: string;
@@ -23,7 +25,6 @@ interface SequenceEditorProps {
 const SequenceEditor: React.FC<SequenceEditorProps> = ({
   moduleId,
   paramValues,
-  onParamChange,
   clipParam = 'clip',
   bpmParam,
   runningParam,
@@ -31,8 +32,23 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const serializedClip = paramValues[clipParam] as string;
-  const clip = useMemo(() => parseMidiClipJson(serializedClip || ''), [serializedClip]);
-  const isRunning = runningParam ? (paramValues[runningParam] as boolean) : false;
+  const clip = useMemo(
+    () => parseMidiClipJson(serializedClip || ''),
+    [serializedClip]
+  );
+  const transport = useFlowStore((state) => state.transport);
+  const setTransportBpm = useFlowStore((state) => state.setTransportBpm);
+  const setSequencersRunning = useFlowStore(
+    (state) => state.setSequencersRunning
+  );
+  const applyAutomationAtTick = useFlowStore(
+    (state) => state.applyAutomationAtTick
+  );
+  const isRunning = useTransportRuntimeStore((state) => state.isPlaying);
+  const positionTicks = useTransportRuntimeStore((state) => state.positionTicks);
+  const clipLengthTicks = Math.max(1, getClipLengthTicks(clip));
+  const playheadPercent =
+    ((positionTicks % clipLengthTicks) / clipLengthTicks) * 100;
 
   const pitchRange = useMemo(() => {
     if (clip.notes.length === 0) {
@@ -57,8 +73,14 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
   };
 
   const toggleRunning = () => {
-    if (runningParam) {
-      onParamChange(runningParam, !isRunning);
+    const runtime = useTransportRuntimeStore.getState();
+    if (runtime.isPlaying) {
+      runtime.stop();
+      setSequencersRunning(false);
+      applyAutomationAtTick(0);
+    } else {
+      runtime.play();
+      setSequencersRunning(true);
     }
   };
 
@@ -93,10 +115,16 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
         <div className="flex items-center gap-2 border-b px-2 py-1.5">
           <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">BPM</span>
           <Input
+            key={transport.bpm}
             type="number"
             className="h-6 w-16 px-2 text-xs"
-            value={(paramValues[bpmParam] as number) ?? ''}
-            onChange={(event) => onParamChange(bpmParam, Number.parseFloat(event.target.value))}
+            defaultValue={transport.bpm}
+            onBlur={(event) =>
+              setTransportBpm(Number.parseFloat(event.target.value))
+            }
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+            }}
           />
           <span className="ml-auto text-[10px] text-muted-foreground">
             {clip.bars} bar{clip.bars === 1 ? '' : 's'} / {clip.notes.length} notes
@@ -105,8 +133,12 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
       )}
 
       <div className="relative h-20 bg-[linear-gradient(90deg,color-mix(in_oklab,var(--chart-5)_18%,transparent)_1px,transparent_1px),linear-gradient(0deg,color-mix(in_oklab,var(--border)_70%,transparent)_1px,transparent_1px)] bg-[length:25%_100%,100%_20%]">
+        <div
+          className={`pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)] ${isRunning ? 'opacity-100' : 'opacity-30'}`}
+          style={{ left: `${playheadPercent}%` }}
+        />
         {clip.notes.map((note) => {
-          const lengthTicks = Math.max(1, getClipLengthTicks(clip));
+          const lengthTicks = clipLengthTicks;
           const top =
             pitchRange.max === pitchRange.min
               ? 34

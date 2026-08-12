@@ -170,6 +170,24 @@ Parameter changes should reconcile to one `setParameter` patch; topology changes
 should reconcile to the smallest ordered disconnect/create/update/connect patch
 set.
 
+### Global Transport and Automation
+
+The workbench uses one project-level Transport rather than independent playback
+clocks per sequencer:
+
+- `src/core/transport/`: pure persisted transport schema and automation helpers
+- `src/store/transport-runtime-store.ts`: transient playback position, play, and
+  record state; these values must not be serialized
+- `useFlowStore.transport`: persisted BPM, time signature, loop mode, and
+  automation lanes, stored under `SerializedCanvas.metadata.transport`
+- `src/components/workbench/TransportBar.tsx`: the primary transport UI;
+  compact MIDI and piano-roll controls mirror the same global state
+
+Automation playback must update parameters through `useFlowStore` so changes
+still reconcile into minimal graph patches. Do not write playback position into
+React Flow nodes, project history, or project JSON. New transport metadata must
+remain optional so older project files continue to import with default values.
+
 ### Base Classes
 
 **ModuleBase** (`src/core/base/ModuleBase.ts`):

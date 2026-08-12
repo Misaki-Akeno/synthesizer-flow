@@ -116,7 +116,11 @@ export class SerializationManager {
       : null;
   }
 
-  serializeCanvas(nodes: FlowNode[], edges: Edge[]): SerializedCanvas {
+  serializeCanvas(
+    nodes: FlowNode[],
+    edges: Edge[],
+    metadata?: Record<string, unknown>
+  ): SerializedCanvas {
     const serializedNodes: SerializedNode[] = nodes.map((node) => ({
       id: node.id,
       position: { x: node.position.x, y: node.position.y },
@@ -139,11 +143,16 @@ export class SerializationManager {
       timestamp: Date.now(),
       nodes: serializedNodes,
       edges: serializedEdges,
+      metadata,
     };
   }
 
-  serializeCanvasToJson(nodes: FlowNode[], edges: Edge[]): string {
-    return JSON.stringify(this.serializeCanvas(nodes, edges));
+  serializeCanvasToJson(
+    nodes: FlowNode[],
+    edges: Edge[],
+    metadata?: Record<string, unknown>
+  ): string {
+    return JSON.stringify(this.serializeCanvas(nodes, edges, metadata));
   }
 
   deserializeCanvas(canvasData: SerializedCanvas): {

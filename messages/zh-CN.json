@@ -149,6 +149,22 @@
         "settings": "应用程序设置"
       }
     },
+    "transport": {
+      "play": "播放",
+      "stop": "停止并回到开头",
+      "record": "录制参数自动化",
+      "stopRecording": "停止录制",
+      "bpm": "全局速度",
+      "loop": "循环播放",
+      "automation": "自动化通道",
+      "automationTitle": "参数自动化",
+      "automationDescription": "录制开启时，旋钮、滑块和开关的变化会写入当前时间位置。",
+      "automationEmpty": "还没有自动化。点击录制，然后在播放时调节一个参数。",
+      "pointCount": "{count} 个关键点",
+      "deleteLane": "删除自动化通道",
+      "clearAll": "清除全部",
+      "done": "完成"
+    },
     "welcome": {
       "title": "欢迎来到 Synthesizer Flow",
       "description": "开始你的模块化音频合成之旅。请选择一个操作：",
