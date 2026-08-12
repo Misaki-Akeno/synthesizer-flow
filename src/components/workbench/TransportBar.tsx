@@ -37,6 +37,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
 import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
+import { ensureAudioContextReady } from '@/core/audio/audio-context';
 import { getClipLengthTicks, parseMidiClipJson } from '@/core/midi/utils';
 import { TRANSPORT_PPQ } from '@/core/transport/types';
 import { cn } from '@/lib/utils';
@@ -168,6 +169,9 @@ export function TransportBar() {
   ]);
 
   const togglePlayback = () => {
+    void ensureAudioContextReady().then((ready) => {
+      if (ready) audioGraphRuntime.activateOutputModules();
+    });
     const runtime = useTransportRuntimeStore.getState();
     if (runtime.isPlaying) {
       runtime.pause();
@@ -192,6 +196,9 @@ export function TransportBar() {
   };
 
   const toggleRecording = () => {
+    void ensureAudioContextReady().then((ready) => {
+      if (ready) audioGraphRuntime.activateOutputModules();
+    });
     const runtime = useTransportRuntimeStore.getState();
     if (transport.automationMode === 'read') return;
     const nextRecording = !runtime.isRecording;

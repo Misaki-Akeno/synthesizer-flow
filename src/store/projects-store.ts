@@ -17,6 +17,8 @@ import {
 } from '@/actions/project.actions';
 import { nanoid } from 'nanoid';
 import { getIndexedDbStorage } from './persist-storage';
+import { ensureAudioContextReady } from '@/core/audio/audio-context';
+import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 
 // 创建项目管理器专用日志记录器
 const logger = createModuleLogger('ProjectManager');
@@ -388,6 +390,8 @@ export const useProjectStore = create<ProjectPersistState>()(
       },
 
       loadProject: async (projectOrId: ProjectConfig | string) => {
+        // 如果调用来自点击，必须在第一个异步数据库请求前消费用户手势。
+        const audioReady = ensureAudioContextReady();
         try {
           let projectConfig: ProjectConfig | null = null;
 
@@ -495,6 +499,9 @@ export const useProjectStore = create<ProjectPersistState>()(
                 data: jsonData, // 更新为完整数据
               },
             });
+            if (await audioReady) {
+              audioGraphRuntime.activateOutputModules();
+            }
             logger.success(`项目"${projectConfig.name}"加载成功`);
           } else {
             logger.error(`项目"${projectConfig.name}"加载失败`);

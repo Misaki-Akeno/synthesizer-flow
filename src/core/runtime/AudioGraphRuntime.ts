@@ -112,6 +112,14 @@ export class AudioGraphRuntime {
     transportService.setBpm(bpm);
   }
 
+  /** AudioContext 解锁后立即刷新输出模块，无需再点节点内的启动按钮。 */
+  activateOutputModules(): void {
+    this.snapshots.forEach((snapshot) => {
+      if (snapshot.type !== 'speaker') return;
+      this.invokeAction(snapshot.id, 'onClick');
+    });
+  }
+
   getModuleSnapshot(moduleId: string): RuntimeModuleSnapshot | undefined {
     return this.snapshots.get(moduleId);
   }
