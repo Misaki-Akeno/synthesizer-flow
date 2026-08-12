@@ -28,6 +28,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/store/canvas-store';
 import { useRuntimeModule } from '@/core/hooks/useRuntimeModule';
+import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
 import { MidiClip, MidiNote } from '@/core/midi/types';
 import {
@@ -42,11 +43,11 @@ import {
   Copy,
   Eraser,
   MousePointer2,
+  Pause,
   Pencil,
   Piano,
   Play,
   Scissors,
-  Square,
   Trash2,
 } from 'lucide-react';
 
@@ -134,9 +135,6 @@ export function MidiClipEditorPanel() {
   const setTransportBpm = useFlowStore((state) => state.setTransportBpm);
   const setSequencersRunning = useFlowStore(
     (state) => state.setSequencersRunning
-  );
-  const applyAutomationAtTick = useFlowStore(
-    (state) => state.applyAutomationAtTick
   );
   const isTransportPlaying = useTransportRuntimeStore(
     (state) => state.isPlaying
@@ -601,17 +599,17 @@ export function MidiClipEditorPanel() {
           onClick={() => {
             const runtime = useTransportRuntimeStore.getState();
             if (runtime.isPlaying) {
-              runtime.stop();
-              setSequencersRunning(false);
-              applyAutomationAtTick(0);
+              runtime.pause();
+              audioGraphRuntime.pauseTransport();
             } else {
               runtime.play();
-              setSequencersRunning(true);
+              if (runtime.hasStarted) audioGraphRuntime.resumeTransport();
+              else setSequencersRunning(true);
             }
           }}
         >
           {isRunning ? (
-            <Square className="h-4 w-4" />
+            <Pause className="h-4 w-4" />
           ) : (
             <Play className="h-4 w-4" />
           )}

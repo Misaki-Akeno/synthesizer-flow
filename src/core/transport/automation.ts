@@ -2,6 +2,7 @@ import type { ParameterValue } from '@/core/graph/types';
 import {
   createDefaultTransportDocument,
   TRANSPORT_DOCUMENT_VERSION,
+  TRANSPORT_PPQ,
   type AutomationLane,
   type AutomationPoint,
   type TransportDocument,
@@ -61,6 +62,18 @@ export function normalizeTransportDocument(value: unknown): TransportDocument {
   const candidate = value as Partial<TransportDocument>;
   const numerator = candidate.timeSignature?.[0];
   const denominator = candidate.timeSignature?.[1];
+  const loopStart = candidate.loopRange?.startTick;
+  const loopEnd = candidate.loopRange?.endTick;
+  const normalizedLoopStart = Number.isFinite(loopStart)
+    ? Math.max(0, Math.round(loopStart as number))
+    : fallback.loopRange.startTick;
+  const normalizedLoopEnd = Number.isFinite(loopEnd)
+    ? Math.max(
+        normalizedLoopStart + TRANSPORT_PPQ,
+        Math.round(loopEnd as number)
+      )
+    : fallback.loopRange.endTick;
+  const automationMode = candidate.automationMode;
   return {
     version: TRANSPORT_DOCUMENT_VERSION,
     bpm: Number.isFinite(candidate.bpm)
@@ -77,11 +90,69 @@ export function normalizeTransportDocument(value: unknown): TransportDocument {
       typeof candidate.loopEnabled === 'boolean'
         ? candidate.loopEnabled
         : fallback.loopEnabled,
+    loopRange: {
+      startTick: normalizedLoopStart,
+      endTick: normalizedLoopEnd,
+    },
+    automationMode:
+      automationMode === 'read' ||
+      automationMode === 'touch' ||
+      automationMode === 'latch' ||
+      automationMode === 'write'
+        ? automationMode
+        : fallback.automationMode,
     automationLanes: Array.isArray(candidate.automationLanes)
       ? candidate.automationLanes
           .map(normalizeLane)
           .filter((lane): lane is AutomationLane => Boolean(lane))
       : [],
+  };
+}
+
+function simplifyNumericPoints(
+  points: AutomationPoint[],
+  tolerance: number
+): AutomationPoint[] {
+  if (points.length < 3) return points;
+  const simplified = [points[0]];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = simplified[simplified.length - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    if (
+      typeof previous.value !== 'number' ||
+      typeof current.value !== 'number' ||
+      typeof next.value !== 'number' ||
+      next.tick === previous.tick
+    ) {
+      simplified.push(current);
+      continue;
+    }
+    const progress =
+      (current.tick - previous.tick) / (next.tick - previous.tick);
+    const expected = previous.value + (next.value - previous.value) * progress;
+    if (Math.abs(current.value - expected) > tolerance) {
+      simplified.push(current);
+    }
+  }
+  simplified.push(points[points.length - 1]);
+  return simplified;
+}
+
+/** 压缩录制产生的冗余线性关键点，保留开关和列表值的精确变化。 */
+export function simplifyAutomationDocument(
+  document: TransportDocument,
+  tolerance = 0.002
+): TransportDocument {
+  return {
+    ...document,
+    automationLanes: document.automationLanes.map((lane) => ({
+      ...lane,
+      points:
+        lane.interpolation === 'linear'
+          ? simplifyNumericPoints(lane.points, tolerance)
+          : lane.points,
+    })),
   };
 }
 

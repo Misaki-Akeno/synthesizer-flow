@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Circle, ListMusic, Play, Repeat2, Square, Trash2 } from 'lucide-react';
+import {
+  Circle,
+  ListMusic,
+  Pause,
+  Play,
+  Repeat2,
+  Square,
+  Trash2,
+} from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/shadcn/button';
 import {
@@ -14,6 +22,14 @@ import {
   DialogTitle,
 } from '@/components/ui/shadcn/dialog';
 import { Input } from '@/components/ui/shadcn/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/shadcn/select';
+import { Slider } from '@/components/ui/shadcn/slider';
 import {
   Tooltip,
   TooltipContent,
@@ -68,6 +84,10 @@ export function TransportBar() {
     transport,
     setTransportBpm,
     setTransportLoopEnabled,
+    setTransportLoopRange,
+    setAutomationMode,
+    beginAutomationRecording,
+    finishAutomationRecording,
     setSequencersRunning,
     applyAutomationAtTick,
     clearAutomationLane,
@@ -78,19 +98,25 @@ export function TransportBar() {
       transport: state.transport,
       setTransportBpm: state.setTransportBpm,
       setTransportLoopEnabled: state.setTransportLoopEnabled,
+      setTransportLoopRange: state.setTransportLoopRange,
+      setAutomationMode: state.setAutomationMode,
+      beginAutomationRecording: state.beginAutomationRecording,
+      finishAutomationRecording: state.finishAutomationRecording,
       setSequencersRunning: state.setSequencersRunning,
       applyAutomationAtTick: state.applyAutomationAtTick,
       clearAutomationLane: state.clearAutomationLane,
       clearAllAutomation: state.clearAllAutomation,
     }))
   );
-  const { isPlaying, isRecording, positionTicks } = useTransportRuntimeStore(
-    useShallow((state) => ({
-      isPlaying: state.isPlaying,
-      isRecording: state.isRecording,
-      positionTicks: state.positionTicks,
-    }))
-  );
+  const { isPlaying, hasStarted, isRecording, positionTicks } =
+    useTransportRuntimeStore(
+      useShallow((state) => ({
+        isPlaying: state.isPlaying,
+        hasStarted: state.hasStarted,
+        isRecording: state.isRecording,
+        positionTicks: state.positionTicks,
+      }))
+    );
   const projectLengthTicks = useMemo(
     () => getProjectLengthTicks(nodes, transport.timeSignature),
     [nodes, transport.timeSignature]
@@ -102,7 +128,18 @@ export function TransportBar() {
     const renderFrame = (now: number) => {
       const result = useTransportRuntimeStore
         .getState()
-        .advance(now, transport.bpm, projectLengthTicks, transport.loopEnabled);
+        .advance(
+          now,
+          transport.bpm,
+          projectLengthTicks,
+          transport.loopEnabled,
+          transport.loopRange.startTick,
+          transport.loopRange.endTick,
+          audioGraphRuntime.getTransportPositionTicks()
+        );
+      if (result.wrapped) {
+        audioGraphRuntime.seekTransport(result.positionTicks);
+      }
       if (
         now - lastAutomationFrame.current >= AUTOMATION_FRAME_INTERVAL_MS ||
         result.wrapped ||
@@ -126,28 +163,53 @@ export function TransportBar() {
     setSequencersRunning,
     transport.bpm,
     transport.loopEnabled,
+    transport.loopRange.endTick,
+    transport.loopRange.startTick,
   ]);
 
   const togglePlayback = () => {
     const runtime = useTransportRuntimeStore.getState();
     if (runtime.isPlaying) {
-      runtime.stop();
-      setSequencersRunning(false);
-      applyAutomationAtTick(0);
+      runtime.pause();
+      audioGraphRuntime.pauseTransport();
+      if (runtime.isRecording) finishAutomationRecording();
       return;
     }
     runtime.play();
-    setSequencersRunning(true);
+    if (runtime.hasStarted) {
+      audioGraphRuntime.resumeTransport();
+    } else {
+      setSequencersRunning(true);
+    }
+  };
+
+  const stopPlayback = () => {
+    const runtime = useTransportRuntimeStore.getState();
+    if (runtime.isRecording) finishAutomationRecording();
+    runtime.stop();
+    setSequencersRunning(false);
+    applyAutomationAtTick(0);
   };
 
   const toggleRecording = () => {
     const runtime = useTransportRuntimeStore.getState();
+    if (transport.automationMode === 'read') return;
     const nextRecording = !runtime.isRecording;
     runtime.setRecording(nextRecording);
+    if (nextRecording) beginAutomationRecording();
+    else finishAutomationRecording();
     if (nextRecording && !runtime.isPlaying) {
       runtime.play();
-      setSequencersRunning(true);
+      if (runtime.hasStarted) audioGraphRuntime.resumeTransport();
+      else setSequencersRunning(true);
     }
+  };
+
+  const seek = (tick: number) => {
+    const nextTick = Math.max(0, Math.min(projectLengthTicks, tick));
+    useTransportRuntimeStore.getState().seek(nextTick);
+    audioGraphRuntime.seekTransport(nextTick);
+    applyAutomationAtTick(nextTick);
   };
 
   const commitBpm = (value: string) => {
@@ -159,6 +221,10 @@ export function TransportBar() {
 
   const position = formatPosition(positionTicks, transport.timeSignature);
   const automationCount = transport.automationLanes.length;
+  const ticksPerBar =
+    TRANSPORT_PPQ *
+    transport.timeSignature[0] *
+    (4 / transport.timeSignature[1]);
 
   return (
     <>
@@ -182,19 +248,35 @@ export function TransportBar() {
                     'bg-amber-400 text-amber-950 hover:bg-amber-300 hover:text-amber-950'
                 )}
                 onClick={togglePlayback}
-                aria-label={isPlaying ? t('stop') : t('play')}
+                aria-label={isPlaying ? t('pause') : t('play')}
                 aria-pressed={isPlaying}
               >
                 {isPlaying ? (
-                  <Square className="h-3.5 w-3.5 fill-current" />
+                  <Pause className="h-3.5 w-3.5 fill-current" />
                 ) : (
                   <Play className="h-4 w-4 fill-current" />
                 )}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              {isPlaying ? t('stop') : t('play')}
+              {isPlaying ? t('pause') : t('play')}
             </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 rounded-md text-muted-foreground"
+                onClick={stopPlayback}
+                aria-label={t('stop')}
+                disabled={!hasStarted && positionTicks === 0}
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t('stop')}</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -210,6 +292,7 @@ export function TransportBar() {
                 onClick={toggleRecording}
                 aria-label={isRecording ? t('stopRecording') : t('record')}
                 aria-pressed={isRecording}
+                disabled={transport.automationMode === 'read'}
               >
                 <Circle
                   className={cn(
@@ -229,6 +312,16 @@ export function TransportBar() {
           <div className="min-w-[66px] px-1 text-center font-mono text-[13px] font-semibold tabular-nums tracking-[0.08em] text-foreground">
             {position}
           </div>
+
+          <Slider
+            value={[Math.min(positionTicks, projectLengthTicks)]}
+            min={0}
+            max={Math.max(1, projectLengthTicks)}
+            step={TRANSPORT_PPQ / 4}
+            onValueChange={([tick]) => seek(tick)}
+            aria-label={t('seek')}
+            className="hidden w-20 xl:flex [&_[data-slot=slider-thumb]]:size-3"
+          />
 
           <div className="flex h-7 items-center rounded-md border bg-background/75 px-1.5">
             <Input
@@ -296,6 +389,66 @@ export function TransportBar() {
             <DialogTitle>{t('automationTitle')}</DialogTitle>
             <DialogDescription>{t('automationDescription')}</DialogDescription>
           </DialogHeader>
+
+          <div className="grid gap-3 rounded-xl border bg-muted/25 p-3 sm:grid-cols-[1fr_1fr_1.25fr]">
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              {t('loopStart')}
+              <Input
+                key={`loop-start-${transport.loopRange.startTick}`}
+                defaultValue={transport.loopRange.startTick / ticksPerBar + 1}
+                min={1}
+                step={1}
+                type="number"
+                className="h-8 bg-background font-mono text-foreground"
+                onBlur={(event) => {
+                  const bar = Math.max(1, Number(event.target.value) || 1);
+                  setTransportLoopRange(
+                    (bar - 1) * ticksPerBar,
+                    transport.loopRange.endTick
+                  );
+                }}
+              />
+            </label>
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              {t('loopEnd')}
+              <Input
+                key={`loop-end-${transport.loopRange.endTick}`}
+                defaultValue={transport.loopRange.endTick / ticksPerBar}
+                min={2}
+                step={1}
+                type="number"
+                className="h-8 bg-background font-mono text-foreground"
+                onBlur={(event) => {
+                  const bar = Math.max(2, Number(event.target.value) || 2);
+                  setTransportLoopRange(
+                    transport.loopRange.startTick,
+                    bar * ticksPerBar
+                  );
+                }}
+              />
+            </label>
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              {t('automationMode')}
+              <Select
+                value={transport.automationMode}
+                onValueChange={(mode) =>
+                  setAutomationMode(
+                    mode as 'read' | 'touch' | 'latch' | 'write'
+                  )
+                }
+              >
+                <SelectTrigger size="sm" className="w-full bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="read">{t('modeRead')}</SelectItem>
+                  <SelectItem value="touch">{t('modeTouch')}</SelectItem>
+                  <SelectItem value="latch">{t('modeLatch')}</SelectItem>
+                  <SelectItem value="write">{t('modeWrite')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+          </div>
 
           <div className="max-h-[360px] space-y-2 overflow-auto py-2">
             {automationCount === 0 ? (

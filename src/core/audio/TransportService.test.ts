@@ -5,11 +5,16 @@ function createTone() {
   const transport = {
     state: 'stopped',
     position: 12 as number | string,
+    ticks: 96,
+    bpm: { value: 120 },
     start: vi.fn(() => {
       transport.state = 'started';
     }),
     stop: vi.fn(() => {
       transport.state = 'stopped';
+    }),
+    pause: vi.fn(() => {
+      transport.state = 'paused';
     }),
   };
 
@@ -33,5 +38,20 @@ describe('TransportService', () => {
 
     expect(tone.Transport.stop).toHaveBeenCalledTimes(1);
     expect(tone.Transport.position).toBe(0);
+  });
+
+  it('pauses, resumes, seeks and exposes the active Tone clock', () => {
+    const tone = createTone();
+    transportService.start('clip-a', tone);
+
+    transportService.pause();
+    expect(tone.Transport.pause).toHaveBeenCalledTimes(1);
+    transportService.seekTicks(720);
+    transportService.setBpm(98);
+    expect(transportService.getPositionTicks()).toBe(720);
+    expect(tone.Transport.bpm.value).toBe(98);
+
+    transportService.resume();
+    expect(tone.Transport.start).toHaveBeenCalledTimes(2);
   });
 });

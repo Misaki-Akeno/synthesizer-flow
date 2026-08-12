@@ -25,6 +25,7 @@ function resetCanvasStore(): void {
   });
   useTransportRuntimeStore.setState({
     isPlaying: false,
+    hasStarted: false,
     isRecording: false,
     positionTicks: 0,
     lastFrameMs: null,
@@ -548,6 +549,30 @@ describe('canvas store history', () => {
     expect(useFlowStore.getState().importCanvasFromJson(exported)).toBe(true);
     expect(useFlowStore.getState().transport.bpm).toBe(96);
     expect(useFlowStore.getState().transport.automationLanes).toHaveLength(1);
+  });
+
+  it('replaces a touched lane when automation is recorded in write mode', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    useTransportRuntimeStore.setState({
+      isRecording: true,
+      positionTicks: 120,
+    });
+    useFlowStore.getState().updateModuleParameter('number', 'value', 12);
+    useFlowStore.getState().finishAutomationRecording();
+
+    useFlowStore.getState().setAutomationMode('write');
+    useFlowStore.getState().beginAutomationRecording();
+    useTransportRuntimeStore.setState({
+      isRecording: true,
+      positionTicks: 480,
+    });
+    useFlowStore.getState().updateModuleParameter('number', 'value', 48);
+
+    expect(useFlowStore.getState().transport.automationLanes[0].points).toEqual(
+      [{ tick: 480, value: 48 }]
+    );
   });
 });
 

@@ -34,13 +34,17 @@ import {
 import { createModuleLogger } from '@/lib/logger';
 import { createNodeId } from '@/core/utils/nodeId';
 import {
+  automationLaneId,
   getAutomationValueAtTick,
   normalizeTransportDocument,
   removeAutomationLane,
+  simplifyAutomationDocument,
   upsertAutomationPoint,
 } from '@/core/transport/automation';
 import {
   createDefaultTransportDocument,
+  TRANSPORT_PPQ,
+  type AutomationMode,
   type TransportDocument,
 } from '@/core/transport/types';
 import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
@@ -68,6 +72,10 @@ interface FlowState {
   setCurrentProjectId: (projectId: string) => void;
   setTransportBpm: (bpm: number) => void;
   setTransportLoopEnabled: (enabled: boolean) => void;
+  setTransportLoopRange: (startTick: number, endTick: number) => void;
+  setAutomationMode: (mode: AutomationMode) => void;
+  beginAutomationRecording: () => void;
+  finishAutomationRecording: () => void;
   setSequencersRunning: (running: boolean) => void;
   applyAutomationAtTick: (tick: number) => void;
   clearAutomationLane: (laneId: string) => void;
@@ -258,6 +266,8 @@ function pruneTransportAutomation(
 
 export const useFlowStore = create<FlowState>((set, get) => {
   const draggingNodeIds = new Set<string>();
+  const automationWriteLanes = new Set<string>();
+  const automationTouchUntil = new Map<string, number>();
   let graphRevision = 0;
   let historyTransaction: { snapshot: SerializedCanvas; depth: number } | null =
     null;
@@ -382,6 +392,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
         edges: committed.edges,
         transport: { ...get().transport, bpm: nextBpm },
       });
+      audioGraphRuntime.setTransportBpm(nextBpm);
     },
 
     setTransportLoopEnabled: (loopEnabled) => {
@@ -407,6 +418,38 @@ export const useFlowStore = create<FlowState>((set, get) => {
         edges: committed.edges,
         transport: { ...get().transport, loopEnabled },
       });
+    },
+
+    setTransportLoopRange: (startTick, endTick) => {
+      const nextStart = Math.max(0, Math.round(startTick));
+      const nextEnd = Math.max(nextStart + TRANSPORT_PPQ, Math.round(endTick));
+      const current = get().transport.loopRange;
+      if (current.startTick === nextStart && current.endTick === nextEnd)
+        return;
+      recordHistory();
+      set({
+        transport: {
+          ...get().transport,
+          loopRange: { startTick: nextStart, endTick: nextEnd },
+        },
+      });
+    },
+
+    setAutomationMode: (automationMode) => {
+      if (get().transport.automationMode === automationMode) return;
+      recordHistory();
+      set({ transport: { ...get().transport, automationMode } });
+    },
+
+    beginAutomationRecording: () => {
+      automationWriteLanes.clear();
+      automationTouchUntil.clear();
+    },
+
+    finishAutomationRecording: () => {
+      automationWriteLanes.clear();
+      automationTouchUntil.clear();
+      set({ transport: simplifyAutomationDocument(get().transport) });
     },
 
     setSequencersRunning: (running) => {
@@ -446,6 +489,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
       if (automationLanes.length === 0) return;
       const updates = new Map<string, Map<string, ParameterValue>>();
       automationLanes.forEach((lane) => {
+        const touchUntil = automationTouchUntil.get(lane.id) ?? 0;
+        if (touchUntil > Date.now()) return;
         const value = getAutomationValueAtTick(lane, tick);
         if (value === undefined) return;
         const snapshot = audioGraphRuntime.getModuleSnapshot(lane.moduleId);
@@ -720,8 +765,23 @@ export const useFlowStore = create<FlowState>((set, get) => {
       let transport = get().transport;
       if (
         useTransportRuntimeStore.getState().isRecording &&
+        transport.automationMode !== 'read' &&
         !AUTOMATION_IGNORED_PARAMETERS.has(paramKey)
       ) {
+        const laneId = automationLaneId(nodeId, paramKey);
+        automationTouchUntil.set(
+          laneId,
+          transport.automationMode === 'touch'
+            ? Date.now() + 500
+            : Number.POSITIVE_INFINITY
+        );
+        if (
+          transport.automationMode === 'write' &&
+          !automationWriteLanes.has(laneId)
+        ) {
+          transport = removeAutomationLane(transport, laneId);
+          automationWriteLanes.add(laneId);
+        }
         transport = upsertAutomationPoint(
           transport,
           nodeId,

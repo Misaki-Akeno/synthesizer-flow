@@ -16,6 +16,7 @@ import type {
   RuntimeModuleSnapshot,
 } from '@/core/graph/types';
 import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
+import { transportService } from '@/core/audio/TransportService';
 
 const TELEMETRY_THROTTLE_MS = 100;
 
@@ -89,6 +90,27 @@ export class AudioGraphRuntime {
   private subscriptions = new Map<string, Subscription[]>();
   private listeners = new Map<string, Set<RuntimeListener>>();
   private actions = new Map<string, Map<string, RuntimeAction>>();
+
+  /** 返回音频调度器的权威播放位置，不向 UI 暴露 Tone 对象。 */
+  getTransportPositionTicks(): number | undefined {
+    return transportService.getPositionTicks();
+  }
+
+  pauseTransport(): void {
+    transportService.pause();
+  }
+
+  resumeTransport(): void {
+    transportService.resume();
+  }
+
+  seekTransport(ticks: number): void {
+    transportService.seekTicks(ticks);
+  }
+
+  setTransportBpm(bpm: number): void {
+    transportService.setBpm(bpm);
+  }
 
   getModuleSnapshot(moduleId: string): RuntimeModuleSnapshot | undefined {
     return this.snapshots.get(moduleId);
@@ -169,6 +191,7 @@ export class AudioGraphRuntime {
       this.releaseModuleSubscriptions(moduleId);
     });
     moduleManager.disposeAllModules();
+    transportService.reset();
     this.snapshots.clear();
     this.actions.clear();
     this.listeners.forEach((listeners) => {

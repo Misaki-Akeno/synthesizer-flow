@@ -8,10 +8,11 @@ import {
   midiToNoteName,
   parseMidiClipJson,
 } from '@/core/midi/utils';
-import { Play, Square, PanelBottomOpen, Music2 } from 'lucide-react';
+import { Pause, Play, PanelBottomOpen, Music2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useFlowStore } from '@/store/canvas-store';
 import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
+import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 
 interface SequenceEditorProps {
   moduleId?: string;
@@ -41,11 +42,10 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
   const setSequencersRunning = useFlowStore(
     (state) => state.setSequencersRunning
   );
-  const applyAutomationAtTick = useFlowStore(
-    (state) => state.applyAutomationAtTick
-  );
   const isRunning = useTransportRuntimeStore((state) => state.isPlaying);
-  const positionTicks = useTransportRuntimeStore((state) => state.positionTicks);
+  const positionTicks = useTransportRuntimeStore(
+    (state) => state.positionTicks
+  );
   const clipLengthTicks = Math.max(1, getClipLengthTicks(clip));
   const playheadPercent =
     ((positionTicks % clipLengthTicks) / clipLengthTicks) * 100;
@@ -75,12 +75,12 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
   const toggleRunning = () => {
     const runtime = useTransportRuntimeStore.getState();
     if (runtime.isPlaying) {
-      runtime.stop();
-      setSequencersRunning(false);
-      applyAutomationAtTick(0);
+      runtime.pause();
+      audioGraphRuntime.pauseTransport();
     } else {
       runtime.play();
-      setSequencersRunning(true);
+      if (runtime.hasStarted) audioGraphRuntime.resumeTransport();
+      else setSequencersRunning(true);
     }
   };
 
@@ -102,10 +102,20 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
               onClick={toggleRunning}
               aria-label={isRunning ? 'Stop MIDI clip' : 'Play MIDI clip'}
             >
-              {isRunning ? <Square size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
+              {isRunning ? (
+                <Pause size={12} fill="currentColor" />
+              ) : (
+                <Play size={12} fill="currentColor" />
+              )}
             </Button>
           )}
-          <Button size="icon" variant="outline" className="h-6 w-6" onClick={openEditor} aria-label="Open MIDI editor">
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-6 w-6"
+            onClick={openEditor}
+            aria-label="Open MIDI editor"
+          >
             <PanelBottomOpen size={13} />
           </Button>
         </div>
@@ -113,7 +123,9 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
 
       {bpmParam && (
         <div className="flex items-center gap-2 border-b px-2 py-1.5">
-          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">BPM</span>
+          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            BPM
+          </span>
           <Input
             key={transport.bpm}
             type="number"
@@ -127,7 +139,8 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
             }}
           />
           <span className="ml-auto text-[10px] text-muted-foreground">
-            {clip.bars} bar{clip.bars === 1 ? '' : 's'} / {clip.notes.length} notes
+            {clip.bars} bar{clip.bars === 1 ? '' : 's'} / {clip.notes.length}{' '}
+            notes
           </span>
         </div>
       )}
@@ -142,7 +155,10 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
           const top =
             pitchRange.max === pitchRange.min
               ? 34
-              : 8 + ((pitchRange.max - note.midi) / (pitchRange.max - pitchRange.min)) * 52;
+              : 8 +
+                ((pitchRange.max - note.midi) /
+                  (pitchRange.max - pitchRange.min)) *
+                  52;
           const left = (note.startTick / lengthTicks) * 100;
           const width = Math.max(4, (note.durationTicks / lengthTicks) * 100);
 
