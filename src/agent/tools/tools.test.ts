@@ -150,7 +150,7 @@ describe('ToolExecutor', () => {
     });
 
     it('should reject unknown module types', () => {
-      const result = executor.addModule('filter', 'Filter 1', {
+      const result = executor.addModule('missing-module', 'Missing module', {
         x: 100,
         y: 100,
       });

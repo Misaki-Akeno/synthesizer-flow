@@ -39,6 +39,16 @@ export const MODULE_GUIDES: Record<string, ModuleGuideContent> = {
     cautions: ['LFO 输出不是音频，不能直接连接 AUDIO 端口'],
     tags: ['modulation', 'lfo', 'number'],
   },
+  envelope: {
+    useWhen: ['需要音符触发的 ADSR 控制曲线', '塑造音量或滤波器动态'],
+    setup: [
+      '将门信号连接到 gate',
+      '设置 Attack、Decay、Sustain 与 Release',
+      '把 envelope 输出连接到 VCA cv 或其他 NUMBER 调制输入',
+    ],
+    cautions: ['包络输出是 NUMBER 控制信号，不能直接连接 AUDIO 端口'],
+    tags: ['modulation', 'envelope', 'adsr', 'number'],
+  },
   midiinput: {
     useWhen: ['接入外部 MIDI 键盘', '使用 MPE 控制器进行逐音符表达'],
     setup: [
@@ -102,6 +112,53 @@ export const MODULE_GUIDES: Record<string, ModuleGuideContent> = {
     setup: ['将 AUDIO 信号接入 input', '先降低 wet 试听，再调整 bits 强度'],
     cautions: ['高 wet 与激进位深会产生尖锐高频，注意监听音量'],
     tags: ['effect', 'lofi', 'distortion', 'audio'],
+  },
+  vca: {
+    useWhen: ['用包络控制音量', '制作震音或自动淡入淡出'],
+    setup: [
+      '将音频连接到 input',
+      '将包络或 LFO 连接到 cv',
+      '用 gain 和 cvAmount 设置基础电平与调制深度',
+    ],
+    cautions: ['CV 会与基础增益相乘；没有 CV 时保持默认值 1'],
+    tags: ['audio', 'amplifier', 'vca', 'modulation'],
+  },
+  filter: {
+    useWhen: ['进行减法合成音色塑形', '制作扫频、哇音或共振效果'],
+    setup: [
+      '将音频接入 input 并选择滤波模式',
+      '设置 cutoff 与 resonance',
+      '可将 LFO 或包络接到 cutoffMod',
+    ],
+    cautions: ['高共振可能显著提高峰值，后级建议接主限幅器'],
+    tags: ['audio', 'filter', 'subtractive', 'modulation'],
+  },
+  mixer: {
+    useWhen: ['合并多个音源或并行效果返回', '统一控制主输出电平'],
+    setup: [
+      '将最多四路 AUDIO 信号接到 input1..input4',
+      '分别设置通道电平，再调整 master',
+    ],
+    cautions: ['多路高电平相加容易削波，保留主输出余量'],
+    tags: ['audio', 'mixer', 'routing', 'gain'],
+  },
+  noise: {
+    useWhen: ['制作鼓噪声、风声、气息和纹理', '为减法合成提供宽频信号源'],
+    setup: [
+      '选择 white、pink 或 brown',
+      '先降低 level，再接入滤波器、VCA 或效果器',
+    ],
+    cautions: ['白噪声高频能量强，首次监听保持较低电平'],
+    tags: ['audio', 'noise', 'source', 'texture'],
+  },
+  masterlimiter: {
+    useWhen: ['在 Speaker 前保护最终输出', '控制复杂混音的瞬时峰值'],
+    setup: [
+      '将最终混音接到 input',
+      '设置输入增益与 ceiling，再把 output 接到 Speaker',
+    ],
+    cautions: ['限幅器是安全网，不应依赖它修复长期过载的通道增益'],
+    tags: ['audio', 'output', 'limiter', 'mastering'],
   },
   speaker: {
     useWhen: ['把最终音频送到系统输出', '作为音频链的终点'],
