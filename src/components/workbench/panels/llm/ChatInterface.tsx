@@ -15,6 +15,9 @@ import {
   Save,
   Check,
   X,
+  Activity,
+  ShieldCheck,
+  WandSparkles,
 } from 'lucide-react';
 import {
   useAISettings,
@@ -58,6 +61,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
+import {
+  diagnoseAudioGraph,
+  type AudioGraphDiagnosticReport,
+} from '@/core/diagnostics/audioGraphDiagnostics';
 
 function getCurrentCanvasSnapshot() {
   const state = useFlowStore.getState();
@@ -74,6 +81,9 @@ export function ChatInterface({ onRequestClose }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState(false);
+  const [diagnosticReport, setDiagnosticReport] =
+    useState<AudioGraphDiagnosticReport | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 获取AI设置
@@ -89,6 +99,8 @@ export function ChatInterface({ onRequestClose }: ChatInterfaceProps) {
     onConnect,
     onEdgesChange,
     importCanvasFromJson,
+    beginHistoryTransaction,
+    commitHistoryTransaction,
   } = useFlowStore(
     useShallow((s) => ({
       addNode: s.addNode,
@@ -97,6 +109,8 @@ export function ChatInterface({ onRequestClose }: ChatInterfaceProps) {
       onConnect: s.onConnect,
       onEdgesChange: s.onEdgesChange,
       importCanvasFromJson: s.importCanvasFromJson,
+      beginHistoryTransaction: s.beginHistoryTransaction,
+      commitHistoryTransaction: s.commitHistoryTransaction,
     }))
   );
 
@@ -135,47 +149,58 @@ export function ChatInterface({ onRequestClose }: ChatInterfaceProps) {
     messages.length > 0 &&
     messages[messages.length - 1].approval?.status === 'pending';
 
+  const runSilentDiagnosis = () => {
+    const state = useFlowStore.getState();
+    setDiagnosticReport(diagnoseAudioGraph(state.nodes, state.edges));
+    setIsDiagnosticsOpen(true);
+  };
+
   // 初始化 Thread ID
   useEffect(() => {
     setThreadId(createThreadId(window.crypto));
   }, []);
 
   const executeClientOperations = (operations: ClientOperation[]) => {
-    operations.forEach((op) => {
-      switch (op.type) {
-        case 'ADD_MODULE':
-          addNode(op.data.type, op.data.label, op.data.position, op.data.id);
-          break;
-        case 'DELETE_MODULE':
-          deleteNode(op.data.id);
-          break;
-        case 'UPDATE_MODULE_PARAM':
-          updateModuleParameter(
-            op.data.id,
-            op.data.key,
-            op.data.value as string | number | boolean
-          );
-          break;
-        case 'CONNECT_MODULES':
-          onConnect({
-            source: op.data.source,
-            target: op.data.target,
-            sourceHandle: op.data.sourceHandle || null,
-            targetHandle: op.data.targetHandle || null,
-          });
-          break;
-        case 'DISCONNECT_MODULES': {
-          const edgeChanges = getDisconnectEdgeChanges(
-            useFlowStore.getState().edges,
-            op.data
-          );
-          if (edgeChanges.length > 0) {
-            onEdgesChange(edgeChanges);
+    beginHistoryTransaction();
+    try {
+      operations.forEach((op) => {
+        switch (op.type) {
+          case 'ADD_MODULE':
+            addNode(op.data.type, op.data.label, op.data.position, op.data.id);
+            break;
+          case 'DELETE_MODULE':
+            deleteNode(op.data.id);
+            break;
+          case 'UPDATE_MODULE_PARAM':
+            updateModuleParameter(
+              op.data.id,
+              op.data.key,
+              op.data.value as string | number | boolean
+            );
+            break;
+          case 'CONNECT_MODULES':
+            onConnect({
+              source: op.data.source,
+              target: op.data.target,
+              sourceHandle: op.data.sourceHandle || null,
+              targetHandle: op.data.targetHandle || null,
+            });
+            break;
+          case 'DISCONNECT_MODULES': {
+            const edgeChanges = getDisconnectEdgeChanges(
+              useFlowStore.getState().edges,
+              op.data
+            );
+            if (edgeChanges.length > 0) {
+              onEdgesChange(edgeChanges);
+            }
+            break;
           }
-          break;
         }
-      }
-    });
+      });
+    } finally {
+      commitHistoryTransaction();
+    }
   };
 
   const handleFinalResponse = (
@@ -661,6 +686,115 @@ export function ChatInterface({ onRequestClose }: ChatInterfaceProps) {
                 {t('newConversation')}
               </TooltipContent>
             </Tooltip>
+
+            <Dialog
+              open={isDiagnosticsOpen}
+              onOpenChange={setIsDiagnosticsOpen}
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={runSilentDiagnosis}
+                      aria-label="静默诊断音频图"
+                    >
+                      <Activity size={15} />
+                    </Button>
+                  </DialogTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">静默诊断</TooltipContent>
+              </Tooltip>
+              <DialogContent className="sm:max-w-[520px]">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <ShieldCheck className="size-4.5 text-emerald-600" />
+                    音频图健康诊断
+                  </DialogTitle>
+                </DialogHeader>
+                {diagnosticReport && (
+                  <div className="grid gap-3">
+                    <div className="grid grid-cols-4 gap-2 rounded-xl border bg-muted/25 p-3 text-center">
+                      {[
+                        ['模块', diagnosticReport.stats.modules],
+                        ['连接', diagnosticReport.stats.connections],
+                        ['音频路径', diagnosticReport.stats.audioConnections],
+                        ['可修复', diagnosticReport.stats.suggestedFixes],
+                      ].map(([label, value]) => (
+                        <div key={label}>
+                          <div className="text-lg font-semibold">{value}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {label}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                      {diagnosticReport.findings.length === 0 && (
+                        <div className="grid place-items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-8 text-center">
+                          <ShieldCheck className="size-7 text-emerald-600" />
+                          <div>
+                            <p className="text-sm font-semibold">音频图健康</p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              没有发现可听路径或输出安全问题。
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {diagnosticReport.findings.map((finding) => (
+                        <div
+                          key={finding.id}
+                          className="rounded-xl border bg-card p-3"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`mt-1 size-2 shrink-0 rounded-full ${
+                                finding.severity === 'critical'
+                                  ? 'bg-red-500'
+                                  : finding.severity === 'warning'
+                                    ? 'bg-amber-500'
+                                    : 'bg-sky-500'
+                              }`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold">
+                                {finding.title}
+                              </p>
+                              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                                {finding.message}
+                              </p>
+                            </div>
+                            {finding.fix && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 shrink-0 gap-1.5 px-2 text-[10px]"
+                                disabled={!isAIConfigured}
+                                onClick={() => {
+                                  setInput(
+                                    `请重新运行 canvas_diagnose，并应用修复 ${finding.fix?.id}（${finding.fix?.label}）。不要应用其他修复。`
+                                  );
+                                  setIsDiagnosticsOpen(false);
+                                }}
+                              >
+                                <WandSparkles className="size-3" />
+                                请求修复
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] leading-relaxed text-muted-foreground">
+                      诊断完全在本地读取声明图。请求修复后，Agent
+                      会重新验证并等待你的批准。
+                    </p>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
 
             {session?.user && (
               <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>

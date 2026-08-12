@@ -522,10 +522,12 @@ describe('Tool Definitions', () => {
 
   it('should create all tools', () => {
     const tools = createTools(executor);
-    expect(tools).toHaveLength(9);
+    expect(tools).toHaveLength(11);
 
     const toolNames = tools.map((t) => t.name);
     expect(toolNames).toContain('canvas_inspect');
+    expect(toolNames).toContain('canvas_diagnose');
+    expect(toolNames).toContain('canvas_apply_diagnostic_fix');
     expect(toolNames).toContain('module_add');
     expect(toolNames).toContain('knowledge_search');
     expect(toolNames).toContain('skill_list');
@@ -543,8 +545,59 @@ describe('Tool Definitions', () => {
       'skills',
     ]);
     expect(registry.approvalRequiredToolNames).toEqual([
+      'canvas_apply_diagnostic_fix',
       'module_delete',
       'connection_disconnect',
+    ]);
+  });
+
+  it('diagnoses and applies an approved deterministic output fix', async () => {
+    const audioExecutor = new ToolExecutor({
+      nodes: [
+        {
+          id: 'osc',
+          type: 'default',
+          position: { x: 0, y: 0 },
+          data: {
+            type: 'simpleoscillator',
+            label: 'Oscillator',
+            parameters: {},
+            ports: {
+              inputs: { frequency: 'number' },
+              outputs: { audioOut: 'audio' },
+            },
+          },
+        },
+      ],
+      edges: [],
+    });
+    const tools = createTools(audioExecutor);
+    const diagnose = tools.find((tool) => tool.name === 'canvas_diagnose');
+    const applyFix = tools.find(
+      (tool) => tool.name === 'canvas_apply_diagnostic_fix'
+    );
+    expect(diagnose).toBeDefined();
+    expect(applyFix).toBeDefined();
+    if (!diagnose || !applyFix) return;
+
+    const report = JSON.parse(await diagnose.call({}));
+    const fixId = report.data.findings[0].fix.id;
+    const result = JSON.parse(await applyFix.call({ fixId }));
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({ operationsAdded: 5 }),
+      })
+    );
+    expect(
+      audioExecutor.getOperations().map((operation) => operation.type)
+    ).toEqual([
+      'ADD_MODULE',
+      'ADD_MODULE',
+      'CONNECT_MODULES',
+      'CONNECT_MODULES',
+      'CONNECT_MODULES',
     ]);
   });
 

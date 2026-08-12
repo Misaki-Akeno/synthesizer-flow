@@ -9,6 +9,10 @@ import { ClientOperation, GraphStateSnapshot } from '../core/types';
 import { ParameterType, PortType } from '../../core/base/ModuleBase';
 import { createEdgeId, createNodeId } from '../../core/utils/nodeId';
 import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
+import {
+  diagnoseAudioGraph,
+  type AudioGraphDiagnosticFix,
+} from '@/core/diagnostics/audioGraphDiagnostics';
 
 const logger = createModuleLogger('ToolExecutor');
 
@@ -99,6 +103,150 @@ export class ToolExecutor {
 
   public getOperations(): ClientOperation[] {
     return this.operations;
+  }
+
+  public diagnoseCanvas() {
+    return {
+      success: true,
+      data: diagnoseAudioGraph(this.nodes, this.edges),
+    };
+  }
+
+  private resultError(result: unknown): string {
+    if (
+      typeof result === 'object' &&
+      result !== null &&
+      'error' in result &&
+      typeof result.error === 'string'
+    ) {
+      return result.error;
+    }
+    return '诊断修复执行失败';
+  }
+
+  private addFixModule(
+    type: string,
+    label: string,
+    position: { x: number; y: number }
+  ): string {
+    const operationIndex = this.operations.length;
+    const result = this.addModule(type, label, position);
+    if (!result.success) throw new Error(this.resultError(result));
+    const operation = this.operations[operationIndex];
+    if (operation?.type !== 'ADD_MODULE') {
+      throw new Error('修复模块创建后未生成客户端操作');
+    }
+    return operation.data.id;
+  }
+
+  private requireFixSuccess(result: unknown): void {
+    if (
+      typeof result !== 'object' ||
+      result === null ||
+      !('success' in result) ||
+      result.success !== true
+    ) {
+      throw new Error(this.resultError(result));
+    }
+  }
+
+  private applyFixOperations(fix: AudioGraphDiagnosticFix): void {
+    const source = this.nodes.find((node) => node.id === fix.sourceId);
+    if (!source) throw new Error(`未找到模块: ${fix.sourceId}`);
+
+    if (fix.kind === 'disconnect-invalid') {
+      this.requireFixSuccess(
+        this.disconnectModules(
+          fix.sourceId,
+          fix.targetId,
+          fix.sourcePort,
+          fix.targetPort
+        )
+      );
+      return;
+    }
+
+    if (fix.kind === 'create-safe-output') {
+      const limiterId = this.addFixModule('masterlimiter', '主限幅器', {
+        x: source.position.x + 300,
+        y: source.position.y,
+      });
+      const speakerId = this.addFixModule('speaker', '扬声器', {
+        x: source.position.x + 600,
+        y: source.position.y,
+      });
+      this.requireFixSuccess(
+        this.connectModules(fix.sourceId, limiterId, fix.sourcePort, 'input')
+      );
+      this.requireFixSuccess(
+        this.connectModules(limiterId, speakerId, 'output', 'audioInLeft')
+      );
+      this.requireFixSuccess(
+        this.connectModules(limiterId, speakerId, 'output', 'audioInRight')
+      );
+      return;
+    }
+
+    const speaker = this.nodes.find((node) => node.id === fix.speakerId);
+    if (!speaker) throw new Error(`未找到模块: ${fix.speakerId}`);
+    const limiterId = this.addFixModule('masterlimiter', '主限幅器', {
+      x: (source.position.x + speaker.position.x) / 2,
+      y: (source.position.y + speaker.position.y) / 2,
+    });
+
+    if (fix.kind === 'insert-limiter') {
+      this.requireFixSuccess(
+        this.disconnectModules(
+          fix.sourceId,
+          fix.speakerId,
+          fix.sourcePort,
+          fix.speakerPort
+        )
+      );
+    }
+    this.requireFixSuccess(
+      this.connectModules(fix.sourceId, limiterId, fix.sourcePort, 'input')
+    );
+    this.requireFixSuccess(
+      this.connectModules(limiterId, fix.speakerId, 'output', fix.speakerPort)
+    );
+  }
+
+  public applyDiagnosticFix(fixId: string) {
+    const report = diagnoseAudioGraph(this.nodes, this.edges);
+    const fix = report.findings.find(
+      (finding) => finding.fix?.id === fixId
+    )?.fix;
+    if (!fix) {
+      return {
+        success: false,
+        error: '修复建议已过期，请重新运行 canvas_diagnose',
+      };
+    }
+
+    const previousNodes = JSON.parse(JSON.stringify(this.nodes)) as FlowNode[];
+    const previousEdges = JSON.parse(JSON.stringify(this.edges)) as FlowEdge[];
+    const operationCount = this.operations.length;
+    try {
+      this.applyFixOperations(fix);
+      return {
+        success: true,
+        data: {
+          fixId,
+          message: `已应用诊断修复：${fix.label}`,
+          operationsAdded: this.operations.length - operationCount,
+          report: diagnoseAudioGraph(this.nodes, this.edges),
+        },
+      };
+    } catch (error) {
+      this.nodes = previousNodes;
+      this.edges = previousEdges;
+      this.operations.splice(operationCount);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '诊断修复执行失败',
+      };
+    }
   }
 
   /**
