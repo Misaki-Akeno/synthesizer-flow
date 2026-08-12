@@ -5,6 +5,7 @@ import { useFlowStore } from './canvas-store';
 import { useProjectStore } from './projects-store';
 import {
   getBuiltInPresets,
+  getProjectById,
   getUserProjects,
   saveProject,
 } from '@/actions/project.actions';
@@ -28,6 +29,7 @@ const memoryStorage = {
 };
 
 const mockGetBuiltInPresets = vi.mocked(getBuiltInPresets);
+const mockGetProjectById = vi.mocked(getProjectById);
 const mockGetUserProjects = vi.mocked(getUserProjects);
 const mockSaveProject = vi.mocked(saveProject);
 
@@ -58,6 +60,12 @@ function resetStores(): void {
     hasHydratedProjects: true,
     projectsLastFetchedAt: null,
     projectListError: null,
+    saveStatus: 'idle',
+    lastLocalSaveAt: null,
+    localDraft: null,
+    draftHistory: [],
+    recoveryDraftAvailable: false,
+    saveConflict: null,
   });
 }
 
@@ -66,6 +74,10 @@ describe('project store', () => {
     vi.clearAllMocks();
     mockGetBuiltInPresets.mockResolvedValue({ success: true, data: [] });
     mockGetUserProjects.mockResolvedValue({ success: true, data: [] });
+    mockGetProjectById.mockResolvedValue({
+      success: false,
+      error: 'Project not found',
+    });
     mockSaveProject.mockResolvedValue({
       success: true,
       projectId: 'saved-1',
@@ -238,5 +250,124 @@ describe('project store', () => {
         created,
       })
     );
+  });
+
+  it('captures and restores a local canvas draft without touching the server', () => {
+    const baseline = useFlowStore.getState().exportCanvasToJson();
+    useProjectStore.setState({
+      currentProject: {
+        id: 'draft-project',
+        name: 'Draft Project',
+        created: '2026-01-01T00:00:00.000Z',
+        lastModified: '2026-01-01T00:00:00.000Z',
+        data: baseline,
+        revision: 3,
+      },
+    });
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+
+    useProjectStore.getState().captureLocalDraft();
+    const draft = useProjectStore.getState().localDraft;
+
+    expect(draft).toEqual(
+      expect.objectContaining({
+        projectId: 'draft-project',
+        projectName: 'Draft Project',
+        baseRevision: 3,
+      })
+    );
+    expect(useProjectStore.getState().draftHistory).toHaveLength(1);
+    expect(useProjectStore.getState().saveStatus).toBe('dirty');
+
+    useFlowStore.getState().deleteNode('number');
+    expect(useProjectStore.getState().restoreLocalDraft(draft?.id)).toBe(true);
+    expect(useFlowStore.getState().nodes.map((node) => node.id)).toEqual([
+      'number',
+    ]);
+    expect(mockSaveProject).not.toHaveBeenCalled();
+  });
+
+  it('does not create a draft for timestamp and default-metadata migrations', () => {
+    useProjectStore.setState({
+      currentProject: {
+        id: 'legacy-project',
+        name: 'Legacy Project',
+        created: '2026-01-01T00:00:00.000Z',
+        lastModified: '2026-01-01T00:00:00.000Z',
+        data: JSON.stringify({
+          version: '1.0',
+          timestamp: 1,
+          nodes: [],
+          edges: [],
+        }),
+        revision: 1,
+      },
+    });
+
+    useProjectStore.getState().captureLocalDraft();
+
+    expect(useProjectStore.getState().localDraft).toBeNull();
+    expect(useProjectStore.getState().draftHistory).toEqual([]);
+    expect(useProjectStore.getState().saveStatus).toBe('saved');
+  });
+
+  it('preserves both sides of a revision conflict and can reload remote', async () => {
+    const baseline = useFlowStore.getState().exportCanvasToJson();
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    useProjectStore.setState({
+      currentProject: {
+        id: 'shared-project',
+        name: 'Shared Project',
+        created: createdAt.toISOString(),
+        lastModified: createdAt.toISOString(),
+        data: baseline,
+        revision: 1,
+      },
+    });
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Local Number', { x: 0, y: 0 }, 'local-number');
+    mockSaveProject.mockResolvedValueOnce({
+      success: false,
+      code: 'PROJECT_REVISION_CONFLICT',
+      error: 'Project was modified elsewhere. Reload and try again.',
+    });
+    mockGetProjectById.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: 'shared-project',
+        name: 'Shared Project',
+        description: null,
+        createdAt,
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+        isPreset: false,
+        metadata: {},
+        schemaVersion: 1,
+        revision: 2,
+        data: JSON.parse(baseline),
+      },
+    });
+
+    const saved = await useProjectStore
+      .getState()
+      .saveCurrentCanvas('Shared Project');
+
+    expect(saved).toBe(false);
+    expect(useProjectStore.getState().saveStatus).toBe('conflict');
+    expect(useProjectStore.getState().saveConflict).toEqual(
+      expect.objectContaining({
+        localDraft: expect.objectContaining({
+          canvasData: expect.stringContaining('local-number'),
+        }),
+        remoteProject: expect.objectContaining({ revision: 2 }),
+      })
+    );
+
+    expect(useProjectStore.getState().reloadConflictRemote()).toBe(true);
+    expect(useFlowStore.getState().nodes).toEqual([]);
+    expect(useProjectStore.getState().saveConflict).toBeNull();
+    expect(useProjectStore.getState().draftHistory).toHaveLength(1);
   });
 });

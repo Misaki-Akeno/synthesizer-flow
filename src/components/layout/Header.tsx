@@ -50,7 +50,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -64,6 +64,7 @@ import { useFlowStore } from '@/store/canvas-store';
 import { useTranslations } from 'next-intl';
 import { useShallow } from 'zustand/react/shallow';
 import { TransportBar } from '@/components/workbench/TransportBar';
+import { useProjectStore } from '@/store/projects-store';
 
 interface HeaderProps {
   className?: string;
@@ -84,6 +85,8 @@ export function Header({ className }: HeaderProps) {
       canRedo: state.canRedo,
     }))
   );
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const saveCurrentCanvas = useProjectStore((state) => state.saveCurrentCanvas);
 
   const toggleRightPanel = (panel: string) => {
     const currentPanel = searchParams.get('auxPanel');
@@ -102,6 +105,32 @@ export function Header({ className }: HeaderProps) {
     setDevNoticeDescription(description);
     setDevNoticeOpen(true);
   };
+
+  const quickSave = () => {
+    if (currentProject) {
+      void saveCurrentCanvas(currentProject.name, currentProject.description);
+      return;
+    }
+    const params = new URLSearchParams(searchParams);
+    params.set('panel', 'project-manager');
+    router.replace(`?${params.toString()}`);
+  };
+
+  useEffect(() => {
+    const handleSaveShortcut = (event: KeyboardEvent) => {
+      if (
+        event.repeat ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.key.toLowerCase() !== 's'
+      ) {
+        return;
+      }
+      event.preventDefault();
+      quickSave();
+    };
+    window.addEventListener('keydown', handleSaveShortcut);
+    return () => window.removeEventListener('keydown', handleSaveShortcut);
+  });
 
   return (
     <header
@@ -162,11 +191,7 @@ export function Header({ className }: HeaderProps) {
                 </div>
               </MenubarItem>
               <MenubarSeparator />
-              <MenubarItem
-                onClick={() =>
-                  handleMenuItemClick(t('save'), t('descriptions.save'))
-                }
-              >
+              <MenubarItem onClick={quickSave}>
                 <Save className="mr-2 h-4 w-4" />
                 <span>{t('save')}</span>
                 <div className="ml-auto text-xs text-muted-foreground">
@@ -416,11 +441,7 @@ export function Header({ className }: HeaderProps) {
                 <FolderOpen className="mr-2 h-4 w-4" />
                 <span>{t('openProject')}</span>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  handleMenuItemClick(t('save'), t('descriptions.save'))
-                }
-              >
+              <DropdownMenuItem onClick={quickSave}>
                 <Save className="mr-2 h-4 w-4" />
                 <span>{t('save')}</span>
               </DropdownMenuItem>

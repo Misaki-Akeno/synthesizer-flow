@@ -37,6 +37,7 @@ import {
   RefreshCcw,
   Info,
   AlertTriangle,
+  History,
 } from 'lucide-react';
 import { WorkbenchPanelHeader } from '@/components/layout/WorkbenchPanel';
 
@@ -71,7 +72,18 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
     projectsLastFetchedAt,
     projectListError,
     fetchProjects,
+    draftHistory,
+    restoreLocalDraft,
+    saveStatus,
+    lastLocalSaveAt,
   } = usePersistStore();
+
+  const currentDraftHistory = currentProject
+    ? draftHistory
+        .filter((draft) => draft.projectId === currentProject.id)
+        .slice(-5)
+        .reverse()
+    : [];
 
   useEffect(() => {
     if (hasHydratedProjects) {
@@ -174,9 +186,42 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
                         {currentProject.description}
                       </div>
                     )}
-                    <div className="text-xs text-muted-foreground/60 font-mono mt-4 pt-4 border-t">
-                      上次修改: {formatDate(currentProject.lastModified)}
+                    <div className="grid grid-cols-2 gap-2 border-t pt-4 text-xs text-muted-foreground/70">
+                      <span>
+                        云端 revision {currentProject.revision ?? '—'}
+                      </span>
+                      <span className="text-right">
+                        {saveStatus === 'dirty'
+                          ? `草稿 ${lastLocalSaveAt ? formatDate(lastLocalSaveAt) : '待保存'}`
+                          : '画布已同步'}
+                      </span>
+                      <span className="col-span-2 font-mono text-[10px] opacity-70">
+                        上次修改: {formatDate(currentProject.lastModified)}
+                      </span>
                     </div>
+                    {currentDraftHistory.length > 0 && (
+                      <div className="space-y-2 border-t pt-3">
+                        <div className="flex items-center gap-1.5 text-xs font-medium">
+                          <History className="size-3.5 text-violet-500" />
+                          本地版本
+                        </div>
+                        <div className="grid max-h-36 gap-1.5 overflow-y-auto">
+                          {currentDraftHistory.map((draft) => (
+                            <button
+                              key={draft.id}
+                              type="button"
+                              onClick={() => restoreLocalDraft(draft.id)}
+                              className="flex items-center justify-between rounded-lg border bg-muted/25 px-2.5 py-2 text-left text-[11px] transition-colors hover:border-violet-400/40 hover:bg-violet-500/5"
+                            >
+                              <span>{formatDate(draft.savedAt)}</span>
+                              <span className="text-violet-600 dark:text-violet-400">
+                                恢复
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-sm text-muted-foreground/60 italic flex flex-col items-center justify-center py-8 gap-2">
