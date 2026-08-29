@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import XYPad from './XYPad';
 import PianoKeyboard from './PianoKeyboard';
 import SequenceEditor from './SequenceEditor';
+import EnvelopeEditor from './EnvelopeEditor';
 import {
   ParameterControl,
   NumberParameterControl,
@@ -45,6 +46,7 @@ export const CustomUIComponents = {
   PianoKeyboard,
   CommonButton: ModuleButton,
   SequenceEditor, // sequencer: SequenceEditor,
+  EnvelopeEditor,
   oscilloscope: Oscilloscope,
 };
 

@@ -203,7 +203,7 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
     Object.keys(moduleInstance.parameters).forEach((paramKey) => {
       const meta = moduleInstance.getParameterMeta(paramKey);
 
-      if (meta.uiOptions?.hide) {
+      if (meta.uiOptions?.hide || meta.uiOptions?.hideInNode) {
         return;
       }
 
