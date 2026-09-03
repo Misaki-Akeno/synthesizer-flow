@@ -19,7 +19,6 @@ import { nanoid } from 'nanoid';
 import { getIndexedDbStorage } from './persist-storage';
 import { ensureAudioContextReady } from '@/core/audio/audio-context';
 import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
-import { normalizeTransportDocument } from '@/core/transport/automation';
 
 // 创建项目管理器专用日志记录器
 const logger = createModuleLogger('ProjectManager');
@@ -50,30 +49,6 @@ export type ProjectListErrorCode =
   | 'built-in-projects-unavailable'
   | 'projects-unavailable';
 
-export type ProjectSaveStatus =
-  | 'idle'
-  | 'dirty'
-  | 'saving'
-  | 'saved'
-  | 'conflict'
-  | 'error';
-
-export interface LocalProjectDraft {
-  id: string;
-  projectId: string;
-  projectName: string;
-  canvasData: string;
-  savedAt: string;
-  baseRevision?: number;
-}
-
-export interface ProjectSaveConflict {
-  detectedAt: string;
-  message: string;
-  localDraft: LocalProjectDraft;
-  remoteProject: ProjectConfig | null;
-}
-
 // ======== 项目管理 Store 接口 ========
 
 export interface ProjectPersistState {
@@ -90,12 +65,6 @@ export interface ProjectPersistState {
   hasHydratedProjects: boolean;
   projectsLastFetchedAt: string | null;
   projectListError: ProjectListErrorCode | null;
-  saveStatus: ProjectSaveStatus;
-  lastLocalSaveAt: string | null;
-  localDraft: LocalProjectDraft | null;
-  draftHistory: LocalProjectDraft[];
-  recoveryDraftAvailable: boolean;
-  saveConflict: ProjectSaveConflict | null;
 
   // 动作
   fetchProjects: (options?: FetchProjectsOptions) => Promise<void>;
@@ -114,12 +83,6 @@ export interface ProjectPersistState {
   deleteProject: (projectId: string) => Promise<boolean>;
   exportProjectToFile: (projectIdOrName: string) => void;
   importProjectFromJson: (jsonData: string) => Promise<boolean>;
-  captureLocalDraft: () => void;
-  restoreLocalDraft: (draftId?: string) => boolean;
-  discardLocalDraft: () => void;
-  reloadConflictRemote: () => boolean;
-  saveConflictAsCopy: () => Promise<boolean>;
-  flagDraftForRecovery: () => void;
 }
 
 // ======== 工具函数 ========
@@ -144,93 +107,9 @@ function isLocalImportedProject(project: ProjectConfig): boolean {
   return project.id.startsWith('imported_');
 }
 
-export function getCanvasDataSignature(canvasData: string): string {
-  try {
-    const parsed = JSON.parse(canvasData) as {
-      nodes?: unknown;
-      edges?: unknown;
-      metadata?: unknown;
-    };
-    const metadata =
-      parsed.metadata &&
-      typeof parsed.metadata === 'object' &&
-      !Array.isArray(parsed.metadata)
-        ? (parsed.metadata as Record<string, unknown>)
-        : {};
-    const { transport, subpatches, ...extraMetadata } = metadata;
-    return JSON.stringify({
-      nodes: parsed.nodes ?? [],
-      edges: parsed.edges ?? [],
-      metadata: {
-        ...extraMetadata,
-        transport: normalizeTransportDocument(transport),
-        subpatches: Array.isArray(subpatches) ? subpatches : [],
-      },
-    });
-  } catch {
-    return canvasData;
-  }
-}
-
 const PROJECT_LIST_CACHE_TTL_MS = 60_000;
 const PROJECT_DATABASE_MIGRATION_REQUIRED =
   'PROJECT_DATABASE_MIGRATION_REQUIRED';
-const LOCAL_DRAFT_HISTORY_LIMIT = 10;
-const LOCAL_DRAFT_COALESCE_MS = 30_000;
-
-interface ProjectActionData {
-  id: string;
-  name: string;
-  description: string | null;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-  isPreset: boolean;
-  metadata: unknown;
-  schemaVersion: number;
-  revision: number;
-  data: unknown;
-}
-
-function toProjectConfig(project: ProjectActionData): ProjectConfig {
-  return {
-    id: project.id,
-    name: project.name,
-    description: project.description ?? undefined,
-    created: new Date(project.createdAt).toISOString(),
-    lastModified: new Date(project.updatedAt).toISOString(),
-    isBuiltIn: project.isPreset,
-    metadata: project.metadata as Record<string, unknown>,
-    schemaVersion: project.schemaVersion,
-    revision: project.revision,
-    data:
-      typeof project.data === 'object'
-        ? JSON.stringify(project.data)
-        : String(project.data),
-  };
-}
-
-function appendDraftVersion(
-  history: LocalProjectDraft[],
-  draft: LocalProjectDraft
-): LocalProjectDraft[] {
-  const previous = history[history.length - 1];
-  if (
-    previous &&
-    getCanvasDataSignature(previous.canvasData) ===
-      getCanvasDataSignature(draft.canvasData)
-  ) {
-    return history;
-  }
-
-  const shouldCoalesce =
-    previous?.projectId === draft.projectId &&
-    new Date(draft.savedAt).getTime() - new Date(previous.savedAt).getTime() <
-      LOCAL_DRAFT_COALESCE_MS;
-  const next = shouldCoalesce
-    ? [...history.slice(0, -1), draft]
-    : [...history, draft];
-  return next.slice(-LOCAL_DRAFT_HISTORY_LIMIT);
-}
 
 function resolveProjectListError(
   userError: string | null,
@@ -270,12 +149,6 @@ export const useProjectStore = create<ProjectPersistState>()(
       hasHydratedProjects: false,
       projectsLastFetchedAt: null,
       projectListError: null,
-      saveStatus: 'idle',
-      lastLocalSaveAt: null,
-      localDraft: null,
-      draftHistory: [],
-      recoveryDraftAvailable: false,
-      saveConflict: null,
 
       markProjectsHydrated: () => {
         set({ hasHydratedProjects: true });
@@ -404,7 +277,7 @@ export const useProjectStore = create<ProjectPersistState>()(
       saveCurrentCanvas: async (name: string, description?: string) => {
         try {
           logger.info(`保存项目: "${name}"`);
-          set({ isLoading: true, saveStatus: 'saving' });
+          set({ isLoading: true });
 
           // 获取当前画布的JSON
           const canvasData = useFlowStore.getState().exportCanvasToJson();
@@ -415,7 +288,6 @@ export const useProjectStore = create<ProjectPersistState>()(
             dataToSave = JSON.parse(canvasData);
           } catch (e) {
             logger.error('Canvas data parse error', e);
-            set({ saveStatus: 'error' });
             return false;
           }
 
@@ -439,8 +311,6 @@ export const useProjectStore = create<ProjectPersistState>()(
               : undefined,
             metadata: currentProject?.metadata,
           });
-          const resultError =
-            'error' in result ? result.error : 'Unknown save error';
 
           if (result.success && result.projectId) {
             // 保存成功，更新当前项目状态（包括 data，这里保持 string 格式以便本地缓存）
@@ -467,62 +337,15 @@ export const useProjectStore = create<ProjectPersistState>()(
             };
 
             set({ currentProject: newProjectConfig });
-            set({
-              localDraft: null,
-              draftHistory: get().draftHistory.map((draft) =>
-                currentProject && draft.projectId === currentProject.id
-                  ? {
-                      ...draft,
-                      projectId: result.projectId as string,
-                      projectName: name,
-                      baseRevision: result.revision,
-                    }
-                  : draft
-              ),
-              recoveryDraftAvailable: false,
-              saveConflict: null,
-              saveStatus: 'saved',
-              lastLocalSaveAt: now,
-            });
             useFlowStore.getState().setCurrentProjectId(result.projectId);
             logger.success(`项目"${name}"保存成功`);
             return true;
           } else {
-            const isRevisionConflict =
-              'code' in result &&
-              result.code === 'PROJECT_REVISION_CONFLICT' &&
-              Boolean(projectIdToUpdate && currentProject);
-            if (isRevisionConflict && projectIdToUpdate && currentProject) {
-              get().captureLocalDraft();
-              const localDraft = get().localDraft;
-              const remoteResult = await getProjectById(projectIdToUpdate);
-              const remoteProject =
-                remoteResult.success && remoteResult.data
-                  ? toProjectConfig(remoteResult.data as ProjectActionData)
-                  : null;
-              if (localDraft) {
-                set({
-                  saveStatus: 'conflict',
-                  recoveryDraftAvailable: false,
-                  saveConflict: {
-                    detectedAt: new Date().toISOString(),
-                    message:
-                      resultError ??
-                      'Project was modified elsewhere. Reload and try again.',
-                    localDraft,
-                    remoteProject,
-                  },
-                });
-              }
-            } else {
-              set({ saveStatus: 'error' });
-            }
-            logger.error('保存失败', resultError);
+            logger.error('保存失败', result.error);
             return false;
           }
         } catch (error) {
           logger.error('保存画布失败', error);
-          set({ saveStatus: 'error' });
           return false;
         } finally {
           set({ isLoading: false });
@@ -549,15 +372,13 @@ export const useProjectStore = create<ProjectPersistState>()(
             isPreset: true,
             description,
           });
-          const resultError =
-            'error' in result ? result.error : 'Unknown save error';
 
           if (result.success && result.projectId) {
             await get().fetchProjects({ force: true });
             logger.success(`预设"${name}"保存成功`);
             return true;
           } else {
-            logger.error('保存预设失败', resultError);
+            logger.error('保存预设失败', result.error);
             return false;
           }
         } catch (error) {
@@ -793,10 +614,7 @@ export const useProjectStore = create<ProjectPersistState>()(
             .getState()
             .importCanvasFromJson(jsonData, importedProject.id);
           if (success) {
-            set({
-              currentProject: importedProject,
-              saveStatus: 'dirty',
-            });
+            set({ currentProject: importedProject });
             logger.success('项目导入成功，在保存前仅存在于本地');
             return true;
           }
@@ -805,159 +623,6 @@ export const useProjectStore = create<ProjectPersistState>()(
           logger.error('导入失败', error);
           return false;
         }
-      },
-
-      captureLocalDraft: () => {
-        const canvasData = useFlowStore.getState().exportCanvasToJson();
-        const { currentProject, localDraft, draftHistory } = get();
-        const projectId =
-          currentProject?.id ||
-          useFlowStore.getState().currentProjectId ||
-          'untitled';
-
-        if (
-          currentProject?.data &&
-          getCanvasDataSignature(currentProject.data) ===
-            getCanvasDataSignature(canvasData)
-        ) {
-          set({
-            localDraft: localDraft?.projectId === projectId ? null : localDraft,
-            saveStatus: 'saved',
-            recoveryDraftAvailable: false,
-          });
-          return;
-        }
-        if (
-          localDraft?.projectId === projectId &&
-          getCanvasDataSignature(localDraft.canvasData) ===
-            getCanvasDataSignature(canvasData)
-        ) {
-          return;
-        }
-
-        const savedAt = new Date().toISOString();
-        const draft: LocalProjectDraft = {
-          id: `draft_${Date.now()}_${nanoid(6)}`,
-          projectId,
-          projectName: currentProject?.name ?? '未命名工程',
-          canvasData,
-          savedAt,
-          baseRevision: currentProject?.revision,
-        };
-        set({
-          localDraft: draft,
-          draftHistory: appendDraftVersion(draftHistory, draft),
-          lastLocalSaveAt: savedAt,
-          saveStatus: 'dirty',
-          recoveryDraftAvailable: false,
-        });
-      },
-
-      restoreLocalDraft: (draftId) => {
-        const draft = draftId
-          ? get().draftHistory.find((item) => item.id === draftId)
-          : get().localDraft;
-        if (!draft) return false;
-        const restored = useFlowStore
-          .getState()
-          .importCanvasFromJson(draft.canvasData, draft.projectId);
-        if (!restored) return false;
-
-        const currentProject = get().currentProject;
-        set({
-          currentProject:
-            currentProject?.id === draft.projectId
-              ? currentProject
-              : {
-                  id: draft.projectId,
-                  name: draft.projectName,
-                  created: draft.savedAt,
-                  lastModified: draft.savedAt,
-                  revision: draft.baseRevision,
-                  isBuiltIn: false,
-                },
-          localDraft: draft,
-          recoveryDraftAvailable: false,
-          saveConflict: null,
-          saveStatus: 'dirty',
-        });
-        return true;
-      },
-
-      discardLocalDraft: () => {
-        set({
-          localDraft: null,
-          recoveryDraftAvailable: false,
-          saveConflict: null,
-          saveStatus: 'saved',
-        });
-      },
-
-      reloadConflictRemote: () => {
-        const remote = get().saveConflict?.remoteProject;
-        if (!remote?.data) return false;
-        const restored = useFlowStore
-          .getState()
-          .importCanvasFromJson(remote.data, remote.id);
-        if (!restored) return false;
-        set({
-          currentProject: remote,
-          localDraft: null,
-          recoveryDraftAvailable: false,
-          saveConflict: null,
-          saveStatus: 'saved',
-        });
-        return true;
-      },
-
-      saveConflictAsCopy: async () => {
-        const conflict = get().saveConflict;
-        if (!conflict) return false;
-        set({ isLoading: true, saveStatus: 'saving' });
-        try {
-          const data = JSON.parse(conflict.localDraft.canvasData) as unknown;
-          const copyName = `${conflict.localDraft.projectName}（冲突副本）`;
-          const result = await saveProject(copyName, data, {
-            metadata: conflict.remoteProject?.metadata,
-          });
-          if (!result.success || !result.projectId) {
-            set({ saveStatus: 'error' });
-            return false;
-          }
-          const now = new Date().toISOString();
-          const project: ProjectConfig = {
-            id: result.projectId,
-            name: copyName,
-            created: now,
-            lastModified: now,
-            data: conflict.localDraft.canvasData,
-            metadata: conflict.remoteProject?.metadata,
-            schemaVersion: conflict.remoteProject?.schemaVersion ?? 1,
-            revision: result.revision,
-            isBuiltIn: false,
-          };
-          await get().fetchProjects({ force: true });
-          useFlowStore.getState().setCurrentProjectId(result.projectId);
-          set({
-            currentProject: project,
-            localDraft: null,
-            recoveryDraftAvailable: false,
-            saveConflict: null,
-            saveStatus: 'saved',
-            lastLocalSaveAt: now,
-          });
-          return true;
-        } catch (error) {
-          logger.error('保存冲突副本失败', error);
-          set({ saveStatus: 'error' });
-          return false;
-        } finally {
-          set({ isLoading: false });
-        }
-      },
-
-      flagDraftForRecovery: () => {
-        set({ recoveryDraftAvailable: Boolean(get().localDraft) });
       },
     }),
     {
@@ -971,12 +636,8 @@ export const useProjectStore = create<ProjectPersistState>()(
           data: undefined,
         })),
         projectsLastFetchedAt: state.projectsLastFetchedAt,
-        localDraft: state.localDraft,
-        draftHistory: state.draftHistory,
-        lastLocalSaveAt: state.lastLocalSaveAt,
-        saveConflict: state.saveConflict,
       }),
-      version: 4,
+      version: 3,
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== 'object') {
           return persistedState as ProjectPersistState;
@@ -989,10 +650,6 @@ export const useProjectStore = create<ProjectPersistState>()(
             ...project,
             data: undefined,
           })),
-          localDraft: state.localDraft ?? null,
-          draftHistory: state.draftHistory ?? [],
-          lastLocalSaveAt: state.lastLocalSaveAt ?? null,
-          saveConflict: state.saveConflict ?? null,
         } as ProjectPersistState;
       },
       storage: createJSONStorage(() =>
@@ -1006,7 +663,6 @@ export const useProjectStore = create<ProjectPersistState>()(
         if (state) {
           logger.info('本地缓存已恢复');
           state.markProjectsHydrated();
-          state.flagDraftForRecovery();
           // 移除 state.fetchProjects()，由 UI 组件 (ProjectManager) 通过 useEffect 触发
 
           // 注意：自动恢复逻辑已下放至 Canvas 组件，以便与 URL 参数协调

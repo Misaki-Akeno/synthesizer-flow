@@ -228,7 +228,6 @@ describe('project actions', () => {
 
     expect(result).toEqual({
       success: false,
-      code: 'PROJECT_REVISION_CONFLICT',
       error: 'Project was modified elsewhere. Reload and try again.',
     });
   });

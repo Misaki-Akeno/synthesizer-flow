@@ -405,9 +405,6 @@ export const saveProject = withAuth(
         if (!updatedProject) {
           return {
             success: false,
-            ...(expectedRevision === undefined
-              ? {}
-              : { code: 'PROJECT_REVISION_CONFLICT' as const }),
             error:
               expectedRevision === undefined
                 ? 'Project not found or access denied'
