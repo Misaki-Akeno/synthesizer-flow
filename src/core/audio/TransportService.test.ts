@@ -6,6 +6,7 @@ function createTone() {
     state: 'stopped',
     position: 12 as number | string,
     ticks: 96,
+    PPQ: 192,
     bpm: { value: 120 },
     start: vi.fn(() => {
       transport.state = 'started';
@@ -46,9 +47,12 @@ describe('TransportService', () => {
 
     transportService.pause();
     expect(tone.Transport.pause).toHaveBeenCalledTimes(1);
-    transportService.seekTicks(720);
+    transportService.start('clip-a', tone);
+    expect(tone.Transport.start).toHaveBeenCalledTimes(1);
+    transportService.seekTicks(480);
     transportService.setBpm(98);
-    expect(transportService.getPositionTicks()).toBe(720);
+    expect(tone.Transport.ticks).toBe(192);
+    expect(transportService.getPositionTicks()).toBe(480);
     expect(tone.Transport.bpm.value).toBe(98);
 
     transportService.resume();

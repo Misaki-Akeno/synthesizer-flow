@@ -52,7 +52,15 @@ describe('MIDI recording', () => {
       120
     );
 
-    expect(recorder.finish(120).notes[0].durationTicks).toBe(240);
+    const recording = recorder.finish(120);
+    expect(recording.notes[0].durationTicks).toBe(240);
+
+    const clip = normalizeMidiClip({ notes: [], bars: 1 });
+    const merged = mergeMidiRecording(clip, recording, 120, 1);
+    expect(merged.notes[0]).toMatchObject({
+      startTick: 1800,
+      durationTicks: 240,
+    });
   });
 
   it('quantizes non-destructively using a strength between zero and one', () => {

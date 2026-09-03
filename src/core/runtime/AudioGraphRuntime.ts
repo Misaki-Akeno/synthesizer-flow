@@ -159,10 +159,13 @@ export class AudioGraphRuntime {
 
     const result = callback(...args);
     this.refreshSnapshot(moduleId);
-    if (result && typeof (result as Promise<unknown>).finally === 'function') {
-      void (result as Promise<unknown>).finally(() => {
-        this.refreshSnapshot(moduleId);
-      });
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      // 同时处理 fulfilled/rejected，既保证异步动作结束后刷新快照，也避免
+      // `finally()` 派生出一个无人接收的 rejected Promise。
+      void (result as PromiseLike<unknown>).then(
+        () => this.refreshSnapshot(moduleId),
+        () => this.refreshSnapshot(moduleId)
+      );
     }
     return result;
   }

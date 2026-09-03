@@ -1,3 +1,5 @@
+import { TRANSPORT_PPQ } from '@/core/transport/types';
+
 interface ToneTransportLike {
   state: string;
   start: () => void;
@@ -6,6 +8,7 @@ interface ToneTransportLike {
   position?: number | string;
   ticks?: number;
   bpm?: { value: number };
+  PPQ?: number;
 }
 
 interface ToneLike {
@@ -22,10 +25,12 @@ interface ToneLike {
 class TransportService {
   private activeClients = new Set<string>();
   private tone: ToneLike | null = null;
+  private paused = false;
 
   public start(clientId: string, tone: ToneLike): void {
     this.tone = tone;
     this.activeClients.add(clientId);
+    if (this.paused) return;
     if (tone.Transport.state !== 'started') {
       tone.Transport.start();
     }
@@ -43,17 +48,22 @@ class TransportService {
     if ('position' in tone.Transport) {
       tone.Transport.position = 0;
     }
+    this.paused = false;
     this.tone = null;
   }
 
   /** 暂停全局时钟但保留活动片段和当前位置。 */
   public pause(): void {
-    if (this.tone?.Transport.state !== 'started') return;
-    this.tone.Transport.pause?.();
+    if (!this.tone || this.activeClients.size === 0) return;
+    this.paused = true;
+    if (this.tone.Transport.state === 'started') {
+      this.tone.Transport.pause?.();
+    }
   }
 
   /** 从暂停位置恢复全局时钟。 */
   public resume(): void {
+    this.paused = false;
     if (!this.tone || this.activeClients.size === 0) return;
     if (this.tone.Transport.state !== 'started') {
       this.tone.Transport.start();
@@ -62,7 +72,8 @@ class TransportService {
 
   public seekTicks(ticks: number): void {
     if (!this.tone || !('ticks' in this.tone.Transport)) return;
-    this.tone.Transport.ticks = Math.max(0, ticks);
+    this.tone.Transport.ticks =
+      (Math.max(0, ticks) * this.getTonePpq()) / TRANSPORT_PPQ;
   }
 
   public setBpm(bpm: number): void {
@@ -74,7 +85,9 @@ class TransportService {
   /** 仅在 Tone Transport 已被片段激活时返回权威播放位置。 */
   public getPositionTicks(): number | undefined {
     const ticks = this.tone?.Transport.ticks;
-    return Number.isFinite(ticks) ? ticks : undefined;
+    return Number.isFinite(ticks)
+      ? ((ticks as number) * TRANSPORT_PPQ) / this.getTonePpq()
+      : undefined;
   }
 
   public getActiveClientCount(): number {
@@ -83,7 +96,15 @@ class TransportService {
 
   public reset(): void {
     this.activeClients.clear();
+    this.paused = false;
     this.tone = null;
+  }
+
+  private getTonePpq(): number {
+    const ppq = this.tone?.Transport.PPQ;
+    return typeof ppq === 'number' && Number.isFinite(ppq) && ppq > 0
+      ? ppq
+      : TRANSPORT_PPQ;
   }
 }
 

@@ -590,9 +590,7 @@ describe('canvas store history', () => {
     });
 
     useFlowStore.getState().applyMidiControlChange(21, 0.5, 1);
-    expect(useFlowStore.getState().nodes[0].data.parameters.value).toBeCloseTo(
-      499.5
-    );
+    expect(useFlowStore.getState().nodes[0].data.parameters.value).toBe(500);
 
     const exported = JSON.parse(useFlowStore.getState().exportCanvasToJson());
     expect(exported.metadata.transport.midiMappings).toEqual([
@@ -602,6 +600,37 @@ describe('canvas store history', () => {
         channel: 1,
       }),
     ]);
+  });
+
+  it('snaps linear automation playback to the parameter step', () => {
+    useFlowStore
+      .getState()
+      .addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    useFlowStore.setState((state) => ({
+      transport: {
+        ...state.transport,
+        automationLanes: [
+          {
+            id: 'number:value',
+            moduleId: 'number',
+            parameterKey: 'value',
+            interpolation: 'linear',
+            points: [
+              { tick: 0, value: 0 },
+              { tick: 100, value: 999 },
+            ],
+          },
+        ],
+      },
+    }));
+    useFlowStore.getState().beginAutomationRecording();
+
+    useFlowStore.getState().applyAutomationAtTick(50);
+
+    expect(useFlowStore.getState().nodes[0].data.parameters.value).toBe(500);
+    expect(moduleManager.getModule('number')?.getParameterValue('value')).toBe(
+      500
+    );
   });
 
   it('persists Subpatch macros and restores grouping through history', () => {

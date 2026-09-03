@@ -10,13 +10,14 @@ import {
   applyEdgeChanges,
   applyNodeChanges,
 } from '@xyflow/react';
-import { PortType } from '@/core/base/ModuleBase';
+import { ParameterType, PortType } from '@/core/base/ModuleBase';
 import { createAudioGraphDocument } from '@/core/graph/document';
 import { getAudioConnectionKey } from '@/core/graph/reconciler';
 import {
   connectionSpecFromEdge,
   type FlowNode,
   type ParameterValue,
+  type RuntimeParameterMeta,
 } from '@/core/graph/types';
 import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
 import { audioGraphController } from '@/core/runtime/AudioGraphController';
@@ -217,6 +218,32 @@ function filterBindableEdges(nodes: FlowNode[], edges: Edge[]): Edge[] {
     }
     return true;
   });
+}
+
+function normalizeParameterValue(
+  value: ParameterValue,
+  meta: RuntimeParameterMeta
+): ParameterValue {
+  if (meta.type !== ParameterType.NUMBER || typeof value !== 'number') {
+    return value;
+  }
+
+  let normalized = Math.min(
+    meta.max ?? Number.POSITIVE_INFINITY,
+    Math.max(meta.min ?? Number.NEGATIVE_INFINITY, value)
+  );
+  if (typeof meta.step === 'number' && meta.step > 0) {
+    const origin = meta.min ?? 0;
+    normalized =
+      origin + Math.round((normalized - origin) / meta.step) * meta.step;
+    // 消除 0.1、0.05 等十进制 step 产生的浮点尾差。
+    normalized = Number(normalized.toPrecision(12));
+    normalized = Math.min(
+      meta.max ?? Number.POSITIVE_INFINITY,
+      Math.max(meta.min ?? Number.NEGATIVE_INFINITY, normalized)
+    );
+  }
+  return normalized;
 }
 
 function getSingleInputConflicts(
@@ -538,11 +565,17 @@ export const useFlowStore = create<FlowState>((set, get) => {
       if (mappings.length === 0) return;
       const updates = new Map<string, Map<string, number>>();
       mappings.forEach((mapping) => {
+        const meta = audioGraphRuntime.getModuleSnapshot(mapping.moduleId)
+          ?.parameterMeta[mapping.parameterKey];
+        if (!meta) return;
         const moduleUpdates = updates.get(mapping.moduleId) ?? new Map();
         moduleUpdates.set(
           mapping.parameterKey,
-          mapping.min +
-            (mapping.max - mapping.min) * Math.max(0, Math.min(1, value))
+          normalizeParameterValue(
+            mapping.min +
+              (mapping.max - mapping.min) * Math.max(0, Math.min(1, value)),
+            meta
+          ) as number
         );
         updates.set(mapping.moduleId, moduleUpdates);
       });
@@ -607,13 +640,7 @@ export const useFlowStore = create<FlowState>((set, get) => {
         const snapshot = audioGraphRuntime.getModuleSnapshot(lane.moduleId);
         const meta = snapshot?.parameterMeta[lane.parameterKey];
         if (!meta) return;
-        let nextValue = value;
-        if (typeof value === 'number') {
-          nextValue = Math.min(
-            meta.max ?? Number.POSITIVE_INFINITY,
-            Math.max(meta.min ?? Number.NEGATIVE_INFINITY, value)
-          );
-        }
+        const nextValue = normalizeParameterValue(value, meta);
         const moduleUpdates = updates.get(lane.moduleId) ?? new Map();
         moduleUpdates.set(lane.parameterKey, nextValue);
         updates.set(lane.moduleId, moduleUpdates);

@@ -204,6 +204,29 @@ describe('ToolExecutor', () => {
       expect(result.error).toContain('参数类型不匹配');
       expect(executor.getOperations()).toHaveLength(0);
     });
+
+    it('should clamp and snap numeric parameters before updating shadow state', () => {
+      const clamped = executor.updateModuleParameter(
+        'node-1',
+        'value',
+        100000
+      );
+      const snapped = executor.updateModuleParameter('node-1', 'value', 440.6);
+
+      expect(clamped.success).toBe(true);
+      expect(snapped.success).toBe(true);
+      expect(executor.getModuleDetails('node-1').data?.module.parameters.value).toBe(
+        441
+      );
+      expect(executor.getOperations()).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({ value: 999 }),
+        }),
+        expect.objectContaining({
+          data: expect.objectContaining({ value: 441 }),
+        }),
+      ]);
+    });
   });
 
   describe('connectModules', () => {

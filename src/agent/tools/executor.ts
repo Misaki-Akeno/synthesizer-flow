@@ -504,7 +504,9 @@ export class ToolExecutor {
     node: FlowNode,
     paramKey: string,
     value: unknown
-  ): { success: true } | { success: false; error: string } {
+  ):
+    | { success: true; value: number | boolean | string }
+    | { success: false; error: string } {
     if (!paramKey) {
       return { success: false, error: '参数名不能为空' };
     }
@@ -521,11 +523,28 @@ export class ToolExecutor {
         };
       }
 
-      if (meta.type === ParameterType.NUMBER && typeof value !== 'number') {
-        return {
-          success: false,
-          error: `参数类型不匹配: ${paramKey} 需要 number`,
-        };
+      if (meta.type === ParameterType.NUMBER) {
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return {
+            success: false,
+            error: `参数类型不匹配: ${paramKey} 需要有限 number`,
+          };
+        }
+        let normalized = Math.min(
+          meta.max ?? Number.POSITIVE_INFINITY,
+          Math.max(meta.min ?? Number.NEGATIVE_INFINITY, value)
+        );
+        if (typeof meta.step === 'number' && meta.step > 0) {
+          const origin = meta.min ?? 0;
+          normalized =
+            origin + Math.round((normalized - origin) / meta.step) * meta.step;
+          normalized = Number(normalized.toPrecision(12));
+          normalized = Math.min(
+            meta.max ?? Number.POSITIVE_INFINITY,
+            Math.max(meta.min ?? Number.NEGATIVE_INFINITY, normalized)
+          );
+        }
+        return { success: true, value: normalized };
       }
       if (meta.type === ParameterType.BOOLEAN && typeof value !== 'boolean') {
         return {
@@ -554,7 +573,7 @@ export class ToolExecutor {
         }
       }
 
-      return { success: true };
+      return { success: true, value: value as boolean | string };
     }
 
     const parameters = node.data?.parameters || {};
@@ -579,7 +598,7 @@ export class ToolExecutor {
       };
     }
 
-    return { success: true };
+    return { success: true, value: value as number | boolean | string };
   }
 
   /**
@@ -603,11 +622,12 @@ export class ToolExecutor {
     if (!node.data) node.data = {};
     if (!node.data.parameters) node.data.parameters = {};
 
-    node.data.parameters[paramKey] = value;
+    const normalizedValue = validation.value;
+    node.data.parameters[paramKey] = normalizedValue;
 
     this.operations.push({
       type: 'UPDATE_MODULE_PARAM',
-      data: { id: moduleId, key: paramKey, value },
+      data: { id: moduleId, key: paramKey, value: normalizedValue },
     });
 
     const details = this.getModuleDetails(moduleId);
@@ -615,7 +635,7 @@ export class ToolExecutor {
     return {
       success: true,
       data: {
-        message: `成功更新模块 ${moduleId} 的参数 ${paramKey} 为 ${value}`,
+        message: `成功更新模块 ${moduleId} 的参数 ${paramKey} 为 ${normalizedValue}`,
         moduleDetails: details.data,
       },
     };

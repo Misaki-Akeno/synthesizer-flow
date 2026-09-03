@@ -130,16 +130,15 @@ export function mergeMidiRecording(
       0,
       length - 1
     );
-    const endTick = clamp(
-      quantizeTickWithStrength(
-        note.startTick + note.durationTicks,
-        gridTicks,
-        quantizeStrength
-      ),
-      startTick + 1,
-      length
+    const quantizedEndTick = quantizeTickWithStrength(
+      note.startTick + note.durationTicks,
+      gridTicks,
+      quantizeStrength
     );
-    return { ...note, startTick, durationTicks: endTick - startTick };
+    // 跨循环边界的音符允许结束位置超过 clip length；Sequencer 会在调度
+    // note-off 时取模。把 endTick 裁到 length 会错误缩短循环末尾的录音。
+    const durationTicks = clamp(quantizedEndTick - startTick, 1, length);
+    return { ...note, startTick, durationTicks };
   });
   return {
     ...clip,

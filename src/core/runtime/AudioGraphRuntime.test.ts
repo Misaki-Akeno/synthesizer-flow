@@ -92,4 +92,24 @@ describe('AudioGraphRuntime', () => {
     expect(listenerA).toHaveBeenCalledTimes(1);
     expect(listenerB).not.toHaveBeenCalled();
   });
+
+  it('refreshes after a rejected async action without creating a rejected chain', async () => {
+    const rejection = Promise.reject(new Error('recording failed'));
+    const internals = runtime as unknown as {
+      actions: Map<string, Map<string, () => Promise<never>>>;
+      refreshSnapshot: (moduleId: string) => void;
+    };
+    const refreshSnapshot = vi.spyOn(internals, 'refreshSnapshot');
+    internals.actions.set(
+      'async-module',
+      new Map([['startRecording', () => rejection]])
+    );
+
+    const returned = runtime.invokeAction('async-module', 'startRecording');
+
+    expect(returned).toBe(rejection);
+    await expect(returned).rejects.toThrow('recording failed');
+    await Promise.resolve();
+    expect(refreshSnapshot).toHaveBeenCalledTimes(2);
+  });
 });
