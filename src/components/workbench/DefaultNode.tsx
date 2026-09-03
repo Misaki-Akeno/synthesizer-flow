@@ -135,7 +135,9 @@ const DefaultNode = ({ data, id, selected }: DefaultNodeProps) => {
   const groupedParameters: Record<string, ParameterItem[]> = { '': [] };
   if (snapshot) {
     Object.entries(snapshot.parameterMeta).forEach(([key, meta]) => {
-      if (meta.uiOptions?.hide) return;
+      if (meta.uiOptions?.hide || meta.uiOptions?.hideInNode) {
+        return;
+      }
       const group = (meta.uiOptions?.group as string) || '';
       const item: ParameterItem = {
         key,
