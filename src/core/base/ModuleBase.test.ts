@@ -37,6 +37,31 @@ class MidiTargetModule extends ModuleBase {
   }
 }
 
+class NumberSourceModule extends ModuleBase {
+  constructor() {
+    super(
+      'number-source',
+      'number-source',
+      'Number Source',
+      {},
+      {},
+      { output: { type: PortType.NUMBER, value: 0 } }
+    );
+  }
+}
+
+class NumberTargetModule extends ModuleBase {
+  constructor() {
+    super(
+      'number-target',
+      'number-target',
+      'Number Target',
+      {},
+      { modulation: { type: PortType.NUMBER, value: 0.5 } }
+    );
+  }
+}
+
 describe('ModuleBase MIDI connections', () => {
   it('publishes all-notes-off when a MIDI connection is removed', () => {
     const source = new MidiSourceModule();
@@ -64,5 +89,17 @@ describe('ModuleBase MIDI connections', () => {
       isMidiFrame(released) &&
         released.events.some((event) => event.type === 'allNotesOff')
     ).toBe(true);
+  });
+
+  it('restores the declared input default when a number connection is removed', () => {
+    const source = new NumberSourceModule();
+    const target = new NumberTargetModule();
+    source.connectOutput('output', target, 'modulation');
+    source.outputPorts.output.next(1);
+    expect(target.inputPorts.modulation.getValue()).toBe(1);
+
+    source.disconnectOutput('output', target, 'modulation');
+
+    expect(target.inputPorts.modulation.getValue()).toBe(0.5);
   });
 });

@@ -39,16 +39,6 @@ export const MODULE_GUIDES: Record<string, ModuleGuideContent> = {
     cautions: ['LFO 输出不是音频，不能直接连接 AUDIO 端口'],
     tags: ['modulation', 'lfo', 'number'],
   },
-  envelope: {
-    useWhen: ['需要音符触发的 ADSR 控制曲线', '塑造音量或滤波器动态'],
-    setup: [
-      '将门信号连接到 gate',
-      '设置 Attack、Decay、Sustain 与 Release',
-      '把 envelope 输出连接到 VCA cv 或其他 NUMBER 调制输入',
-    ],
-    cautions: ['包络输出是 NUMBER 控制信号，不能直接连接 AUDIO 端口'],
-    tags: ['modulation', 'envelope', 'adsr', 'number'],
-  },
   midiinput: {
     useWhen: ['接入外部 MIDI 键盘', '使用 MPE 控制器进行逐音符表达'],
     setup: [

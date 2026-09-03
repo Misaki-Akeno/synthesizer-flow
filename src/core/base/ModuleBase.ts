@@ -101,6 +101,9 @@ export abstract class ModuleBase {
   public inputPortTypes: { [key: string]: PortType };
   public outputPortTypes: { [key: string]: PortType };
 
+  // 解绑时恢复端口自己的声明默认值，不能假设所有 NUMBER 输入都以 0 为中性值。
+  private inputPortDefaults: { [key: string]: ModuleInterface } = {};
+
   // 存储订阅关系以便取消订阅
   private subscriptions: { [key: string]: Subscription } = {};
 
@@ -161,6 +164,7 @@ export abstract class ModuleBase {
     for (const [key, { type, value }] of Object.entries(inputPorts)) {
       this.inputPorts[key] = new BehaviorSubject<ModuleInterface>(value);
       this.inputPortTypes[key] = type;
+      this.inputPortDefaults[key] = Array.isArray(value) ? [...value] : value;
     }
 
     // 转换输出端口为BehaviorSubject并记录类型
@@ -707,7 +711,7 @@ export abstract class ModuleBase {
         this.inputPorts[inputPortName].next(
           portType === PortType.MIDI
             ? createMidiFrame([], [{ type: 'allNotesOff' }])
-            : 0
+            : this.inputPortDefaults[inputPortName]
         );
         unbound = true;
       }

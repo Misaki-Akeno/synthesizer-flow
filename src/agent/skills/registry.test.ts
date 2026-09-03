@@ -7,7 +7,7 @@ describe('Agent Skills registry', () => {
   it('exposes one discoverable Skill for every registered module', () => {
     const skills = listAgentSkills();
 
-    expect(skills).toHaveLength(22);
+    expect(skills).toHaveLength(21);
     expect(skills).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

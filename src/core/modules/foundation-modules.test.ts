@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { PortType } from '@/core/base/ModuleBase';
 import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
 import { moduleClassMap } from '@/core/modules';
-import { EnvelopeModule } from './modulation/EnvelopeModule';
 
 const EXPECTED_PORTS = {
   vca: {
@@ -12,10 +11,6 @@ const EXPECTED_PORTS = {
   filter: {
     inputs: { input: PortType.AUDIO, cutoffMod: PortType.NUMBER },
     outputs: { output: PortType.AUDIO },
-  },
-  envelope: {
-    inputs: { gate: PortType.NUMBER },
-    outputs: { envelope: PortType.NUMBER },
   },
   mixer: {
     inputs: {
@@ -39,7 +34,6 @@ const EXPECTED_PORTS = {
 
 describe('foundation audio modules', () => {
   afterEach(() => {
-    vi.useRealTimers();
     moduleDefinitionRegistry.clear();
   });
 
@@ -55,20 +49,4 @@ describe('foundation audio modules', () => {
     });
   });
 
-  it('generates an ADSR control signal from a gate', () => {
-    vi.useFakeTimers();
-    const envelope = new EnvelopeModule('env');
-    envelope.updateParameter('attack', 0.01);
-    envelope.updateParameter('decay', 0.01);
-    envelope.updateParameter('sustain', 0.5);
-
-    envelope.inputPorts.gate.next(1);
-    vi.advanceTimersByTime(48);
-    expect(envelope.outputPorts.envelope.getValue()).toBeCloseTo(0.5, 1);
-
-    envelope.inputPorts.gate.next(0);
-    vi.advanceTimersByTime(600);
-    expect(envelope.outputPorts.envelope.getValue()).toBe(0);
-    envelope.dispose();
-  });
 });

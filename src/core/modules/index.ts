@@ -15,7 +15,6 @@ import { CalculatorModule } from './logic/CalculatorModule';
 import { OscilloscopeModule } from './logic/OscilloscopeModule';
 import { VCAModule } from './audio/VCAModule';
 import { FilterModule } from './audio/FilterModule';
-import { EnvelopeModule } from './modulation/EnvelopeModule';
 import { MixerModule } from './audio/MixerModule';
 import { NoiseModule } from './audio/NoiseModule';
 import { MasterLimiterModule } from './audio/MasterLimiterModule';
@@ -41,7 +40,6 @@ export {
   OscilloscopeModule,
   VCAModule,
   FilterModule,
-  EnvelopeModule,
   MixerModule,
   NoiseModule,
   MasterLimiterModule,
@@ -70,7 +68,6 @@ export const moduleClassMap: Record<
   oscilloscope: OscilloscopeModule,
   vca: VCAModule,
   filter: FilterModule,
-  envelope: EnvelopeModule,
   mixer: MixerModule,
   noise: NoiseModule,
   masterlimiter: MasterLimiterModule,
