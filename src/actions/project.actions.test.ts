@@ -143,6 +143,21 @@ describe('project actions', () => {
     expect(result.data?.id).toBe('preset-1');
   });
 
+  it('allows signed-out users to load bundled presets without a database query', async () => {
+    mockAuth.mockResolvedValue(null);
+
+    const result = await getProjectById('preset-space-oscillator-v1');
+
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error(result.error);
+    expect(result.data).toMatchObject({
+      id: 'preset-space-oscillator-v1',
+      isPreset: true,
+      data: { version: '1.0' },
+    });
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
   it('reports a pending database migration for missing project columns', async () => {
     const databaseError = new Error('Failed query') as Error & {
       cause?: unknown;
@@ -154,10 +169,12 @@ describe('project actions', () => {
 
     const result = await getBuiltInPresets();
 
-    expect(result).toEqual({
-      success: false,
-      error: 'PROJECT_DATABASE_MIGRATION_REQUIRED',
+    expect(result).toMatchObject({
+      success: true,
+      warning: 'PROJECT_DATABASE_MIGRATION_REQUIRED',
     });
+    if (!result.success) throw new Error(result.error);
+    expect(result.data).toHaveLength(2);
   });
 
   it('denies private projects without user association', async () => {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { moduleManager } from '@/core/services/ModuleManager';
 import { moduleInitManager } from '@/core/services/ModuleInitManager';
+import { audioGraphController } from '@/core/runtime/AudioGraphController';
 import { useFlowStore } from './canvas-store';
 import { useProjectStore } from './projects-store';
 import {
@@ -32,7 +32,7 @@ const mockGetUserProjects = vi.mocked(getUserProjects);
 const mockSaveProject = vi.mocked(saveProject);
 
 function resetStores(): void {
-  moduleManager.disposeAllModules();
+  audioGraphController.reset();
   moduleInitManager.reset();
   useProjectStore.persist.setOptions({
     storage: memoryStorage,
@@ -41,6 +41,7 @@ function resetStores(): void {
     nodes: [],
     edges: [],
     currentProjectId: '',
+    subpatches: [],
     canUndo: false,
     canRedo: false,
     history: {
@@ -181,7 +182,7 @@ describe('project store', () => {
     expect(mockSaveProject).toHaveBeenCalledWith(
       '导入的项目',
       expect.objectContaining({
-        version: '1.0',
+        version: '2.0',
       }),
       {
         projectId: undefined,
@@ -221,7 +222,7 @@ describe('project store', () => {
     expect(mockSaveProject).toHaveBeenCalledWith(
       '新名称',
       expect.objectContaining({
-        version: '1.0',
+        version: '2.0',
       }),
       {
         projectId: 'existing-1',

@@ -32,10 +32,41 @@ export type MidiEvent =
       timbre?: number;
       tick?: number;
     }
-  | { type: 'noteOff'; noteId: string; midi: number; channel?: number; tick?: number }
-  | { type: 'pitchBend'; noteId?: string; channel?: number; value: number; tick?: number }
-  | { type: 'pressure'; noteId?: string; channel?: number; value: number; tick?: number }
-  | { type: 'timbre'; noteId?: string; channel?: number; value: number; tick?: number }
+  | {
+      type: 'noteOff';
+      noteId: string;
+      midi: number;
+      channel?: number;
+      tick?: number;
+    }
+  | {
+      type: 'pitchBend';
+      noteId?: string;
+      channel?: number;
+      value: number;
+      tick?: number;
+    }
+  | {
+      type: 'pressure';
+      noteId?: string;
+      channel?: number;
+      value: number;
+      tick?: number;
+    }
+  | {
+      type: 'timbre';
+      noteId?: string;
+      channel?: number;
+      value: number;
+      tick?: number;
+    }
+  | {
+      type: 'controlChange';
+      controller: number;
+      channel?: number;
+      value: number;
+      tick?: number;
+    }
   | { type: 'allNotesOff'; channel?: number; tick?: number };
 
 export interface MidiActiveNote extends MidiExpression {

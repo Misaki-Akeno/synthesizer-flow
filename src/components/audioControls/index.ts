@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import XYPad from './XYPad';
 import PianoKeyboard from './PianoKeyboard';
 import SequenceEditor from './SequenceEditor';
+import EnvelopeEditor from './EnvelopeEditor';
 import {
   ParameterControl,
   NumberParameterControl,
@@ -15,6 +16,7 @@ import {
 import { InputPort, OutputPort } from './ModulePorts';
 import { ModuleEnableToggle } from './ModuleEnableToggle';
 import ModuleButton from './ModuleButton';
+import RecorderControls from './RecorderControls';
 
 const Oscilloscope = dynamic(() => import('./Oscilloscope'), {
   ssr: false,
@@ -44,7 +46,9 @@ export const CustomUIComponents = {
   XYPad,
   PianoKeyboard,
   CommonButton: ModuleButton,
+  RecorderControls,
   SequenceEditor, // sequencer: SequenceEditor,
+  EnvelopeEditor,
   oscilloscope: Oscilloscope,
 };
 

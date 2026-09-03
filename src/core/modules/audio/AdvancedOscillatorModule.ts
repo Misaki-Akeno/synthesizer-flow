@@ -148,7 +148,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         uiOptions: {
           label: 'Att<Vel',
           describe: '力度对起音速度的影响',
-          group: '包络设置',
+          group: '表现力',
         },
       },
       attack: {
@@ -162,6 +162,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
           label: '起音时间',
           describe: '触发音符时包络的起始时间，单位为秒',
           group: '包络设置',
+          hideInNode: true,
         },
       },
       decay: {
@@ -175,6 +176,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
           label: '衰减时间',
           describe: '音调达到持续水平前的衰减时间，单位为秒',
           group: '包络设置',
+          hideInNode: true,
         },
       },
       sustain: {
@@ -187,6 +189,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
           label: '持续音量',
           describe: '维持音符时的音量水平（0-1）',
           group: '包络设置',
+          hideInNode: true,
         },
       },
       sustainTime: {
@@ -199,6 +202,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
           label: 'S.Time',
           describe: '延音渐弱时间，单位为秒',
           group: '包络设置',
+          hideInNode: true,
         },
       },
       release: {
@@ -211,6 +215,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
           label: '释音时间',
           describe: '音符释放后的衰减时间，单位为秒',
           group: '包络设置',
+          hideInNode: true,
         },
       },
     };
@@ -243,6 +248,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     };
 
     super(moduleType, id, name, parameters, inputPorts, outputPorts, true);
+    this.setCustomUI('EnvelopeEditor');
   }
 
   /**

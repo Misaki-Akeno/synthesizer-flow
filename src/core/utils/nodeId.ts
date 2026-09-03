@@ -34,3 +34,7 @@ export function createModuleId(existingIds: Iterable<string> = []): string {
 export function createEdgeId(existingIds: Iterable<string> = []): string {
   return createPrefixedId('edge', existingIds);
 }
+
+export function createSubpatchId(existingIds: Iterable<string> = []): string {
+  return createPrefixedId('subpatch', existingIds);
+}

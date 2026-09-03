@@ -48,6 +48,27 @@ test('可以从 MIDI Clip 打开底部编辑器', async ({ page }) => {
   await expect(page.getByText('MIDI 编辑器', { exact: true })).toBeVisible();
 });
 
+test('全局 Transport 可以播放、停止并打开自动化面板', async ({ page }) => {
+  await openBlankWorkbench(page);
+
+  const transport = page.getByTestId('global-transport');
+  await expect(transport).toBeVisible();
+  await transport.getByRole('button', { name: '播放', exact: true }).click();
+  await expect(
+    transport.getByRole('button', { name: '停止并回到开头', exact: true })
+  ).toBeVisible();
+
+  await transport
+    .getByRole('button', { name: '停止并回到开头', exact: true })
+    .click();
+  await expect(
+    transport.getByRole('button', { name: '播放', exact: true })
+  ).toBeVisible();
+
+  await transport.getByRole('button', { name: '自动化通道' }).click();
+  await expect(page.getByRole('dialog', { name: '参数自动化' })).toBeVisible();
+});
+
 test('模块浏览器可以滚动到列表底部并添加模块', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await openBlankWorkbench(page);
@@ -63,4 +84,20 @@ test('模块浏览器可以滚动到列表底部并添加模块', async ({ page 
   await speakerButton.click();
 
   await expect(page.locator('[data-module-type="speaker"]')).toHaveCount(1);
+});
+
+test('AI 助手操作位于面板标题栏而不是输入区', async ({ page }) => {
+  await openBlankWorkbench(page);
+  await page.getByRole('button', { name: 'AI 助手面板' }).click();
+
+  const headerActions = page.getByTestId('chat-header-actions');
+  await expect(
+    headerActions.getByRole('button', { name: '新建对话' })
+  ).toBeVisible();
+  await expect(
+    headerActions.getByRole('button', { name: '关闭面板' })
+  ).toBeVisible();
+  await expect(
+    page.getByTestId('chat-composer').getByRole('button', { name: '新建对话' })
+  ).toHaveCount(0);
 });

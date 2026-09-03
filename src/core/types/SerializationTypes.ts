@@ -10,6 +10,7 @@ export interface SerializedNode {
     type: string;
     label?: string;
     parameters?: { [key: string]: number | boolean | string };
+    enabled?: boolean;
     [key: string]: unknown;
   };
 }

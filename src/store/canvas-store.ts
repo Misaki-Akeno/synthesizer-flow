@@ -2,20 +2,32 @@
 
 import { create } from 'zustand';
 import {
-  Connection,
-  EdgeChange,
-  NodeChange,
-  addEdge,
-  applyNodeChanges,
+  type Connection,
+  type Edge,
+  type EdgeChange,
+  type NodeChange,
+  addEdge as addReactFlowEdge,
   applyEdgeChanges,
-  Edge,
+  applyNodeChanges,
 } from '@xyflow/react';
-import { moduleManager, FlowNode } from '../core/services/ModuleManager';
-import { moduleInitManager } from '../core/services/ModuleInitManager';
-import { serializationManager } from '../core/services/SerializationManager';
+import { ParameterType, PortType } from '@/core/base/ModuleBase';
+import { createAudioGraphDocument } from '@/core/graph/document';
+import { getAudioConnectionKey } from '@/core/graph/reconciler';
 import {
+  connectionSpecFromEdge,
+  type FlowNode,
+  type ParameterValue,
+  type RuntimeParameterMeta,
+} from '@/core/graph/types';
+import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
+import { audioGraphController } from '@/core/runtime/AudioGraphController';
+import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
+import { serializationManager } from '@/core/services/SerializationManager';
+import type {
   SerializedCanvas,
+  SerializedEdge,
   SerializedModule,
+  SerializedNode,
 } from '@/core/types/SerializationTypes';
 import {
   validateAndParseJson,
@@ -23,20 +35,47 @@ import {
   validateSerializedModule,
 } from '@/core/types/SerializationValidator';
 import { createModuleLogger } from '@/lib/logger';
-import { PortType } from '@/core/base/ModuleBase';
-import { createNodeId } from '@/core/utils/nodeId';
+import { createNodeId, createSubpatchId } from '@/core/utils/nodeId';
+import {
+  createAutomaticMacroControls,
+  normalizeSubpatchDocuments,
+  SUBPATCH_DOCUMENT_VERSION,
+  type SubpatchDocument,
+} from '@/core/subpatch/types';
+import {
+  automationLaneId,
+  getAutomationValueAtTick,
+  normalizeTransportDocument,
+  removeAutomationLane,
+  simplifyAutomationDocument,
+  upsertAutomationPoint,
+} from '@/core/transport/automation';
+import {
+  createDefaultTransportDocument,
+  TRANSPORT_PPQ,
+  type AutomationMode,
+  type MidiControlMapping,
+  type TransportDocument,
+} from '@/core/transport/types';
+import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
 
-// 创建Store专用日志记录器
 const logger = createModuleLogger('FlowStore');
 const MAX_HISTORY_SIZE = 100;
+const AUTOMATION_IGNORED_PARAMETERS = new Set([
+  'bpm',
+  'clip',
+  'loop',
+  'running',
+  'recordArmed',
+  'quantizeStrength',
+]);
 
-// --------------------------------
-//        Reactflow管理部分
-// --------------------------------
 interface FlowState {
   nodes: FlowNode[];
   edges: Edge[];
-  currentProjectId: string; // 修改：预设ID改为项目ID
+  currentProjectId: string;
+  transport: TransportDocument;
+  subpatches: SubpatchDocument[];
   canUndo: boolean;
   canRedo: boolean;
   history: {
@@ -44,6 +83,23 @@ interface FlowState {
     future: SerializedCanvas[];
   };
   setCurrentProjectId: (projectId: string) => void;
+  setTransportBpm: (bpm: number) => void;
+  setTransportLoopEnabled: (enabled: boolean) => void;
+  setTransportLoopRange: (startTick: number, endTick: number) => void;
+  setAutomationMode: (mode: AutomationMode) => void;
+  beginAutomationRecording: () => void;
+  finishAutomationRecording: () => void;
+  addMidiMapping: (mapping: Omit<MidiControlMapping, 'id'>) => void;
+  removeMidiMapping: (mappingId: string) => void;
+  applyMidiControlChange: (
+    controller: number,
+    value: number,
+    channel: number
+  ) => void;
+  setSequencersRunning: (running: boolean) => void;
+  applyAutomationAtTick: (tick: number) => void;
+  clearAutomationLane: (laneId: string) => void;
+  clearAllAutomation: () => void;
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
@@ -57,6 +113,12 @@ interface FlowState {
     paramKey: string,
     value: number | boolean | string
   ) => void;
+  toggleModuleEnabled: (nodeId: string) => void;
+  invokeModuleAction: (
+    nodeId: string,
+    action: string,
+    ...args: unknown[]
+  ) => unknown;
   addNode: (
     type: string,
     label: string,
@@ -66,8 +128,12 @@ interface FlowState {
   addEdge: (source: string, target: string) => void;
   deleteNode: (nodeId: string) => void;
   renameNode: (nodeId: string, newLabel: string) => void;
-
-  // 序列化相关方法
+  createSubpatchFromSelection: () => string | null;
+  removeSubpatch: (subpatchId: string) => void;
+  renameSubpatch: (subpatchId: string, name: string) => void;
+  copySelection: () => boolean;
+  pasteSelection: () => string[];
+  duplicateSelection: () => string[];
   exportCanvasToJson: () => string;
   importCanvasFromJson: (jsonString: string, projectId?: string) => boolean;
   getModuleAsJson: (moduleId: string) => unknown | null;
@@ -75,9 +141,14 @@ interface FlowState {
   importModuleFromData: (data: unknown) => string | null;
 }
 
-// 创建空的初始状态
-const initialNodes: FlowNode[] = [];
-const initialEdges: Edge[] = [];
+interface CanvasClipboard {
+  nodes: SerializedNode[];
+  edges: SerializedEdge[];
+  subpatches: SubpatchDocument[];
+  pasteCount: number;
+}
+
+let canvasClipboard: CanvasClipboard | null = null;
 
 function validateImportableNodes(nodes: SerializedCanvas['nodes']): boolean {
   const seenIds = new Set<string>();
@@ -87,10 +158,9 @@ function validateImportableNodes(nodes: SerializedCanvas['nodes']): boolean {
       logger.error('导入画布包含重复节点ID，已拒绝', { nodeId: node.id });
       return false;
     }
-
     seenIds.add(node.id);
 
-    if (!moduleManager.hasModuleType(node.data.type)) {
+    if (!moduleDefinitionRegistry.has(node.data.type)) {
       logger.error('导入画布包含未知模块类型，已拒绝', {
         nodeId: node.id,
         type: node.data.type,
@@ -102,73 +172,88 @@ function validateImportableNodes(nodes: SerializedCanvas['nodes']): boolean {
   return true;
 }
 
+function edgeId(
+  source: string,
+  target: string,
+  sourceHandle?: string | null,
+  targetHandle?: string | null
+): string {
+  const sourceKey = sourceHandle ? `${source}-${sourceHandle}` : source;
+  const targetKey = targetHandle ? `${target}-${targetHandle}` : target;
+  return `edge_${sourceKey}_to_${targetKey}`;
+}
+
 function filterBindableEdges(nodes: FlowNode[], edges: Edge[]): Edge[] {
-  const nodeIds = new Set(nodes.map((node) => node.id));
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]));
   const occupiedSingleInputs = new Set<string>();
 
   return edges.filter((edge) => {
-    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
-      logger.warn('导入画布跳过端点不存在的连接', {
-        source: edge.source,
-        target: edge.target,
-      });
+    const sourceNode = nodeMap.get(edge.source);
+    const targetNode = nodeMap.get(edge.target);
+    if (!sourceNode || !targetNode) {
       return false;
     }
 
-    const isBindable = moduleManager.canBindModules(
-      edge.source,
-      edge.target,
-      edge.sourceHandle ?? undefined,
-      edge.targetHandle ?? undefined
-    );
+    const sourceDefinition = moduleDefinitionRegistry.get(sourceNode.data.type);
+    const targetDefinition = moduleDefinitionRegistry.get(targetNode.data.type);
+    const sourcePort = edge.sourceHandle ?? 'output';
+    const targetPort = edge.targetHandle ?? 'input';
+    const sourceType = sourceDefinition?.outputPortTypes[sourcePort];
+    const targetType = targetDefinition?.inputPortTypes[targetPort];
 
-    if (!isBindable) {
-      logger.warn('导入画布跳过无法绑定的连接', {
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: edge.sourceHandle,
-        targetHandle: edge.targetHandle,
-      });
+    if (!sourceType || !targetType || sourceType !== targetType) {
       return false;
     }
 
-    const targetHandle = edge.targetHandle ?? 'input';
-    const targetModule = moduleManager.getModule(edge.target);
-    const targetType = targetModule?.inputPortTypes[targetHandle];
-    const inputKey = `${edge.target}:${targetHandle}`;
-
+    const inputKey = `${edge.target}:${targetPort}`;
     if (
       targetType !== PortType.AUDIO &&
       targetType !== PortType.ARRAY &&
       occupiedSingleInputs.has(inputKey)
     ) {
-      logger.warn('导入画布跳过同一单输入端口上的重复连接', {
-        target: edge.target,
-        targetHandle,
-      });
       return false;
     }
-
     if (targetType !== PortType.AUDIO && targetType !== PortType.ARRAY) {
       occupiedSingleInputs.add(inputKey);
     }
-
     return true;
   });
+}
+
+function normalizeParameterValue(
+  value: ParameterValue,
+  meta: RuntimeParameterMeta
+): ParameterValue {
+  if (meta.type !== ParameterType.NUMBER || typeof value !== 'number') {
+    return value;
+  }
+
+  let normalized = Math.min(
+    meta.max ?? Number.POSITIVE_INFINITY,
+    Math.max(meta.min ?? Number.NEGATIVE_INFINITY, value)
+  );
+  if (typeof meta.step === 'number' && meta.step > 0) {
+    const origin = meta.min ?? 0;
+    normalized =
+      origin + Math.round((normalized - origin) / meta.step) * meta.step;
+    // 消除 0.1、0.05 等十进制 step 产生的浮点尾差。
+    normalized = Number(normalized.toPrecision(12));
+    normalized = Math.min(
+      meta.max ?? Number.POSITIVE_INFINITY,
+      Math.max(meta.min ?? Number.NEGATIVE_INFINITY, normalized)
+    );
+  }
+  return normalized;
 }
 
 function getSingleInputConflicts(
   edges: Edge[],
   connection: Connection
 ): Edge[] {
-  if (!connection.target) {
-    return [];
-  }
-
-  const targetHandle = connection.targetHandle ?? 'input';
-  const targetModule = moduleManager.getModule(connection.target);
-  const targetType = targetModule?.inputPortTypes[targetHandle];
-
+  if (!connection.target) return [];
+  const targetPort = connection.targetHandle ?? 'input';
+  const snapshot = audioGraphRuntime.getModuleSnapshot(connection.target);
+  const targetType = snapshot?.inputPortTypes[targetPort];
   if (targetType === PortType.AUDIO || targetType === PortType.ARRAY) {
     return [];
   }
@@ -176,47 +261,36 @@ function getSingleInputConflicts(
   return edges.filter(
     (edge) =>
       edge.target === connection.target &&
-      (edge.targetHandle ?? 'input') === targetHandle
+      (edge.targetHandle ?? 'input') === targetPort
   );
-}
-
-function restoreEdgeBindings(edges: Edge[]): void {
-  edges.forEach((edge) => {
-    moduleManager.bindModules(
-      edge.source,
-      edge.target,
-      edge.sourceHandle ?? undefined,
-      edge.targetHandle ?? undefined
-    );
-  });
 }
 
 function createCanvasSnapshot(
   nodes: FlowNode[],
-  edges: Edge[]
+  edges: Edge[],
+  transport: TransportDocument,
+  subpatches: SubpatchDocument[]
 ): SerializedCanvas {
-  return serializationManager.serializeCanvas(nodes, edges);
+  return serializationManager.serializeCanvas(nodes, edges, {
+    transport,
+    subpatches,
+  });
 }
 
 function cloneCanvasSnapshot(snapshot: SerializedCanvas): SerializedCanvas {
   return JSON.parse(JSON.stringify(snapshot)) as SerializedCanvas;
 }
 
-function getComparableSnapshot(snapshot: SerializedCanvas): string {
+function comparableSnapshot(snapshot: SerializedCanvas): string {
   return JSON.stringify({
     nodes: snapshot.nodes,
     edges: snapshot.edges,
+    transport: normalizeTransportDocument(snapshot.metadata?.transport),
+    subpatches: snapshot.metadata?.subpatches ?? [],
   });
 }
 
-function areCanvasSnapshotsEqual(
-  left: SerializedCanvas,
-  right: SerializedCanvas
-): boolean {
-  return getComparableSnapshot(left) === getComparableSnapshot(right);
-}
-
-function getHistoryState(past: SerializedCanvas[], future: SerializedCanvas[]) {
+function historyState(past: SerializedCanvas[], future: SerializedCanvas[]) {
   return {
     history: { past, future },
     canUndo: past.length > 0,
@@ -224,199 +298,488 @@ function getHistoryState(past: SerializedCanvas[], future: SerializedCanvas[]) {
   };
 }
 
+function hydrateNodesFromRuntime(nodes: FlowNode[]): FlowNode[] {
+  return nodes.map((node) => {
+    const snapshot = audioGraphRuntime.getModuleSnapshot(node.id);
+    if (!snapshot) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        label: snapshot.name,
+        parameters: {
+          ...snapshot.parameters,
+          ...node.data.parameters,
+        },
+        enabled: snapshot.enabled,
+      },
+    };
+  });
+}
+
+function pruneTransportAutomation(
+  transport: TransportDocument,
+  nodes: FlowNode[]
+): TransportDocument {
+  const moduleIds = new Set(nodes.map((node) => node.id));
+  return {
+    ...transport,
+    automationLanes: transport.automationLanes.filter((lane) =>
+      moduleIds.has(lane.moduleId)
+    ),
+    midiMappings: transport.midiMappings.filter((mapping) =>
+      moduleIds.has(mapping.moduleId)
+    ),
+  };
+}
+
 export const useFlowStore = create<FlowState>((set, get) => {
-  // 设置节点获取函数
-  moduleManager.setNodesGetter(() => get().nodes);
   const draggingNodeIds = new Set<string>();
+  const automationWriteLanes = new Set<string>();
+  const automationTouchUntil = new Map<string, number>();
+  let graphRevision = 0;
   let historyTransaction: { snapshot: SerializedCanvas; depth: number } | null =
     null;
 
-  const applyCanvasSnapshot = (snapshot: SerializedCanvas) => {
-    // 撤销/重做会完整重建模块实例，确保模块注册表、参数和连接状态一致。
-    moduleManager.disposeAllModules();
-    moduleInitManager.reset();
+  const nextDocument = (nodes: FlowNode[], edges: Edge[]) =>
+    createAudioGraphDocument(nodes, edges, ++graphRevision);
 
-    const { nodes, edges } = serializationManager.deserializeCanvas(snapshot);
-    const bindableEdges = filterBindableEdges(nodes, edges);
-
-    set({
+  const commitGraph = (nodes: FlowNode[], edges: Edge[]) => {
+    const result = audioGraphController.commit(nextDocument(nodes, edges));
+    const acceptedConnectionKeys = new Set(
+      result.document.connections.map(getAudioConnectionKey)
+    );
+    return {
       nodes,
-      edges: bindableEdges,
-    });
+      edges: edges.filter((edge) =>
+        acceptedConnectionKeys.has(
+          getAudioConnectionKey(connectionSpecFromEdge(edge))
+        )
+      ),
+      result,
+    };
+  };
 
-    moduleInitManager.onAllModulesReady(() => {
-      moduleManager.setupAllEdgeBindings(bindableEdges);
+  const adoptGraph = (nodes: FlowNode[], edges: Edge[]) => {
+    audioGraphController.adoptDocument(nextDocument(nodes, edges));
+  };
+
+  const ensureDefinitions = (nodes: FlowNode[]) => {
+    if (nodes.some((node) => !moduleDefinitionRegistry.get(node.data.type))) {
+      commitGraph(nodes, []);
+    }
+  };
+
+  const applyCanvasSnapshot = (snapshot: SerializedCanvas) => {
+    const deserialized = serializationManager.deserializeCanvas(snapshot);
+    ensureDefinitions(deserialized.nodes);
+    const candidateEdges = filterBindableEdges(
+      deserialized.nodes,
+      deserialized.edges
+    );
+    const committed = commitGraph(deserialized.nodes, candidateEdges);
+    const hydratedNodes = hydrateNodesFromRuntime(committed.nodes);
+    adoptGraph(hydratedNodes, committed.edges);
+    set({
+      nodes: hydratedNodes,
+      edges: committed.edges,
+      transport: pruneTransportAutomation(
+        normalizeTransportDocument(snapshot.metadata?.transport),
+        hydratedNodes
+      ),
+      subpatches: normalizeSubpatchDocuments(
+        snapshot.metadata?.subpatches,
+        hydratedNodes
+      ),
     });
   };
 
   const recordHistory = () => {
-    if (historyTransaction) {
-      return;
-    }
-
-    const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
-    const { past } = get().history;
-    const lastSnapshot = past[past.length - 1];
-
-    if (
-      lastSnapshot &&
-      areCanvasSnapshotsEqual(lastSnapshot, currentSnapshot)
-    ) {
-      set(getHistoryState(past, []));
-      return;
-    }
-
-    const nextPast = [...past, cloneCanvasSnapshot(currentSnapshot)].slice(
-      -MAX_HISTORY_SIZE
+    if (historyTransaction) return;
+    const snapshot = createCanvasSnapshot(
+      get().nodes,
+      get().edges,
+      get().transport,
+      get().subpatches
     );
-
-    set(getHistoryState(nextPast, []));
+    const { past } = get().history;
+    if (
+      past[past.length - 1] &&
+      comparableSnapshot(past[past.length - 1]) === comparableSnapshot(snapshot)
+    ) {
+      set(historyState(past, []));
+      return;
+    }
+    set(
+      historyState(
+        [...past, cloneCanvasSnapshot(snapshot)].slice(-MAX_HISTORY_SIZE),
+        []
+      )
+    );
   };
 
-  const shouldRecordNodeChanges = (changes: NodeChange[]) => {
-    return changes.some((change) => {
-      if (change.type === 'select' || change.type === 'dimensions') {
+  const shouldRecordNodeChanges = (changes: NodeChange[]) =>
+    changes.some((change) => {
+      if (change.type === 'select' || change.type === 'dimensions')
         return false;
-      }
-
-      if (change.type !== 'position') {
-        return true;
-      }
-
+      if (change.type !== 'position') return true;
       if ('dragging' in change && change.dragging) {
-        if (draggingNodeIds.has(change.id)) {
-          return false;
-        }
-
+        if (draggingNodeIds.has(change.id)) return false;
         draggingNodeIds.add(change.id);
         return true;
       }
-
       return !('dragging' in change);
     });
-  };
-
-  const finishNodeDragTracking = (changes: NodeChange[]) => {
-    changes.forEach((change) => {
-      if (
-        change.type === 'position' &&
-        'dragging' in change &&
-        change.dragging === false
-      ) {
-        draggingNodeIds.delete(change.id);
-      }
-    });
-  };
 
   return {
-    nodes: initialNodes,
-    edges: initialEdges,
-    currentProjectId: '', // 初始为空，由Canvas组件加载第一个项目
+    nodes: [],
+    edges: [],
+    currentProjectId: '',
+    transport: createDefaultTransportDocument(),
+    subpatches: [],
     canUndo: false,
     canRedo: false,
-    history: {
-      past: [],
-      future: [],
+    history: { past: [], future: [] },
+
+    setCurrentProjectId: (currentProjectId) => set({ currentProjectId }),
+
+    setTransportBpm: (bpm) => {
+      const nextBpm = Math.min(320, Math.max(20, Math.round(bpm)));
+      if (get().transport.bpm === nextBpm) return;
+      recordHistory();
+      const nodes = get().nodes.map((node) =>
+        node.data.type === 'sequencer'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                parameters: {
+                  ...node.data.parameters,
+                  bpm: nextBpm,
+                },
+              },
+            }
+          : node
+      );
+      const committed = commitGraph(nodes, get().edges);
+      set({
+        nodes,
+        edges: committed.edges,
+        transport: { ...get().transport, bpm: nextBpm },
+      });
+      audioGraphRuntime.setTransportBpm(nextBpm);
     },
 
-    setCurrentProjectId: (projectId) => {
-      set({ currentProjectId: projectId });
+    setTransportLoopEnabled: (loopEnabled) => {
+      if (get().transport.loopEnabled === loopEnabled) return;
+      recordHistory();
+      const nodes = get().nodes.map((node) =>
+        node.data.type === 'sequencer'
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                parameters: {
+                  ...node.data.parameters,
+                  loop: loopEnabled,
+                },
+              },
+            }
+          : node
+      );
+      const committed = commitGraph(nodes, get().edges);
+      set({
+        nodes,
+        edges: committed.edges,
+        transport: { ...get().transport, loopEnabled },
+      });
+    },
+
+    setTransportLoopRange: (startTick, endTick) => {
+      const nextStart = Math.max(0, Math.round(startTick));
+      const nextEnd = Math.max(nextStart + TRANSPORT_PPQ, Math.round(endTick));
+      const current = get().transport.loopRange;
+      if (current.startTick === nextStart && current.endTick === nextEnd)
+        return;
+      recordHistory();
+      set({
+        transport: {
+          ...get().transport,
+          loopRange: { startTick: nextStart, endTick: nextEnd },
+        },
+      });
+    },
+
+    setAutomationMode: (automationMode) => {
+      if (get().transport.automationMode === automationMode) return;
+      recordHistory();
+      set({ transport: { ...get().transport, automationMode } });
+    },
+
+    beginAutomationRecording: () => {
+      automationWriteLanes.clear();
+      automationTouchUntil.clear();
+    },
+
+    finishAutomationRecording: () => {
+      automationWriteLanes.clear();
+      automationTouchUntil.clear();
+      set({ transport: simplifyAutomationDocument(get().transport) });
+    },
+
+    addMidiMapping: (mapping) => {
+      const id = `${mapping.moduleId}:${mapping.parameterKey}`;
+      const next: MidiControlMapping = { ...mapping, id };
+      recordHistory();
+      set({
+        transport: {
+          ...get().transport,
+          midiMappings: [
+            ...get().transport.midiMappings.filter((item) => item.id !== id),
+            next,
+          ],
+        },
+      });
+    },
+
+    removeMidiMapping: (mappingId) => {
+      if (!get().transport.midiMappings.some((item) => item.id === mappingId)) {
+        return;
+      }
+      recordHistory();
+      set({
+        transport: {
+          ...get().transport,
+          midiMappings: get().transport.midiMappings.filter(
+            (item) => item.id !== mappingId
+          ),
+        },
+      });
+    },
+
+    applyMidiControlChange: (controller, value, channel) => {
+      const mappings = get().transport.midiMappings.filter(
+        (mapping) =>
+          mapping.controller === controller && mapping.channel === channel
+      );
+      if (mappings.length === 0) return;
+      const updates = new Map<string, Map<string, number>>();
+      mappings.forEach((mapping) => {
+        const meta = audioGraphRuntime.getModuleSnapshot(mapping.moduleId)
+          ?.parameterMeta[mapping.parameterKey];
+        if (!meta) return;
+        const moduleUpdates = updates.get(mapping.moduleId) ?? new Map();
+        moduleUpdates.set(
+          mapping.parameterKey,
+          normalizeParameterValue(
+            mapping.min +
+              (mapping.max - mapping.min) * Math.max(0, Math.min(1, value)),
+            meta
+          ) as number
+        );
+        updates.set(mapping.moduleId, moduleUpdates);
+      });
+      let changed = false;
+      const nodes = get().nodes.map((node) => {
+        const moduleUpdates = updates.get(node.id);
+        if (!moduleUpdates) return node;
+        const parameters = { ...node.data.parameters };
+        moduleUpdates.forEach((nextValue, key) => {
+          if (parameters[key] === nextValue) return;
+          parameters[key] = nextValue;
+          changed = true;
+        });
+        return { ...node, data: { ...node.data, parameters } };
+      });
+      if (!changed) return;
+      const committed = commitGraph(nodes, get().edges);
+      set({ nodes, edges: committed.edges });
+    },
+
+    setSequencersRunning: (running) => {
+      let changed = false;
+      const { bpm, loopEnabled } = get().transport;
+      const nodes = get().nodes.map((node) => {
+        if (node.data.type !== 'sequencer') return node;
+        const parameters = node.data.parameters;
+        if (
+          parameters.running === running &&
+          parameters.bpm === bpm &&
+          parameters.loop === loopEnabled
+        ) {
+          return node;
+        }
+        changed = true;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            parameters: {
+              ...parameters,
+              running,
+              bpm,
+              loop: loopEnabled,
+            },
+          },
+        };
+      });
+      if (!changed) return;
+      const committed = commitGraph(nodes, get().edges);
+      set({ nodes, edges: committed.edges });
+    },
+
+    applyAutomationAtTick: (tick) => {
+      const { automationLanes } = get().transport;
+      if (automationLanes.length === 0) return;
+      const updates = new Map<string, Map<string, ParameterValue>>();
+      automationLanes.forEach((lane) => {
+        const touchUntil = automationTouchUntil.get(lane.id) ?? 0;
+        if (touchUntil > Date.now()) return;
+        const value = getAutomationValueAtTick(lane, tick);
+        if (value === undefined) return;
+        const snapshot = audioGraphRuntime.getModuleSnapshot(lane.moduleId);
+        const meta = snapshot?.parameterMeta[lane.parameterKey];
+        if (!meta) return;
+        const nextValue = normalizeParameterValue(value, meta);
+        const moduleUpdates = updates.get(lane.moduleId) ?? new Map();
+        moduleUpdates.set(lane.parameterKey, nextValue);
+        updates.set(lane.moduleId, moduleUpdates);
+      });
+      if (updates.size === 0) return;
+
+      let changed = false;
+      const nodes = get().nodes.map((node) => {
+        const moduleUpdates = updates.get(node.id);
+        if (!moduleUpdates) return node;
+        const parameters = { ...node.data.parameters };
+        moduleUpdates.forEach((value, key) => {
+          if (parameters[key] === value) return;
+          parameters[key] = value;
+          changed = true;
+        });
+        return parameters === node.data.parameters
+          ? node
+          : { ...node, data: { ...node.data, parameters } };
+      });
+      if (!changed) return;
+      const committed = commitGraph(nodes, get().edges);
+      set({ nodes, edges: committed.edges });
+    },
+
+    clearAutomationLane: (laneId) => {
+      if (!get().transport.automationLanes.some((lane) => lane.id === laneId)) {
+        return;
+      }
+      recordHistory();
+      set({ transport: removeAutomationLane(get().transport, laneId) });
+    },
+
+    clearAllAutomation: () => {
+      if (get().transport.automationLanes.length === 0) return;
+      recordHistory();
+      set({
+        transport: { ...get().transport, automationLanes: [] },
+      });
     },
 
     onNodesChange: (changes) => {
-      if (shouldRecordNodeChanges(changes)) {
-        recordHistory();
+      if (shouldRecordNodeChanges(changes)) recordHistory();
+      const nodes = applyNodeChanges(changes, get().nodes) as FlowNode[];
+      const removedIds = new Set(
+        changes
+          .filter((change) => change.type === 'remove')
+          .map((change) => change.id)
+      );
+      const edges = removedIds.size
+        ? get().edges.filter(
+            (edge) =>
+              !removedIds.has(edge.source) && !removedIds.has(edge.target)
+          )
+        : get().edges;
+
+      if (removedIds.size) {
+        const committed = commitGraph(nodes, edges);
+        set({
+          nodes,
+          edges: committed.edges,
+          transport: pruneTransportAutomation(get().transport, nodes),
+          subpatches: normalizeSubpatchDocuments(get().subpatches, nodes),
+        });
+      } else {
+        set({ nodes });
       }
 
-      set({
-        nodes: applyNodeChanges(changes, get().nodes) as FlowNode[],
+      changes.forEach((change) => {
+        if (
+          change.type === 'position' &&
+          'dragging' in change &&
+          change.dragging === false
+        ) {
+          draggingNodeIds.delete(change.id);
+        }
       });
-
-      finishNodeDragTracking(changes);
     },
 
     onEdgesChange: (changes) => {
-      changes.forEach((change) => {
-        if (change.type === 'select') {
-          const edge = get().edges.find((e) => e.id === change.id);
-          if (edge) {
-            // 只为调试输出边的详细信息，不触发重新绑定
-          }
-        }
-      });
-
-      // 只处理 'remove' 类型的变更，忽略 'select' 等其他类型
-      const edgesToRemove = changes
-        .filter((change) => change.type === 'remove')
-        .map((change) => get().edges.find((edge) => edge.id === change.id))
-        .filter((edge): edge is Edge => edge !== undefined);
-
-      if (edgesToRemove.length > 0) {
-        recordHistory();
-      }
-
-      // 只对要删除的边解除绑定
-      edgesToRemove.forEach((edge) => {
-        moduleManager.removeEdgeBinding(edge);
-      });
-
-      // 正常应用所有边变更（包括select）以保持视觉状态
-      set({
-        edges: applyEdgeChanges(changes, get().edges),
-      });
+      const removedExistingEdge = changes.some(
+        (change) =>
+          change.type === 'remove' &&
+          get().edges.some((edge) => edge.id === change.id)
+      );
+      if (removedExistingEdge) recordHistory();
+      const edges = applyEdgeChanges(changes, get().edges);
+      const committed = commitGraph(get().nodes, edges);
+      set({ edges: committed.edges });
     },
 
     onConnect: (connection) => {
-      if (!connection.source || !connection.target) {
-        logger.warn('连接缺少源节点或目标节点，已忽略', connection);
+      if (!connection.source || !connection.target) return;
+      const sourcePort = connection.sourceHandle ?? 'output';
+      const targetPort = connection.targetHandle ?? 'input';
+      if (
+        !audioGraphRuntime.canConnect({
+          source: connection.source,
+          target: connection.target,
+          sourcePort,
+          targetPort,
+        })
+      ) {
         return;
       }
 
-      const canBind = moduleManager.canBindModules(
-        connection.source,
-        connection.target,
-        connection.sourceHandle ?? undefined,
-        connection.targetHandle ?? undefined
+      const previousEdges = get().edges;
+      const conflicts = getSingleInputConflicts(previousEdges, connection);
+      const candidateEdges = addReactFlowEdge(
+        {
+          ...connection,
+          id: edgeId(
+            connection.source,
+            connection.target,
+            connection.sourceHandle,
+            connection.targetHandle
+          ),
+        },
+        previousEdges.filter(
+          (edge) => !conflicts.some((conflict) => conflict.id === edge.id)
+        )
       );
-
-      if (!canBind) {
-        return;
-      }
-
-      const existingEdges = get().edges;
-      const conflictingEdges = getSingleInputConflicts(
-        existingEdges,
-        connection
-      );
-
-      conflictingEdges.forEach((edge) => {
-        moduleManager.removeEdgeBinding(edge);
+      const committed = commitGraph(get().nodes, candidateEdges);
+      const candidateKey = getAudioConnectionKey({
+        source: connection.source,
+        target: connection.target,
+        sourcePort,
+        targetPort,
       });
-
-      // 只有底层绑定成功时才添加视觉边，避免 UI 与音频图状态分裂
-      const isBound = moduleManager.bindModules(
-        connection.source,
-        connection.target,
-        connection.sourceHandle ?? undefined,
-        connection.targetHandle ?? undefined
+      const connected = committed.result.document.connections.some(
+        (item) => getAudioConnectionKey(item) === candidateKey
       );
 
-      if (!isBound) {
-        restoreEdgeBindings(conflictingEdges);
+      if (!connected) {
+        commitGraph(get().nodes, previousEdges);
         return;
       }
-
       recordHistory();
-
-      set({
-        edges: addEdge(
-          connection,
-          existingEdges.filter(
-            (edge) =>
-              !conflictingEdges.some((conflict) => conflict.id === edge.id)
-          )
-        ),
-      });
+      set({ edges: committed.edges });
     },
 
     beginHistoryTransaction: () => {
@@ -424,383 +787,495 @@ export const useFlowStore = create<FlowState>((set, get) => {
         historyTransaction.depth += 1;
         return;
       }
-
       historyTransaction = {
         snapshot: cloneCanvasSnapshot(
-          createCanvasSnapshot(get().nodes, get().edges)
+          createCanvasSnapshot(
+            get().nodes,
+            get().edges,
+            get().transport,
+            get().subpatches
+          )
         ),
         depth: 1,
       };
     },
 
     commitHistoryTransaction: () => {
-      if (!historyTransaction) {
-        return;
-      }
-
+      if (!historyTransaction) return;
       historyTransaction.depth -= 1;
-      if (historyTransaction.depth > 0) {
-        return;
-      }
-
-      const initialSnapshot = historyTransaction.snapshot;
+      if (historyTransaction.depth > 0) return;
+      const initial = historyTransaction.snapshot;
       historyTransaction = null;
-      const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
-
-      if (areCanvasSnapshotsEqual(initialSnapshot, currentSnapshot)) {
-        return;
-      }
-
-      const nextPast = [
-        ...get().history.past,
-        cloneCanvasSnapshot(initialSnapshot),
-      ].slice(-MAX_HISTORY_SIZE);
-      set(getHistoryState(nextPast, []));
+      const current = createCanvasSnapshot(
+        get().nodes,
+        get().edges,
+        get().transport,
+        get().subpatches
+      );
+      if (comparableSnapshot(initial) === comparableSnapshot(current)) return;
+      set(
+        historyState(
+          [...get().history.past, cloneCanvasSnapshot(initial)].slice(
+            -MAX_HISTORY_SIZE
+          ),
+          []
+        )
+      );
     },
 
     cancelHistoryTransaction: () => {
-      if (!historyTransaction) {
-        return;
-      }
-
-      const initialSnapshot = historyTransaction.snapshot;
+      if (!historyTransaction) return;
+      const initial = historyTransaction.snapshot;
       historyTransaction = null;
-      applyCanvasSnapshot(initialSnapshot);
+      applyCanvasSnapshot(initial);
     },
 
     undo: () => {
       historyTransaction = null;
       const { past, future } = get().history;
-      const previousSnapshot = past[past.length - 1];
-
-      if (!previousSnapshot) {
-        return;
-      }
-
-      const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
-      const nextPast = past.slice(0, -1);
-      const nextFuture = [
-        cloneCanvasSnapshot(currentSnapshot),
-        ...future,
-      ].slice(0, MAX_HISTORY_SIZE);
-
-      applyCanvasSnapshot(previousSnapshot);
-      set(getHistoryState(nextPast, nextFuture));
+      const previous = past[past.length - 1];
+      if (!previous) return;
+      const current = createCanvasSnapshot(
+        get().nodes,
+        get().edges,
+        get().transport,
+        get().subpatches
+      );
+      applyCanvasSnapshot(previous);
+      set(
+        historyState(
+          past.slice(0, -1),
+          [cloneCanvasSnapshot(current), ...future].slice(0, MAX_HISTORY_SIZE)
+        )
+      );
     },
 
     redo: () => {
       historyTransaction = null;
       const { past, future } = get().history;
-      const nextSnapshot = future[0];
-
-      if (!nextSnapshot) {
-        return;
-      }
-
-      const currentSnapshot = createCanvasSnapshot(get().nodes, get().edges);
-      const nextPast = [...past, cloneCanvasSnapshot(currentSnapshot)].slice(
-        -MAX_HISTORY_SIZE
+      const next = future[0];
+      if (!next) return;
+      const current = createCanvasSnapshot(
+        get().nodes,
+        get().edges,
+        get().transport,
+        get().subpatches
       );
-      const nextFuture = future.slice(1);
-
-      applyCanvasSnapshot(nextSnapshot);
-      set(getHistoryState(nextPast, nextFuture));
+      applyCanvasSnapshot(next);
+      set(
+        historyState(
+          [...past, cloneCanvasSnapshot(current)].slice(-MAX_HISTORY_SIZE),
+          future.slice(1)
+        )
+      );
     },
 
     updateModuleParameter: (nodeId, paramKey, value) => {
-      const node = get().nodes.find((n) => n.id === nodeId);
-      if (node?.data?.module) {
-        const parameter = node.data.module.parameters[paramKey];
-        if (!parameter) {
-          node.data.module.updateParameter(paramKey, value);
-          return;
-        }
-
-        const previousValue = parameter.getValue();
-        if (previousValue === value) {
-          return;
-        }
-
-        recordHistory();
-        node.data.module.updateParameter(paramKey, value);
-      }
-    },
-
-    // 添加新节点
-    addNode: (
-      type: string,
-      label: string,
-      position: { x: number; y: number },
-      id?: string
-    ) => {
-      const nodeId = id || createNodeId(get().nodes.map((node) => node.id));
-      const newNode = moduleManager.createNode(nodeId, type, label, position);
-
+      const node = get().nodes.find((item) => item.id === nodeId);
+      const snapshot = audioGraphRuntime.getModuleSnapshot(nodeId);
+      if (!node || !snapshot?.parameterMeta[paramKey]) return;
+      const previousValue = node.data.parameters[paramKey];
+      if (previousValue === value) return;
       recordHistory();
 
-      set({
-        nodes: [...get().nodes, newNode],
-      });
+      let nodes = get().nodes.map((item) =>
+        item.id === nodeId
+          ? {
+              ...item,
+              data: {
+                ...item.data,
+                parameters: { ...item.data.parameters, [paramKey]: value },
+              },
+            }
+          : item
+      );
+      const committed = commitGraph(nodes, get().edges);
+      const runtimeValue =
+        audioGraphRuntime.getModuleSnapshot(nodeId)?.parameters[paramKey];
+      if (runtimeValue !== undefined && runtimeValue !== value) {
+        nodes = nodes.map((item) =>
+          item.id === nodeId
+            ? {
+                ...item,
+                data: {
+                  ...item.data,
+                  parameters: {
+                    ...item.data.parameters,
+                    [paramKey]: runtimeValue,
+                  },
+                },
+              }
+            : item
+        );
+        adoptGraph(nodes, committed.edges);
+      }
+      let transport = get().transport;
+      if (
+        useTransportRuntimeStore.getState().isRecording &&
+        transport.automationMode !== 'read' &&
+        !AUTOMATION_IGNORED_PARAMETERS.has(paramKey)
+      ) {
+        const laneId = automationLaneId(nodeId, paramKey);
+        automationTouchUntil.set(
+          laneId,
+          transport.automationMode === 'touch'
+            ? Date.now() + 500
+            : Number.POSITIVE_INFINITY
+        );
+        if (
+          transport.automationMode === 'write' &&
+          !automationWriteLanes.has(laneId)
+        ) {
+          transport = removeAutomationLane(transport, laneId);
+          automationWriteLanes.add(laneId);
+        }
+        transport = upsertAutomationPoint(
+          transport,
+          nodeId,
+          paramKey,
+          (runtimeValue ?? value) as ParameterValue,
+          useTransportRuntimeStore.getState().positionTicks
+        );
+      }
+      set({ nodes, edges: committed.edges, transport });
+    },
 
+    toggleModuleEnabled: (nodeId) => {
+      const node = get().nodes.find((item) => item.id === nodeId);
+      if (!node) return;
+      recordHistory();
+      const nodes = get().nodes.map((item) =>
+        item.id === nodeId
+          ? { ...item, data: { ...item.data, enabled: !item.data.enabled } }
+          : item
+      );
+      const committed = commitGraph(nodes, get().edges);
+      set({ nodes, edges: committed.edges });
+    },
+
+    invokeModuleAction: (nodeId, action, ...args) =>
+      audioGraphRuntime.invokeAction(nodeId, action, ...args),
+
+    addNode: (type, label, position, id) => {
+      if (!moduleDefinitionRegistry.has(type)) {
+        throw new Error(`未知模块类型: ${type}`);
+      }
+      const nodeId = id || createNodeId(get().nodes.map((node) => node.id));
+      recordHistory();
+      let nodes: FlowNode[] = [
+        ...get().nodes,
+        {
+          id: nodeId,
+          type: 'default',
+          position,
+          dragHandle: '.node-drag-handle',
+          data: {
+            type,
+            label: label || nodeId,
+            parameters: {},
+            enabled: true,
+          },
+        },
+      ];
+      const committed = commitGraph(nodes, get().edges);
+      nodes = hydrateNodesFromRuntime(nodes);
+      adoptGraph(nodes, committed.edges);
+      set({ nodes, edges: committed.edges });
       return nodeId;
     },
 
-    // 添加新边
     addEdge: (source, target) => {
-      if (!moduleManager.canBindModules(source, target)) {
-        return;
-      }
-
-      const connection: Connection = {
+      get().onConnect({
         source,
         target,
         sourceHandle: null,
         targetHandle: null,
-      };
-      const existingEdges = get().edges;
-      const conflictingEdges = getSingleInputConflicts(
-        existingEdges,
-        connection
-      );
-
-      conflictingEdges.forEach((edge) => {
-        moduleManager.removeEdgeBinding(edge);
-      });
-
-      const edge = moduleManager.createEdge(source, target);
-      const isBound = moduleManager.bindModules(source, target);
-
-      if (!isBound) {
-        restoreEdgeBindings(conflictingEdges);
-        return;
-      }
-
-      recordHistory();
-
-      set({
-        edges: [
-          ...existingEdges.filter(
-            (existingEdge) =>
-              !conflictingEdges.some(
-                (conflict) => conflict.id === existingEdge.id
-              )
-          ),
-          edge,
-        ],
       });
     },
 
-    // 删除节点及相连的边
     deleteNode: (nodeId) => {
-      const node = get().nodes.find((n) => n.id === nodeId);
-      if (!node) {
-        return;
-      }
-
+      if (!get().nodes.some((node) => node.id === nodeId)) return;
       recordHistory();
-
-      // 1. 找到与该节点相连的所有边
-      const connectedEdges = get().edges.filter(
-        (edge) => edge.source === nodeId || edge.target === nodeId
+      const nodes = get().nodes.filter((node) => node.id !== nodeId);
+      const edges = get().edges.filter(
+        (edge) => edge.source !== nodeId && edge.target !== nodeId
       );
-
-      // 2. 解除这些边的绑定
-      connectedEdges.forEach((edge) => {
-        moduleManager.removeEdgeBinding(edge);
-      });
-
-      // 3. 释放节点资源
-      if (node?.data?.module) {
-        moduleManager.disposeModule(nodeId);
-
-        // 记录模块销毁事件
-        moduleInitManager.recordDisposal(nodeId);
-      }
-
-      // 4. 从状态中移除节点和相连的边
+      const committed = commitGraph(nodes, edges);
       set({
-        nodes: get().nodes.filter((n) => n.id !== nodeId),
-        edges: get().edges.filter(
-          (e) => e.source !== nodeId && e.target !== nodeId
-        ),
+        nodes,
+        edges: committed.edges,
+        transport: pruneTransportAutomation(get().transport, nodes),
+        subpatches: normalizeSubpatchDocuments(get().subpatches, nodes),
       });
     },
 
     renameNode: (nodeId, newLabel) => {
-      const trimmedLabel = newLabel.trim();
-      if (!trimmedLabel) {
-        return;
-      }
+      const label = newLabel.trim();
+      const node = get().nodes.find((item) => item.id === nodeId);
+      if (!label || !node || node.data.label === label) return;
+      recordHistory();
+      const nodes = get().nodes.map((item) =>
+        item.id === nodeId ? { ...item, data: { ...item.data, label } } : item
+      );
+      const committed = commitGraph(nodes, get().edges);
+      set({ nodes, edges: committed.edges });
+    },
 
-      const node = get().nodes.find((currentNode) => currentNode.id === nodeId);
-      if (!node || node.data?.label === trimmedLabel) {
-        return;
-      }
+    createSubpatchFromSelection: () => {
+      const selectedNodes = get().nodes.filter((node) => node.selected);
+      if (selectedNodes.length < 2) return null;
 
       recordHistory();
-
+      const selectedIds = new Set(selectedNodes.map((node) => node.id));
+      const retainedSubpatches = get()
+        .subpatches.map((subpatch) => ({
+          ...subpatch,
+          memberNodeIds: subpatch.memberNodeIds.filter(
+            (nodeId) => !selectedIds.has(nodeId)
+          ),
+          macroControls: subpatch.macroControls.filter(
+            (macro) => !selectedIds.has(macro.moduleId)
+          ),
+        }))
+        .filter((subpatch) => subpatch.memberNodeIds.length >= 2);
+      const id = createSubpatchId(
+        retainedSubpatches.map((subpatch) => subpatch.id)
+      );
+      const subpatch: SubpatchDocument = {
+        version: SUBPATCH_DOCUMENT_VERSION,
+        id,
+        name: `Subpatch ${retainedSubpatches.length + 1}`,
+        memberNodeIds: selectedNodes.map((node) => node.id),
+        macroControls: createAutomaticMacroControls(selectedNodes),
+      };
       set({
-        nodes: get().nodes.map((node) => {
-          if (node.id !== nodeId) {
-            return node;
-          }
+        subpatches: normalizeSubpatchDocuments(
+          [...retainedSubpatches, subpatch],
+          get().nodes
+        ),
+      });
+      return id;
+    },
 
-          const moduleInstance = node.data?.module;
-          if (moduleInstance && typeof moduleInstance.setName === 'function') {
-            moduleInstance.setName(trimmedLabel);
-          }
-
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              label: trimmedLabel,
-            },
-          };
-        }),
+    removeSubpatch: (subpatchId) => {
+      if (!get().subpatches.some((subpatch) => subpatch.id === subpatchId)) {
+        return;
+      }
+      recordHistory();
+      set({
+        subpatches: get().subpatches.filter(
+          (subpatch) => subpatch.id !== subpatchId
+        ),
       });
     },
 
-    // 序列化整个画布到JSON格式
-    exportCanvasToJson: () => {
-      return serializationManager.serializeCanvasToJson(
-        get().nodes,
-        get().edges
+    renameSubpatch: (subpatchId, name) => {
+      const nextName = name.trim().slice(0, 80);
+      if (!nextName) return;
+      const subpatch = get().subpatches.find((item) => item.id === subpatchId);
+      if (!subpatch || subpatch.name === nextName) return;
+      recordHistory();
+      set({
+        subpatches: get().subpatches.map((item) =>
+          item.id === subpatchId ? { ...item, name: nextName } : item
+        ),
+      });
+    },
+
+    copySelection: () => {
+      const selectedNodes = get().nodes.filter((node) => node.selected);
+      if (selectedNodes.length === 0) return false;
+      const selectedIds = new Set(selectedNodes.map((node) => node.id));
+      const selectedEdges = get().edges.filter(
+        (edge) => selectedIds.has(edge.source) && selectedIds.has(edge.target)
       );
+      const serialized = serializationManager.serializeCanvas(
+        selectedNodes,
+        selectedEdges
+      );
+      canvasClipboard = {
+        nodes: serialized.nodes,
+        edges: serialized.edges,
+        subpatches: get().subpatches.filter((subpatch) =>
+          subpatch.memberNodeIds.every((nodeId) => selectedIds.has(nodeId))
+        ),
+        pasteCount: 0,
+      };
+      return true;
     },
 
-    // 从JSON格式导入画布
-    importCanvasFromJson: (jsonString, projectId = 'imported-project') => {
-      try {
-        historyTransaction = null;
-        const parseResult = validateAndParseJson<SerializedCanvas>(
-          jsonString,
-          validateSerializedCanvas
-        );
+    pasteSelection: () => {
+      if (!canvasClipboard || canvasClipboard.nodes.length === 0) return [];
+      recordHistory();
+      canvasClipboard.pasteCount += 1;
+      const offset = 48 * canvasClipboard.pasteCount;
+      const existingIds = new Set(get().nodes.map((node) => node.id));
+      const idMap = new Map<string, string>();
+      canvasClipboard.nodes.forEach((node) => {
+        const id = createNodeId(existingIds);
+        existingIds.add(id);
+        idMap.set(node.id, id);
+      });
 
-        if (!parseResult.success || !parseResult.data) {
-          logger.error('导入画布数据验证失败:', parseResult.error);
-          return false;
-        }
-
-        if (!validateImportableNodes(parseResult.data.nodes)) {
-          return false;
-        }
-
-        // 先清理旧画布的模块实例，再重建新图，避免全局注册表残留
-        moduleManager.disposeAllModules();
-        moduleInitManager.reset();
-
-        const { nodes, edges } = serializationManager.deserializeCanvas(
-          parseResult.data
-        );
-
-        if (parseResult.data.nodes.length > 0 && nodes.length === 0) {
-          logger.error('导入画布反序列化后没有生成节点');
-          return false;
-        }
-
-        const bindableEdges = filterBindableEdges(nodes, edges);
-
-        // 更新状态
-        set({
-          nodes,
-          edges: bindableEdges,
-          currentProjectId: projectId,
-          ...getHistoryState([], []),
-        });
-
-        // 初始化连接
-        moduleInitManager.onAllModulesReady(() => {
-          moduleManager.setupAllEdgeBindings(bindableEdges);
-        });
-
-        return true;
-      } catch (error) {
-        logger.error('导入画布数据失败:', error);
-        return false;
-      }
-    },
-
-    // 获取模块的JSON表示
-    getModuleAsJson: (moduleId) => {
-      const node = get().nodes.find((n) => n.id === moduleId);
-      if (!node || !node.data?.module) return null;
-
-      return serializationManager.serializeModule(node.data.module);
-    },
-
-    // 获取模块的JSON字符串表示
-    getModuleAsString: (moduleId) => {
-      const node = get().nodes.find((n) => n.id === moduleId);
-      if (!node || !node.data?.module) return null;
-
-      return serializationManager.serializeModuleToJson(node.data.module);
-    },
-
-    // 从序列化数据导入模块（可以是JSON字符串或JSON对象）
-    importModuleFromData: (data) => {
-      try {
-        let serializedModule: SerializedModule;
-
-        if (typeof data === 'string') {
-          const parseResult = validateAndParseJson<SerializedModule>(
-            data,
-            validateSerializedModule
-          );
-          if (!parseResult.success || !parseResult.data) {
-            logger.error('模块JSON验证失败，无法导入', parseResult.error);
-            return null;
-          }
-          serializedModule = parseResult.data;
-        } else {
-          const validationResult = validateSerializedModule(data);
-          if (!validationResult.success) {
-            logger.error('模块数据验证失败，无法导入', validationResult.error);
-            return null;
-          }
-          serializedModule = data as SerializedModule;
-        }
-
-        const nodeId = get().nodes.some(
-          (node) => node.id === serializedModule.id
-        )
-          ? createNodeId(get().nodes.map((node) => node.id))
-          : serializedModule.id;
-
-        const moduleInstance = serializationManager.deserializeModule({
-          ...serializedModule,
-          id: nodeId,
-        });
-
-        if (!moduleInstance) {
-          return null;
-        }
-
-        // 创建节点
-        const node: FlowNode = {
-          id: nodeId,
-          type: 'default',
-          position: { x: 100, y: 100 }, // 默认位置，可以进一步优化
-          data: {
-            module: moduleInstance,
-            label: moduleInstance.name,
-            type: moduleInstance.moduleType,
+      const clipboardCanvas: SerializedCanvas = {
+        version: '2.0',
+        timestamp: Date.now(),
+        nodes: canvasClipboard.nodes.map((node) => ({
+          ...node,
+          id: idMap.get(node.id) as string,
+          position: {
+            x: node.position.x + offset,
+            y: node.position.y + offset,
           },
+        })),
+        edges: canvasClipboard.edges.map((edge) => ({
+          ...edge,
+          source: idMap.get(edge.source) as string,
+          target: idMap.get(edge.target) as string,
+        })),
+      };
+      const cloned = serializationManager.deserializeCanvas(clipboardCanvas);
+      const nodes = [
+        ...get().nodes.map((node) => ({ ...node, selected: false })),
+        ...cloned.nodes.map((node) => ({ ...node, selected: true })),
+      ];
+      const edges = [
+        ...get().edges,
+        ...cloned.edges.map((edge) => ({
+          ...edge,
+          id: edgeId(
+            edge.source,
+            edge.target,
+            edge.sourceHandle,
+            edge.targetHandle
+          ),
+        })),
+      ];
+      const committed = commitGraph(nodes, edges);
+      const hydratedNodes = hydrateNodesFromRuntime(nodes);
+      adoptGraph(hydratedNodes, committed.edges);
+
+      const existingSubpatchIds = new Set(
+        get().subpatches.map((item) => item.id)
+      );
+      const clonedSubpatches = canvasClipboard.subpatches.map((subpatch) => {
+        const id = createSubpatchId(existingSubpatchIds);
+        existingSubpatchIds.add(id);
+        return {
+          ...subpatch,
+          id,
+          memberNodeIds: subpatch.memberNodeIds.map(
+            (nodeId) => idMap.get(nodeId) as string
+          ),
+          macroControls: subpatch.macroControls.map((macro) => ({
+            ...macro,
+            id: `${idMap.get(macro.moduleId)}:${macro.parameterKey}`,
+            moduleId: idMap.get(macro.moduleId) as string,
+          })),
         };
+      });
+      set({
+        nodes: hydratedNodes,
+        edges: committed.edges,
+        subpatches: normalizeSubpatchDocuments(
+          [...get().subpatches, ...clonedSubpatches],
+          hydratedNodes
+        ),
+      });
+      return cloned.nodes.map((node) => node.id);
+    },
 
-        // 添加节点到画布
-        recordHistory();
+    duplicateSelection: () => {
+      if (!get().copySelection()) return [];
+      return get().pasteSelection();
+    },
 
-        set({
-          nodes: [...get().nodes, node],
-        });
+    exportCanvasToJson: () =>
+      serializationManager.serializeCanvasToJson(get().nodes, get().edges, {
+        transport: get().transport,
+        subpatches: get().subpatches,
+      }),
 
-        return nodeId;
-      } catch (error) {
-        logger.error('从数据导入模块失败:', error);
-        return null;
+    importCanvasFromJson: (jsonString, projectId = 'imported-project') => {
+      const result = validateAndParseJson<SerializedCanvas>(
+        jsonString,
+        validateSerializedCanvas
+      );
+      if (!result.success || !result.data) return false;
+      if (!validateImportableNodes(result.data.nodes)) return false;
+
+      historyTransaction = null;
+      useTransportRuntimeStore.getState().stop();
+      const deserialized = serializationManager.deserializeCanvas(result.data);
+      ensureDefinitions(deserialized.nodes);
+      const edges = filterBindableEdges(deserialized.nodes, deserialized.edges);
+      const committed = commitGraph(deserialized.nodes, edges);
+      const nodes = hydrateNodesFromRuntime(committed.nodes);
+      adoptGraph(nodes, committed.edges);
+      set({
+        nodes,
+        edges: committed.edges,
+        transport: pruneTransportAutomation(
+          normalizeTransportDocument(result.data.metadata?.transport),
+          nodes
+        ),
+        subpatches: normalizeSubpatchDocuments(
+          result.data.metadata?.subpatches,
+          nodes
+        ),
+        currentProjectId: projectId,
+        ...historyState([], []),
+      });
+      return true;
+    },
+
+    getModuleAsJson: (moduleId) => {
+      const node = get().nodes.find((item) => item.id === moduleId);
+      return node
+        ? serializationManager.serializeModule(
+            node,
+            audioGraphRuntime.getModuleSnapshot(moduleId)
+          )
+        : null;
+    },
+
+    getModuleAsString: (moduleId) => {
+      const node = get().nodes.find((item) => item.id === moduleId);
+      return node
+        ? serializationManager.serializeModuleToJson(
+            node,
+            audioGraphRuntime.getModuleSnapshot(moduleId)
+          )
+        : null;
+    },
+
+    importModuleFromData: (data) => {
+      let serialized: SerializedModule;
+      if (typeof data === 'string') {
+        const result = validateAndParseJson<SerializedModule>(
+          data,
+          validateSerializedModule
+        );
+        if (!result.success || !result.data) return null;
+        serialized = result.data;
+      } else {
+        const result = validateSerializedModule(data);
+        if (!result.success) return null;
+        serialized = data as SerializedModule;
       }
+
+      const imported = serializationManager.deserializeModule(serialized);
+      if (!imported) return null;
+      const nodeId = get().nodes.some((node) => node.id === imported.id)
+        ? createNodeId(get().nodes.map((node) => node.id))
+        : imported.id;
+      recordHistory();
+      let nodes = [...get().nodes, { ...imported, id: nodeId }];
+      const committed = commitGraph(nodes, get().edges);
+      nodes = hydrateNodesFromRuntime(nodes);
+      adoptGraph(nodes, committed.edges);
+      set({ nodes, edges: committed.edges });
+      return nodeId;
     },
   };
 });

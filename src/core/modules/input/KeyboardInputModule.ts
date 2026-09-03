@@ -9,6 +9,7 @@ import {
 import keyboardEventListener from '@/lib/KeyboardEventListener';
 import { MidiActiveNote, MidiEvent } from '@/core/midi/types';
 import { createMidiFrame, midiFrameToLegacyArrays } from '@/core/midi/utils';
+import { midiPerformanceBus } from '@/core/midi/performance-bus';
 
 /**
  * 检查是否在浏览器环境中运行
@@ -339,7 +340,12 @@ export class KeyboardInputModule extends AudioModuleBase {
 
     // 更新输出端口
     this.updateOutputPorts([
-      { type: 'noteOn', noteId, midi: transposedNote, velocity: scaledVelocity },
+      {
+        type: 'noteOn',
+        noteId,
+        midi: transposedNote,
+        velocity: scaledVelocity,
+      },
     ]);
   }
 
@@ -362,9 +368,11 @@ export class KeyboardInputModule extends AudioModuleBase {
   }
 
   /**
-   * 更新音符的力度（触后）
+   * 更新音符的触后压力。
+   * note-on velocity 是一次性的起音属性，不能在拖动时被覆盖；否则兼容
+   * velocity 端口和下游包络会把每个 pointermove 当成新的力度阶跃。
    * @param note 音符编号
-   * @param velocity 新的力度值 (0-1)
+   * @param velocity 新的触后压力 (0-1)
    */
   public updateVelocity(note: number, velocity: number): void {
     if (!this.isEnabled()) return;
@@ -384,10 +392,11 @@ export class KeyboardInputModule extends AudioModuleBase {
 
       const activeNote = this.activeNotes.get(noteId)!;
       activeNote.pressure = scaledVelocity;
-      activeNote.velocity = scaledVelocity;
 
       // 更新输出端口
-      this.updateOutputPorts([{ type: 'pressure', noteId, value: scaledVelocity }]);
+      this.updateOutputPorts([
+        { type: 'pressure', noteId, value: scaledVelocity },
+      ]);
     }
   }
 
@@ -395,8 +404,12 @@ export class KeyboardInputModule extends AudioModuleBase {
    * 更新输出端口的值
    */
   private updateOutputPorts(events: MidiEvent[] = []): void {
-    const frame = createMidiFrame(Array.from(this.activeNotes.values()), events);
+    const frame = createMidiFrame(
+      Array.from(this.activeNotes.values()),
+      events
+    );
     this.outputPorts['midi'].next(frame);
+    midiPerformanceBus.publish({ sourceId: this.id, frame });
     const legacy = midiFrameToLegacyArrays(frame);
     this.outputPorts['activeNotes'].next(legacy.notes);
     this.outputPorts['activeVelocities'].next(legacy.velocities);
@@ -425,7 +438,9 @@ export class KeyboardInputModule extends AudioModuleBase {
         height: 120,
         startNote: this.keyboardStartNote,
         noteCount: this.keyboardNoteCount,
-        activeNotes: Array.from(this.activeNotes.values()).map((note) => note.midi),
+        activeNotes: Array.from(this.activeNotes.values()).map(
+          (note) => note.midi
+        ),
         onNoteOn: (note: number, velocity: number) =>
           this.handleNoteOn(note, velocity),
         onNoteOff: (note: number) => this.handleNoteOff(note),

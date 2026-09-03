@@ -7,7 +7,7 @@ describe('Agent Skills registry', () => {
   it('exposes one discoverable Skill for every registered module', () => {
     const skills = listAgentSkills();
 
-    expect(skills).toHaveLength(15);
+    expect(skills).toHaveLength(21);
     expect(skills).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -35,7 +35,11 @@ describe('Agent Skills registry', () => {
     );
     expect(
       listAgentSkills({ category: '输出' }).map((skill) => skill.id)
-    ).toEqual(['module:speaker']);
+    ).toEqual([
+      'module:speaker',
+      'module:masterrecorder',
+      'module:masterlimiter',
+    ]);
   });
 
   it('loads a guide backed by the real module parameter and port schema', () => {

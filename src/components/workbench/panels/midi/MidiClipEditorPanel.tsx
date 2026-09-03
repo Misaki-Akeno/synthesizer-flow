@@ -27,6 +27,9 @@ import {
 } from '@/components/ui/shadcn/tooltip';
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/store/canvas-store';
+import { useRuntimeModule } from '@/core/hooks/useRuntimeModule';
+import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
+import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
 import { MidiClip, MidiNote } from '@/core/midi/types';
 import {
   clamp,
@@ -36,15 +39,17 @@ import {
   normalizeMidiClip,
   parseMidiClipJson,
 } from '@/core/midi/utils';
+import { quantizeTickWithStrength } from '@/core/midi/recording';
 import {
   Copy,
+  CircleDot,
   Eraser,
   MousePointer2,
+  Pause,
   Pencil,
   Piano,
   Play,
   Scissors,
-  Square,
   Trash2,
 } from 'lucide-react';
 
@@ -124,8 +129,20 @@ export function MidiClipEditorPanel() {
   const node = useFlowStore((state) =>
     state.nodes.find((item) => item.id === moduleId)
   );
+  const snapshot = useRuntimeModule(moduleId ?? undefined);
   const updateModuleParameter = useFlowStore(
     (state) => state.updateModuleParameter
+  );
+  const transport = useFlowStore((state) => state.transport);
+  const setTransportBpm = useFlowStore((state) => state.setTransportBpm);
+  const setSequencersRunning = useFlowStore(
+    (state) => state.setSequencersRunning
+  );
+  const isTransportPlaying = useTransportRuntimeStore(
+    (state) => state.isPlaying
+  );
+  const transportPositionTicks = useTransportRuntimeStore(
+    (state) => state.positionTicks
   );
   const rollScrollRef = useRef<HTMLDivElement | null>(null);
   const rollRef = useRef<HTMLDivElement | null>(null);
@@ -135,9 +152,9 @@ export function MidiClipEditorPanel() {
   const [dragState, setDragState] = useState<DragState | null>(null);
 
   const initialClip = useMemo(() => {
-    const value = node?.data.module?.getParameterValue('clip');
+    const value = snapshot?.parameters.clip;
     return parseMidiClipJson(typeof value === 'string' ? value : '');
-  }, [node]);
+  }, [snapshot?.parameters.clip]);
   const [clip, setClip] = useState<MidiClip>(initialClip);
   const clipRef = useRef<MidiClip>(initialClip);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(
@@ -159,11 +176,18 @@ export function MidiClipEditorPanel() {
     : (snapOptions[2]?.value ?? Math.round(clip.ppq / 4));
   const selectedNote =
     clip.notes.find((note) => note.id === selectedNoteId) ?? null;
-  const bpmValue = node?.data.module?.getParameterValue('bpm');
-  const runningValue = node?.data.module?.getParameterValue('running');
-  const bpm =
-    typeof bpmValue === 'number' && Number.isFinite(bpmValue) ? bpmValue : 120;
-  const isRunning = typeof runningValue === 'boolean' ? runningValue : false;
+  const bpm = transport.bpm;
+  const recordArmed = Boolean(snapshot?.parameters.recordArmed);
+  const quantizeStrength =
+    typeof snapshot?.parameters.quantizeStrength === 'number'
+      ? snapshot.parameters.quantizeStrength
+      : 0.75;
+  const isRunning = isTransportPlaying;
+  const playheadTick =
+    lengthTicks > 0 ? transportPositionTicks % lengthTicks : 0;
+  const playheadX =
+    KEYBOARD_WIDTH +
+    (lengthTicks > 0 ? playheadTick / lengthTicks : 0) * rollWidth;
 
   const normalizeEditorClip = useCallback((nextClip: MidiClip) => {
     return normalizeMidiClip({
@@ -326,13 +350,21 @@ export function MidiClipEditorPanel() {
       notes: clip.notes.map((note) => {
         if (targetId && note.id !== targetId) return note;
         const startTick = clamp(
-          quantizeTick(note.startTick, activeSnapTicks),
+          quantizeTickWithStrength(
+            note.startTick,
+            activeSnapTicks,
+            quantizeStrength
+          ),
           0,
           Math.max(0, lengthTicks - 1)
         );
         const durationTicks = Math.max(
           activeSnapTicks,
-          quantizeTick(note.durationTicks, activeSnapTicks)
+          quantizeTickWithStrength(
+            note.durationTicks,
+            activeSnapTicks,
+            quantizeStrength
+          )
         );
         return {
           ...note,
@@ -341,7 +373,14 @@ export function MidiClipEditorPanel() {
         };
       }),
     });
-  }, [activeSnapTicks, clip, lengthTicks, saveClip, selectedNoteId]);
+  }, [
+    activeSnapTicks,
+    clip,
+    lengthTicks,
+    quantizeStrength,
+    saveClip,
+    selectedNoteId,
+  ]);
 
   const handleGridPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -519,7 +558,7 @@ export function MidiClipEditorPanel() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [duplicateSelectedNote, removeSelectedNote]);
 
-  if (!moduleId || !node?.data.module) {
+  if (!moduleId || !node || !snapshot) {
     return (
       <div className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">
         {t('selectModule')}
@@ -579,10 +618,20 @@ export function MidiClipEditorPanel() {
         <ToolButton
           active={isRunning}
           label={isRunning ? t('stop') : t('play')}
-          onClick={() => updateModuleParameter(moduleId, 'running', !isRunning)}
+          onClick={() => {
+            const runtime = useTransportRuntimeStore.getState();
+            if (runtime.isPlaying) {
+              runtime.pause();
+              audioGraphRuntime.pauseTransport();
+            } else {
+              runtime.play();
+              if (runtime.hasStarted) audioGraphRuntime.resumeTransport();
+              else setSequencersRunning(true);
+            }
+          }}
         >
           {isRunning ? (
-            <Square className="h-4 w-4" />
+            <Pause className="h-4 w-4" />
           ) : (
             <Play className="h-4 w-4" />
           )}
@@ -593,7 +642,7 @@ export function MidiClipEditorPanel() {
           value={bpm}
           min={20}
           max={320}
-          onChange={(value) => updateModuleParameter(moduleId, 'bpm', value)}
+          onChange={setTransportBpm}
         />
         <NumberField
           label={t('bars')}
@@ -601,6 +650,20 @@ export function MidiClipEditorPanel() {
           min={1}
           max={64}
           onChange={(value) => saveClip({ ...clip, bars: Math.round(value) })}
+        />
+        <NumberField
+          label={t('quantizeStrength')}
+          value={Math.round(quantizeStrength * 100)}
+          min={0}
+          max={100}
+          onChange={(value) => {
+            if (!moduleId) return;
+            updateModuleParameter(
+              moduleId,
+              'quantizeStrength',
+              clamp(value / 100, 0, 1)
+            );
+          }}
         />
 
         <Select
@@ -620,6 +683,17 @@ export function MidiClipEditorPanel() {
         </Select>
 
         <ToolbarDivider />
+
+        <ToolButton
+          active={recordArmed}
+          label={recordArmed ? t('disarmRecording') : t('armRecording')}
+          onClick={() => {
+            if (!moduleId) return;
+            updateModuleParameter(moduleId, 'recordArmed', !recordArmed);
+          }}
+        >
+          <CircleDot className="h-4 w-4" />
+        </ToolButton>
 
         <ToolButton label={t('quantize')} onClick={quantizeSelection}>
           <Scissors className="h-4 w-4" />
@@ -655,6 +729,17 @@ export function MidiClipEditorPanel() {
               height: TIMELINE_HEIGHT + gridHeight,
             }}
           >
+            <div
+              className={cn(
+                'pointer-events-none absolute bottom-0 top-0 z-30 w-px bg-amber-400/90',
+                'shadow-[0_0_8px_rgba(251,191,36,0.65)] transition-opacity',
+                isRunning ? 'opacity-100' : 'opacity-35'
+              )}
+              style={{ left: playheadX }}
+              aria-hidden="true"
+            >
+              <div className="absolute -left-[3px] top-0 h-2 w-[7px] rounded-b-sm bg-amber-400" />
+            </div>
             <div
               className="sticky top-0 z-30 border-b bg-card"
               style={{

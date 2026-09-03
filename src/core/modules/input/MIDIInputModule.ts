@@ -13,6 +13,7 @@ import {
   normalize01,
   normalizePitchBend,
 } from '@/core/midi/utils';
+import { midiPerformanceBus } from '@/core/midi/performance-bus';
 
 /**
  * 检查是否在浏览器环境中运行
@@ -55,6 +56,11 @@ export class MIDIInputModule extends AudioModuleBase {
 
   private activeNotes: Map<string, MidiActiveNote> = new Map();
   private channelNoteIds: Map<number, string> = new Map();
+  private sustainedChannels = new Set<number>();
+  private deferredNoteOffs = new Map<
+    string,
+    { noteId: string; midi: number; channel: number }
+  >();
 
   // 上次音符变化时间（用于防抖动）
   private lastNoteChangeTime: number = 0;
@@ -272,6 +278,11 @@ export class MIDIInputModule extends AudioModuleBase {
 
       while (!input.done) {
         const midiInput = input.value;
+        // Web MIDI 的端口映射在部分浏览器中会短暂保留已拔出的设备。
+        if (midiInput.state === 'disconnected') {
+          input = inputs.next();
+          continue;
+        }
         this.midiInputs.push(midiInput);
         const deviceName =
           midiInput.name || `${midiInput.manufacturer || 'Unknown'} Input`;
@@ -281,11 +292,24 @@ export class MIDIInputModule extends AudioModuleBase {
         input = inputs.next();
       }
 
+      // 设备被物理拔出时，statechange 不会自动触发本模块的解绑逻辑。
+      // 主动解绑可向下游发布 all-notes-off，避免最后一个音符持续发声。
+      if (
+        this.selectedInput &&
+        !deviceOptions.includes(this.selectedInput.id)
+      ) {
+        this.disconnectFromDevice();
+      }
+
       // 更新参数选项
       if (this.parameterMeta['inputDevice']) {
         this.parameterMeta['inputDevice'].options = deviceOptions;
-        if (deviceOptions.length > 0) {
-          this.parameters['inputDevice'].next(deviceOptions[0]);
+        const nextDeviceId =
+          this.selectedInput && deviceOptions.includes(this.selectedInput.id)
+            ? this.selectedInput.id
+            : (deviceOptions[0] ?? '');
+        if (this.parameters['inputDevice'].getValue() !== nextDeviceId) {
+          this.parameters['inputDevice'].next(nextDeviceId);
         }
       }
 
@@ -363,9 +387,11 @@ export class MIDIInputModule extends AudioModuleBase {
       // 重置所有音符状态
       this.activeNotes.clear();
       this.channelNoteIds.clear();
+      this.sustainedChannels.clear();
+      this.deferredNoteOffs.clear();
 
-      // 更新输出端口
-      this.updateOutputPorts();
+      // 使用显式的释放事件，确保事件型消费者和当前帧型消费者都停止发声。
+      this.updateOutputPorts([{ type: 'allNotesOff' }]);
     }
   }
 
@@ -448,6 +474,7 @@ export class MIDIInputModule extends AudioModuleBase {
     );
 
     const noteId = this.getNoteId(transposedNote, channel);
+    this.deferredNoteOffs.delete(noteId);
     const previous = this.activeNotes.get(noteId);
     this.activeNotes.set(noteId, {
       id: noteId,
@@ -484,6 +511,14 @@ export class MIDIInputModule extends AudioModuleBase {
     const transposedNote = Math.max(0, Math.min(127, note + transpose));
 
     const noteId = this.getNoteId(transposedNote, channel);
+    if (this.sustainedChannels.has(channel)) {
+      this.deferredNoteOffs.set(noteId, {
+        noteId,
+        midi: transposedNote,
+        channel,
+      });
+      return;
+    }
     this.activeNotes.delete(noteId);
     if (this.channelNoteIds.get(channel) === noteId) {
       this.channelNoteIds.delete(channel);
@@ -537,17 +572,52 @@ export class MIDIInputModule extends AudioModuleBase {
     if (controller === 123 || controller === 120) {
       this.activeNotes.clear();
       this.channelNoteIds.clear();
+      this.sustainedChannels.clear();
+      this.deferredNoteOffs.clear();
       this.updateOutputPorts([{ type: 'allNotesOff', channel }]);
       return;
     }
 
+    const controlEvent: MidiEvent = {
+      type: 'controlChange',
+      controller,
+      channel,
+      value: normalize01(value / 127, 0),
+    };
+
+    if (controller === 64) {
+      if (value >= 64) {
+        this.sustainedChannels.add(channel);
+        this.updateOutputPorts([controlEvent]);
+        return;
+      }
+
+      this.sustainedChannels.delete(channel);
+      const releaseEvents: MidiEvent[] = [controlEvent];
+      this.deferredNoteOffs.forEach((note, noteId) => {
+        if (note.channel !== channel) return;
+        this.activeNotes.delete(noteId);
+        if (this.channelNoteIds.get(channel) === noteId) {
+          this.channelNoteIds.delete(channel);
+        }
+        releaseEvents.push({ type: 'noteOff', ...note });
+        this.deferredNoteOffs.delete(noteId);
+      });
+      this.updateOutputPorts(releaseEvents);
+      return;
+    }
+
     const timbreCc = this.getParameterValue('timbreCc') as number;
-    if (controller !== timbreCc) return;
+    if (controller !== timbreCc) {
+      this.updateOutputPorts([controlEvent]);
+      return;
+    }
 
     const timbre = normalize01(value / 127, 0);
     const noteId = this.channelNoteIds.get(channel);
     this.applyExpression(channel, 'timbre', timbre);
     this.updateOutputPorts([
+      controlEvent,
       { type: 'timbre', noteId, channel, value: timbre },
     ]);
   }
@@ -582,6 +652,7 @@ export class MIDIInputModule extends AudioModuleBase {
       events
     );
     this.outputPorts['midi'].next(frame);
+    midiPerformanceBus.publish({ sourceId: this.id, frame });
     const legacy = midiFrameToLegacyArrays(frame);
     this.outputPorts['activeNotes'].next(legacy.notes);
     this.outputPorts['activeVelocities'].next(legacy.velocities);
@@ -661,6 +732,8 @@ export class MIDIInputModule extends AudioModuleBase {
       // 如果模块被禁用，重置所有状态
       this.activeNotes.clear();
       this.channelNoteIds.clear();
+      this.sustainedChannels.clear();
+      this.deferredNoteOffs.clear();
       this.updateOutputPorts([{ type: 'allNotesOff' }]);
     }
 

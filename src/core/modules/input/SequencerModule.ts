@@ -60,6 +60,36 @@ export class SequencerModule extends AudioModuleBase {
           hide: true,
         },
       },
+      loop: {
+        type: ParameterType.BOOLEAN,
+        value: true,
+        uiOptions: {
+          label: '循环',
+          describe: '片段播放到末尾后重新开始',
+          hide: true,
+        },
+      },
+      recordArmed: {
+        type: ParameterType.BOOLEAN,
+        value: false,
+        uiOptions: {
+          label: '录音待命',
+          describe: '全局录音开启时，将外部 MIDI 写入此片段',
+          group: '录音',
+        },
+      },
+      quantizeStrength: {
+        type: ParameterType.NUMBER,
+        value: 0.75,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        uiOptions: {
+          label: '量化强度',
+          describe: '0 保留演奏时值，1 完全吸附网格',
+          group: '录音',
+        },
+      },
       clip: {
         type: ParameterType.STRING,
         value: JSON.stringify(normalizeMidiClip(undefined)),
@@ -129,6 +159,7 @@ export class SequencerModule extends AudioModuleBase {
     const schedulingSubscription = combineLatest([
       this.parameters['bpm'],
       this.parameters['running'],
+      this.parameters['loop'],
       this.parameters['clip'],
       this.parameters['transpose'],
     ]).subscribe(() => this.recreateSequence());
@@ -170,7 +201,7 @@ export class SequencerModule extends AudioModuleBase {
       scheduledEvents.map((frame) => [frame.timeSeconds, frame])
     );
 
-    this.sequencePart.loop = true;
+    this.sequencePart.loop = this.getParameterValue('loop') as boolean;
     this.sequencePart.loopEnd = this.ticksToSeconds(
       getClipLengthTicks(clip),
       clip
@@ -284,6 +315,8 @@ export class SequencerModule extends AudioModuleBase {
       this.activeNotes.clear();
       return;
     }
+
+    if (event.type === 'controlChange') return;
 
     this.applyExpressionEvent(event);
   }

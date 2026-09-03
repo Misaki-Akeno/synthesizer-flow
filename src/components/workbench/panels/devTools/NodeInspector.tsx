@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ModuleBase } from '@/core/base/ModuleBase';
+import { useRuntimeModule } from '@/core/hooks/useRuntimeModule';
 import {
   useNodes,
   ViewportPortal,
@@ -15,16 +15,6 @@ const safeStringify = (obj: any, depth = 0, maxDepth = 2): string => {
   // 处理简单类型
   if (obj === null || obj === undefined) return String(obj);
   if (typeof obj !== 'object') return JSON.stringify(obj);
-
-  // 处理BehaviorSubject
-  if (obj && typeof obj.getValue === 'function') {
-    try {
-      const value = obj.getValue();
-      return `"BehaviorSubject(${typeof value === 'number' ? value : '[Complex Value]'})"`;
-    } catch (_e) {
-      return '"BehaviorSubject[Error]"';
-    }
-  }
 
   // 处理数组
   if (Array.isArray(obj)) {
@@ -53,53 +43,6 @@ const safeStringify = (obj: any, depth = 0, maxDepth = 2): string => {
   } catch (_e) {
     return '"[Object]"';
   }
-};
-
-// 格式化模块数据
-const formatModuleData = (module: ModuleBase): string => {
-  if (!module) return 'undefined';
-
-  const result: Record<string, any> = {
-    moduleType: module.moduleType,
-    id: module.id,
-    name: module.name,
-    parameters: {},
-    inputPorts: {},
-    outputPorts: {},
-  };
-
-  // 获取参数值
-  Object.entries(module.parameters || {}).forEach(([key, subject]) => {
-    try {
-      result.parameters[key] = subject.getValue();
-    } catch (_e) {
-      result.parameters[key] = '[Error]';
-    }
-  });
-
-  // 获取输入端口值
-  Object.entries(module.inputPorts || {}).forEach(([key, subject]) => {
-    try {
-      const value = subject.getValue();
-      result.inputPorts[key] =
-        typeof value === 'number' ? value : '[Complex Value]';
-    } catch (_e) {
-      result.inputPorts[key] = '[Error]';
-    }
-  });
-
-  // 获取输出端口值
-  Object.entries(module.outputPorts || {}).forEach(([key, subject]) => {
-    try {
-      const value = subject.getValue();
-      result.outputPorts[key] =
-        typeof value === 'number' ? value : '[Complex Value]';
-    } catch (_e) {
-      result.outputPorts[key] = '[Error]';
-    }
-  });
-
-  return JSON.stringify(result, null, 2);
 };
 
 export default function NodeInspector() {
@@ -157,14 +100,12 @@ function NodeInfo({
   height,
   data,
 }: NodeInfoProps) {
+  const runtime = useRuntimeModule(id);
   if (!width || !height) {
     return null;
   }
 
-  // 格式化数据，避免循环引用错误
-  const formattedData = data.module
-    ? formatModuleData(data.module)
-    : safeStringify(data);
+  const formattedData = safeStringify({ document: data, runtime });
 
   return (
     <div

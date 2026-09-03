@@ -140,6 +140,54 @@ npm run drizzle:migrate   # Run pending migrations
 
 ## Module System Architecture
 
+### Declarative Audio Graph
+
+The canvas and audio engine are separated by a React Native/Fabric-inspired
+reconciliation boundary:
+
+- `src/core/graph/`: pure `AudioGraphDocument`, module definitions, typed graph
+  patches, and the side-effect-free graph reconciler
+- `src/core/runtime/AudioGraphController.ts`: owns the last committed graph and
+  submits minimal patches
+- `src/core/runtime/AudioGraphRuntime.ts`: the only UI-facing service allowed to
+  own `ModuleBase`, Tone.js, or Web Audio objects
+- `src/core/hooks/useRuntimeModule.ts`: exposes throttled, serializable runtime
+  snapshots through `useSyncExternalStore`
+
+React Flow nodes must contain only serializable declaration data (`type`,
+`label`, `parameters`, and `enabled`). Never put a `ModuleBase`, AudioNode,
+BehaviorSubject, or callback in `node.data`. UI actions must go through
+`invokeModuleAction`, and graph mutations must go through the canvas store so
+the document, history, and runtime remain consistent.
+
+Agent shadow graphs and Skills must read `ModuleDefinitionRegistry`; they must
+not instantiate or retain module runtime objects. The registry contains the
+shared parameter and port schema used for UI, validation, Agent tools, and
+Skills.
+
+Visual-only changes such as selection and position do not submit audio patches.
+Parameter changes should reconcile to one `setParameter` patch; topology changes
+should reconcile to the smallest ordered disconnect/create/update/connect patch
+set.
+
+### Global Transport and Automation
+
+The workbench uses one project-level Transport rather than independent playback
+clocks per sequencer:
+
+- `src/core/transport/`: pure persisted transport schema and automation helpers
+- `src/store/transport-runtime-store.ts`: transient playback position, play, and
+  record state; these values must not be serialized
+- `useFlowStore.transport`: persisted BPM, time signature, loop mode, and
+  automation lanes, stored under `SerializedCanvas.metadata.transport`
+- `src/components/workbench/TransportBar.tsx`: the primary transport UI;
+  compact MIDI and piano-roll controls mirror the same global state
+
+Automation playback must update parameters through `useFlowStore` so changes
+still reconcile into minimal graph patches. Do not write playback position into
+React Flow nodes, project history, or project JSON. New transport metadata must
+remain optional so older project files continue to import with default values.
+
 ### Base Classes
 
 **ModuleBase** (`src/core/base/ModuleBase.ts`):
@@ -267,9 +315,11 @@ npx vitest run src/path/to/file.test.ts
 
 **useFlowStore** (`src/store/canvas-store.ts`):
 
-- Manages React Flow nodes and edges
-- Handles module creation, deletion, parameter updates
-- Provides serialization/deserialization methods
+- Owns the pure, serializable React Flow graph document and history
+- Handles module creation, deletion, parameter updates through typed commands
+- Reconciles document changes into the audio runtime without storing live module
+  instances
+- Provides pure-data serialization/deserialization methods
 
 **useProjectsStore** (`src/store/projects-store.ts`):
 

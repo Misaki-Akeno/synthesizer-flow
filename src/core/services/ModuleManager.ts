@@ -1,23 +1,11 @@
-import { Node, Edge } from '@xyflow/react';
+import { Edge } from '@xyflow/react';
 import { ModuleBase, PortType } from '../base/ModuleBase';
 import { moduleClassMap } from '../modules/index';
-import { SerializedNode, SerializedEdge } from '../types/SerializationTypes';
 import { createModuleLogger } from '@/lib/logger';
 import { createModuleId } from '@/core/utils/nodeId';
-import { legacyStepsToMidiClip, normalizeMidiClip } from '@/core/midi/utils';
 
 // 创建模块管理器的专用日志记录器
 const logger = createModuleLogger('ModuleManager');
-
-// 节点数据接口，添加索引签名兼容 Record<string, unknown>
-export interface NodeData {
-  module: ModuleBase;
-  label: string;
-  type: string;
-  [key: string]: unknown; // 添加索引签名
-}
-
-export type FlowNode = Node<NodeData>;
 
 export class ModuleManager {
   // 模块实例注册表
@@ -78,29 +66,6 @@ export class ModuleManager {
       moduleInstance.dispose();
     });
     this.moduleInstances.clear();
-  }
-
-  // 创建流程节点
-  createNode(
-    id: string,
-    type: string,
-    label: string,
-    position: { x: number; y: number }
-  ): FlowNode {
-    // 创建模块实例
-    const moduleInstance = this.createModuleInstance(type, id, label);
-
-    return {
-      id,
-      type: 'default',
-      position,
-      dragHandle: '.node-drag-handle',
-      data: {
-        module: moduleInstance,
-        label: label || id,
-        type,
-      },
-    };
   }
 
   // 生成边ID
@@ -284,122 +249,6 @@ export class ModuleManager {
     const sourceHandle = edge.sourceHandle || 'output';
     const targetHandle = edge.targetHandle || 'input';
     sourceModule.disconnectOutput(sourceHandle, targetModule, targetHandle);
-  }
-
-  // 通过节点存储，用于查找节点
-  private nodesGetter: (() => FlowNode[]) | null = null;
-
-  // 设置节点获取函数
-  setNodesGetter(getter: () => FlowNode[]): void {
-    this.nodesGetter = getter;
-  }
-
-  // 获取当前节点列表
-  private getNodes(): FlowNode[] {
-    if (!this.nodesGetter) {
-      logger.warn('节点获取器未设置');
-      return [];
-    }
-    return this.nodesGetter();
-  }
-
-  // 从序列化数据创建流程图
-  createFlowFromSerializedData(
-    serializedNodes: SerializedNode[],
-    serializedEdges: SerializedEdge[]
-  ): { nodes: FlowNode[]; edges: Edge[] } {
-    // 将序列化节点转换为带有模块的流程节点
-    const nodes = serializedNodes.map((node) => {
-      const { id, position, data } = node;
-      const type = data.type;
-      const label = data.label || id;
-
-      const moduleInstance = this.createModuleInstance(type, id, label);
-
-      // 应用序列化中定义的参数
-      if (data.parameters) {
-        const parameters = this.migrateSerializedParameters(type, data.parameters);
-        Object.entries(parameters).forEach(([key, value]) => {
-          moduleInstance.updateParameter(key, value);
-        });
-      }
-
-      return {
-        id,
-        position,
-        type: 'default',
-        dragHandle: '.node-drag-handle',
-        data: {
-          module: moduleInstance,
-          label,
-          type,
-        },
-      } as FlowNode;
-    });
-
-    // 为边生成ID
-    const edges = serializedEdges.map((edge) => ({
-      id: this.generateEdgeId(
-        edge.source,
-        edge.target,
-        edge.sourceHandle,
-        edge.targetHandle
-      ),
-      source: edge.source,
-      target: edge.target,
-      sourceHandle: edge.sourceHandle,
-      targetHandle: edge.targetHandle,
-    }));
-
-    return { nodes, edges };
-  }
-
-  private migrateSerializedParameters(
-    type: string,
-    parameters: Record<string, unknown>
-  ): Record<string, number | boolean | string> {
-    if (type.toLowerCase() !== 'sequencer') {
-      return parameters as Record<string, number | boolean | string>;
-    }
-
-    const migrated = { ...parameters };
-    if (typeof migrated.clip !== 'string' && typeof migrated.sequence === 'string') {
-      try {
-        const legacySteps = JSON.parse(migrated.sequence);
-        if (Array.isArray(legacySteps)) {
-          migrated.clip = JSON.stringify(legacyStepsToMidiClip(legacySteps));
-        }
-      } catch {
-        migrated.clip = JSON.stringify(normalizeMidiClip(undefined));
-      }
-    }
-
-    delete migrated.sequence;
-    return migrated as Record<string, number | boolean | string>;
-  }
-
-  // 添加一个公共方法，专门用于建立所有边的绑定关系
-  setupAllEdgeBindings(edges: Edge[]): void {
-    // 对边进行排序，确保正确的初始化顺序
-    const sortedEdges = this.sortEdgesByDependency(edges);
-
-    // 建立所有绑定关系
-    sortedEdges.forEach((edge) => {
-      this.bindModules(
-        edge.source,
-        edge.target,
-        edge.sourceHandle ?? undefined,
-        edge.targetHandle ?? undefined
-      );
-    });
-  }
-
-  /**
-   * 根据依赖关系对边进行排序，确保源节点先于目标节点
-   */
-  private sortEdgesByDependency(edges: Edge[]): Edge[] {
-    // 简单实现，返回复制的数组
-    return [...edges];
   }
 }
 

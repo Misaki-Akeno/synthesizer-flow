@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { BehaviorSubject, Subscription } from 'rxjs';
+import { createMidiFrame } from '@/core/midi/utils';
 
 // 接口类型枚举
 export enum PortType {
@@ -100,6 +101,9 @@ export abstract class ModuleBase {
   public inputPortTypes: { [key: string]: PortType };
   public outputPortTypes: { [key: string]: PortType };
 
+  // 解绑时恢复端口自己的声明默认值，不能假设所有 NUMBER 输入都以 0 为中性值。
+  private inputPortDefaults: { [key: string]: ModuleInterface } = {};
+
   // 存储订阅关系以便取消订阅
   private subscriptions: { [key: string]: Subscription } = {};
 
@@ -160,6 +164,7 @@ export abstract class ModuleBase {
     for (const [key, { type, value }] of Object.entries(inputPorts)) {
       this.inputPorts[key] = new BehaviorSubject<ModuleInterface>(value);
       this.inputPortTypes[key] = type;
+      this.inputPortDefaults[key] = Array.isArray(value) ? [...value] : value;
     }
 
     // 转换输出端口为BehaviorSubject并记录类型
@@ -702,8 +707,12 @@ export abstract class ModuleBase {
       if (this.subscriptions[bindingKey]) {
         this.subscriptions[bindingKey].unsubscribe();
         delete this.subscriptions[bindingKey];
-        // 重置输入端口的值
-        this.inputPorts[inputPortName].next(0);
+        // MIDI 断线必须发布一个明确的释放帧，否则下游会保留最后一个持续音。
+        this.inputPorts[inputPortName].next(
+          portType === PortType.MIDI
+            ? createMidiFrame([], [{ type: 'allNotesOff' }])
+            : this.inputPortDefaults[inputPortName]
+        );
         unbound = true;
       }
     }

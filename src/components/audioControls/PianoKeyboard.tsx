@@ -1,11 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { ModuleBase } from '@/core/base/ModuleBase';
 
 // 钢琴键盘属性接口
 interface PianoKeyboardProps {
-  // 模块实例
-  module?: ModuleBase;
   // 键盘宽度(可选)
   width?: number;
   // 键盘高度(可选)
