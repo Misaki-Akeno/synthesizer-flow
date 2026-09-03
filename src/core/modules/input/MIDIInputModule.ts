@@ -278,6 +278,11 @@ export class MIDIInputModule extends AudioModuleBase {
 
       while (!input.done) {
         const midiInput = input.value;
+        // Web MIDI 的端口映射在部分浏览器中会短暂保留已拔出的设备。
+        if (midiInput.state === 'disconnected') {
+          input = inputs.next();
+          continue;
+        }
         this.midiInputs.push(midiInput);
         const deviceName =
           midiInput.name || `${midiInput.manufacturer || 'Unknown'} Input`;
@@ -287,11 +292,24 @@ export class MIDIInputModule extends AudioModuleBase {
         input = inputs.next();
       }
 
+      // 设备被物理拔出时，statechange 不会自动触发本模块的解绑逻辑。
+      // 主动解绑可向下游发布 all-notes-off，避免最后一个音符持续发声。
+      if (
+        this.selectedInput &&
+        !deviceOptions.includes(this.selectedInput.id)
+      ) {
+        this.disconnectFromDevice();
+      }
+
       // 更新参数选项
       if (this.parameterMeta['inputDevice']) {
         this.parameterMeta['inputDevice'].options = deviceOptions;
-        if (deviceOptions.length > 0) {
-          this.parameters['inputDevice'].next(deviceOptions[0]);
+        const nextDeviceId =
+          this.selectedInput && deviceOptions.includes(this.selectedInput.id)
+            ? this.selectedInput.id
+            : (deviceOptions[0] ?? '');
+        if (this.parameters['inputDevice'].getValue() !== nextDeviceId) {
+          this.parameters['inputDevice'].next(nextDeviceId);
         }
       }
 
@@ -372,8 +390,8 @@ export class MIDIInputModule extends AudioModuleBase {
       this.sustainedChannels.clear();
       this.deferredNoteOffs.clear();
 
-      // 更新输出端口
-      this.updateOutputPorts();
+      // 使用显式的释放事件，确保事件型消费者和当前帧型消费者都停止发声。
+      this.updateOutputPorts([{ type: 'allNotesOff' }]);
     }
   }
 

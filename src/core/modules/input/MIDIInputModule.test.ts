@@ -3,9 +3,11 @@ import { MIDIInputModule } from './MIDIInputModule';
 import { isMidiFrame } from '@/core/midi/utils';
 
 interface MidiInputModuleInternals {
+  midiAccess: WebMidi.MIDIAccess | null;
   midiInputs: WebMidi.MIDIInput[];
   connectToDevice: (deviceId: string) => void;
   handleMIDIMessage: (event: WebMidi.MIDIMessageEvent) => void;
+  midiStateChangeListener: (event: WebMidi.MIDIConnectionEvent) => void;
 }
 
 describe('MIDIInputModule lifecycle', () => {
@@ -64,6 +66,53 @@ describe('MIDIInputModule lifecycle', () => {
       isMidiFrame(released) &&
         released.events.some((event) => event.type === 'noteOff')
     ).toBe(true);
+    midiModule.dispose();
+  });
+
+  it('releases active notes when the selected device is unplugged', () => {
+    vi.useFakeTimers();
+    const addEventListener = vi.fn();
+    const removeEventListener = vi.fn();
+    const input = {
+      id: 'midi-device-unplugged',
+      name: 'Unplugged Controller',
+      manufacturer: 'Test',
+      state: 'connected',
+      addEventListener,
+      removeEventListener,
+    } as unknown as WebMidi.MIDIInput;
+    const midiAccess = {
+      inputs: {
+        values: () => [input].values(),
+      },
+      removeEventListener: vi.fn(),
+    } as unknown as WebMidi.MIDIAccess;
+    const midiModule = new MIDIInputModule('midi-unplugged');
+    const internals = midiModule as unknown as MidiInputModuleInternals;
+    internals.midiAccess = midiAccess;
+    internals.midiInputs = [input];
+    internals.connectToDevice(input.id);
+    internals.handleMIDIMessage({
+      data: [0x90, 60, 100],
+    } as unknown as WebMidi.MIDIMessageEvent);
+
+    (input as unknown as { state: string }).state = 'disconnected';
+    internals.midiStateChangeListener({
+      port: input,
+    } as unknown as WebMidi.MIDIConnectionEvent);
+
+    const released = midiModule.outputPorts.midi.getValue();
+    expect(removeEventListener).toHaveBeenCalledWith(
+      'midimessage',
+      expect.any(Function)
+    );
+    expect(isMidiFrame(released) && released.activeNotes).toHaveLength(0);
+    expect(
+      isMidiFrame(released) &&
+        released.events.some((event) => event.type === 'allNotesOff')
+    ).toBe(true);
+    expect(midiModule.getParameterValue('inputDevice')).toBe('');
+
     midiModule.dispose();
   });
 });

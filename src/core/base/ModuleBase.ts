@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { BehaviorSubject, Subscription } from 'rxjs';
+import { createMidiFrame } from '@/core/midi/utils';
 
 // 接口类型枚举
 export enum PortType {
@@ -702,8 +703,12 @@ export abstract class ModuleBase {
       if (this.subscriptions[bindingKey]) {
         this.subscriptions[bindingKey].unsubscribe();
         delete this.subscriptions[bindingKey];
-        // 重置输入端口的值
-        this.inputPorts[inputPortName].next(0);
+        // MIDI 断线必须发布一个明确的释放帧，否则下游会保留最后一个持续音。
+        this.inputPorts[inputPortName].next(
+          portType === PortType.MIDI
+            ? createMidiFrame([], [{ type: 'allNotesOff' }])
+            : 0
+        );
         unbound = true;
       }
     }

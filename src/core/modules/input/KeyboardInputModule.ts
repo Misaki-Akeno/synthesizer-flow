@@ -368,9 +368,11 @@ export class KeyboardInputModule extends AudioModuleBase {
   }
 
   /**
-   * 更新音符的力度（触后）
+   * 更新音符的触后压力。
+   * note-on velocity 是一次性的起音属性，不能在拖动时被覆盖；否则兼容
+   * velocity 端口和下游包络会把每个 pointermove 当成新的力度阶跃。
    * @param note 音符编号
-   * @param velocity 新的力度值 (0-1)
+   * @param velocity 新的触后压力 (0-1)
    */
   public updateVelocity(note: number, velocity: number): void {
     if (!this.isEnabled()) return;
@@ -390,7 +392,6 @@ export class KeyboardInputModule extends AudioModuleBase {
 
       const activeNote = this.activeNotes.get(noteId)!;
       activeNote.pressure = scaledVelocity;
-      activeNote.velocity = scaledVelocity;
 
       // 更新输出端口
       this.updateOutputPorts([
