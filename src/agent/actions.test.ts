@@ -91,13 +91,81 @@ describe('chatWithAgent', () => {
     mockStreamMessage.mockReturnValue(createAgentStream());
   });
 
-  it('rejects unauthenticated users before resolving settings', async () => {
-    mockAuth.mockResolvedValue(null);
+  describe('anonymous users', () => {
+    const anonThreadId = '123e4567-e89b-42d3-a456-426614174000';
 
-    await expect(
-      collect(chatWithAgent(messages, settings, graphState))
-    ).rejects.toThrow('Unauthorized');
-    expect(mockResolveAISettingsForUser).not.toHaveBeenCalled();
+    beforeEach(() => {
+      mockAuth.mockResolvedValue(null);
+    });
+
+    it('uses the request API key without reading stored settings', async () => {
+      await collect(chatWithAgent(messages, settings, graphState));
+
+      expect(mockResolveAISettingsForUser).not.toHaveBeenCalled();
+      expect(mockStreamMessage).toHaveBeenCalledWith(
+        messages,
+        expect.objectContaining({
+          providerId: 'custom',
+          apiKey: 'sk-test',
+          apiEndpoint: 'https://example.com/v1',
+          hasServerApiKey: false,
+        }),
+        graphState,
+        undefined,
+        undefined,
+        undefined
+      );
+    });
+
+    it('ignores client endpoints for fixed providers', async () => {
+      await collect(
+        chatWithAgent(
+          messages,
+          {
+            ...settings,
+            providerId: 'openrouter',
+            apiEndpoint: 'http://169.254.169.254/',
+          },
+          graphState
+        )
+      );
+
+      const resolved = mockStreamMessage.mock.calls[0][1];
+      expect(resolved.apiEndpoint).not.toContain('169.254.169.254');
+    });
+
+    it('rejects non-http custom endpoints', async () => {
+      await expect(
+        collect(
+          chatWithAgent(
+            messages,
+            { ...settings, apiEndpoint: 'file:///etc/passwd' },
+            graphState
+          )
+        )
+      ).rejects.toThrow(/http or https/);
+    });
+
+    it('scopes checkpoints to an anon namespace with UUID thread ids', async () => {
+      await collect(
+        chatWithAgent(messages, settings, graphState, anonThreadId)
+      );
+
+      expect(mockStreamMessage).toHaveBeenCalledWith(
+        messages,
+        expect.anything(),
+        graphState,
+        anonThreadId,
+        undefined,
+        `anon:${anonThreadId}`
+      );
+    });
+
+    it('rejects guessable thread ids', async () => {
+      await expect(
+        collect(chatWithAgent(messages, settings, graphState, 'thread_abc'))
+      ).rejects.toThrow('threadId has an invalid format');
+    });
   });
 
   it('rejects malformed messages before creating the agent', async () => {

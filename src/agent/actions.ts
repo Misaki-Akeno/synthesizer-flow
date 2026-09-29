@@ -5,6 +5,7 @@ import { ChatMessage, GraphStateSnapshot } from './core/types';
 import type { AISettings } from '@/store/settings-store';
 import { auth } from '@/lib/auth/auth';
 import { resolveAISettingsForUser } from '@/lib/ai/server-settings';
+import { getAIProvider, isAIProviderId } from '@/lib/ai/providers';
 
 const VALID_MESSAGE_ROLES = new Set(['user', 'assistant', 'system']);
 const VALID_ACTIONS = new Set(['approve', 'reject']);
@@ -14,6 +15,46 @@ const MAX_TOTAL_MESSAGE_LENGTH = 200_000;
 const MAX_GRAPH_NODES = 500;
 const MAX_GRAPH_EDGES = 2_000;
 const MAX_THREAD_ID_LENGTH = 128;
+
+const ANONYMOUS_THREAD_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 匿名请求的设置只信任提供商注册表：固定提供商忽略客户端传入的 endpoint，
+ * 自定义提供商必须是 http(s) URL。
+ */
+function resolveAnonymousSettings(settings: AISettings): AISettings {
+  if (!isRecord(settings) || !isAIProviderId(settings.providerId)) {
+    throw new Error('providerId is not supported');
+  }
+
+  const provider = getAIProvider(settings.providerId);
+  let apiEndpoint = provider.apiEndpoint;
+
+  if (provider.allowsCustomEndpoint) {
+    let url: URL;
+    try {
+      url = new URL(String(settings.apiEndpoint ?? '').trim());
+    } catch {
+      throw new Error('apiEndpoint must be a valid URL');
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('apiEndpoint must use http or https');
+    }
+    apiEndpoint = url.toString();
+  }
+
+  return {
+    providerId: settings.providerId,
+    modelName:
+      typeof settings.modelName === 'string' && settings.modelName.trim()
+        ? settings.modelName.trim()
+        : provider.defaultModel,
+    apiEndpoint,
+    apiKey: typeof settings.apiKey === 'string' ? settings.apiKey.trim() : '',
+    hasServerApiKey: false,
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -238,9 +279,7 @@ export async function* chatWithAgent(
   action?: 'approve' | 'reject'
 ) {
   const session = await auth();
-  if (!session?.user?.id) {
-    throw new Error('Unauthorized');
-  }
+  const userId = session?.user?.id;
 
   assertChatMessages(messages);
   assertGraphStateSnapshot(initialState);
@@ -252,16 +291,27 @@ export async function* chatWithAgent(
     throw new Error('threadId is required for approval actions');
   }
 
-  const resolvedSettings = await resolveAISettingsForUser(
-    session.user.id,
-    settings
-  );
+  if (!userId && threadId && !ANONYMOUS_THREAD_ID_PATTERN.test(threadId)) {
+    // 匿名会话的 threadId 就是唯一凭据，必须是不可猜测的 UUID。
+    throw new Error('threadId has an invalid format');
+  }
+
+  // 登录用户使用数据库中加密保存的设置；匿名用户只使用本次请求携带的
+  // 密钥，不读取或写入任何用户数据。
+  // 登录用户使用数据库中加密保存的设置；匿名用户只使用本次请求携带的
+  // 密钥，不读取或写入任何用户数据。
+  const resolvedSettings = userId
+    ? await resolveAISettingsForUser(userId, settings)
+    : resolveAnonymousSettings(settings);
 
   const agent = Agent.getInstance();
   // 客户端 threadId 只作为公开会话标识；数据库 key 必须绑定当前用户，
   // 防止仅凭另一个用户的 threadId 恢复或批准其 LangGraph 状态。
+  // 匿名会话使用独立的 anon 命名空间，与任何用户 id 不会冲突（用户 id 经过编码且不含该前缀）。
   const checkpointThreadId = threadId
-    ? `${encodeURIComponent(session.user.id)}:${threadId}`
+    ? userId
+      ? `${encodeURIComponent(userId)}:${threadId}`
+      : `anon:${threadId}`
     : undefined;
   const generator = agent.streamMessage(
     messages,

@@ -365,6 +365,7 @@ npx vitest run src/path/to/file.test.ts
 - **Agent Skills**: Module guides combine curated usage advice with parameter and port schemas extracted from real module classes
 - **Agent Evals**: Golden Set benchmarks score tool traces, arguments, client operations, approvals, and response constraints
 - **Checkpointer**: Database-backed state persistence for conversations
+- **Anonymous chat**: `chatWithAgent` also serves unauthenticated users. They use only the API key sent with the request (never stored, fixed providers ignore client endpoints), require a UUID `threadId`, and checkpoint under the `anon:<threadId>` namespace; signed-in users keep encrypted server-side settings and `<userId>:<threadId>` keys
 
 ### Tool System
 
