@@ -281,6 +281,7 @@
       "configureApi": "请先在设置中配置 AI 模型的 API 密钥",
       "settingsPath": "进入设置 > AI 模型设置",
       "unknownError": "未知错误",
+      "serverError": "服务端出现异常，请稍后重试",
       "requestError": "抱歉，请求处理过程中出现了错误：{message}",
       "requiresApproval": "需要你的确认才能继续。",
       "approvalRequired": "需要确认",

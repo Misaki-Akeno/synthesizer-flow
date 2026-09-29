@@ -327,9 +327,14 @@ export function ChatInterface({ onRequestClose }: ChatInterfaceProps) {
         const asyncIterable = stream as AsyncIterable<{
           type: string;
           content?: string;
+          message?: string;
           response?: ChatResponse;
         }>;
         for await (const part of asyncIterable) {
+          if (part.type === 'error') {
+            // 服务端在生产环境无法通过异常传递细节，失败以 error 事件返回。
+            throw new Error(part.message || t('serverError'));
+          }
           if (part.type === 'chunk' && part.content) {
             currentAssistantMessage += part.content;
             if (pendingAnimationFrame === null) {

@@ -6,6 +6,64 @@ import type { AISettings } from '@/store/settings-store';
 import { auth } from '@/lib/auth/auth';
 import { resolveAISettingsForUser } from '@/lib/ai/server-settings';
 import { getAIProvider, isAIProviderId } from '@/lib/ai/providers';
+import { createModuleLogger } from '@/lib/logger';
+
+const logger = createModuleLogger('ChatAction');
+
+/** 校验类错误：消息面向用户，可以原样返回。 */
+class ChatRequestError extends Error {}
+
+export type ChatErrorCode = 'invalid_request' | 'provider' | 'internal';
+
+export interface ChatErrorEvent {
+  type: 'error';
+  code: ChatErrorCode;
+  /** internal 错误不返回细节，避免泄露数据库或服务端信息。 */
+  message: string;
+}
+
+const MAX_ERROR_MESSAGE_LENGTH = 300;
+
+function toChatErrorEvent(error: unknown, apiKey?: string): ChatErrorEvent {
+  if (error instanceof ChatRequestError) {
+    return { type: 'error', code: 'invalid_request', message: error.message };
+  }
+
+  if (error instanceof Error && error.name === 'AISettingsValidationError') {
+    return { type: 'error', code: 'invalid_request', message: error.message };
+  }
+
+  // 模型服务返回的 HTTP 错误（密钥无效、模型不存在、额度不足等）对用户有诊断价值。
+  const status =
+    isRecord(error) && typeof error.status === 'number'
+      ? error.status
+      : undefined;
+  if (error instanceof Error && status !== undefined) {
+    let message = error.message;
+    if (apiKey) {
+      message = message.split(apiKey).join('[redacted]');
+    }
+    message = message.replace(/\b(sk|key)-[A-Za-z0-9_-]{8,}/g, '[redacted]');
+    return {
+      type: 'error',
+      code: 'provider',
+      message: `(${status}) ${message}`.slice(0, MAX_ERROR_MESSAGE_LENGTH),
+    };
+  }
+
+  return { type: 'error', code: 'internal', message: '' };
+}
+
+async function resolveSettings(
+  userId: string | undefined,
+  settings: AISettings
+): Promise<AISettings> {
+  // 登录用户使用数据库中加密保存的设置；匿名用户只使用本次请求携带的
+  // 密钥，不读取或写入任何用户数据。
+  return userId
+    ? resolveAISettingsForUser(userId, settings)
+    : resolveAnonymousSettings(settings);
+}
 
 const VALID_MESSAGE_ROLES = new Set(['user', 'assistant', 'system']);
 const VALID_ACTIONS = new Set(['approve', 'reject']);
@@ -25,7 +83,7 @@ const ANONYMOUS_THREAD_ID_PATTERN =
  */
 function resolveAnonymousSettings(settings: AISettings): AISettings {
   if (!isRecord(settings) || !isAIProviderId(settings.providerId)) {
-    throw new Error('providerId is not supported');
+    throw new ChatRequestError('providerId is not supported');
   }
 
   const provider = getAIProvider(settings.providerId);
@@ -36,10 +94,10 @@ function resolveAnonymousSettings(settings: AISettings): AISettings {
     try {
       url = new URL(String(settings.apiEndpoint ?? '').trim());
     } catch {
-      throw new Error('apiEndpoint must be a valid URL');
+      throw new ChatRequestError('apiEndpoint must be a valid URL');
     }
     if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      throw new Error('apiEndpoint must use http or https');
+      throw new ChatRequestError('apiEndpoint must use http or https');
     }
     apiEndpoint = url.toString();
   }
@@ -62,39 +120,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function assertChatMessages(value: unknown): asserts value is ChatMessage[] {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new Error('messages must be a non-empty array');
+    throw new ChatRequestError('messages must be a non-empty array');
   }
 
   if (value.length > MAX_MESSAGES) {
-    throw new Error(`messages must contain at most ${MAX_MESSAGES} items`);
+    throw new ChatRequestError(
+      `messages must contain at most ${MAX_MESSAGES} items`
+    );
   }
 
   let totalLength = 0;
 
   value.forEach((message, index) => {
     if (!isRecord(message)) {
-      throw new Error(`messages[${index}] must be an object`);
+      throw new ChatRequestError(`messages[${index}] must be an object`);
     }
 
     if (
       typeof message.role !== 'string' ||
       !VALID_MESSAGE_ROLES.has(message.role)
     ) {
-      throw new Error(`messages[${index}].role is invalid`);
+      throw new ChatRequestError(`messages[${index}].role is invalid`);
     }
 
     if (typeof message.content !== 'string') {
-      throw new Error(`messages[${index}].content must be a string`);
+      throw new ChatRequestError(`messages[${index}].content must be a string`);
     }
 
     if (message.content.length > MAX_MESSAGE_LENGTH) {
-      throw new Error(`messages[${index}].content is too long`);
+      throw new ChatRequestError(`messages[${index}].content is too long`);
     }
     totalLength += message.content.length;
   });
 
   if (totalLength > MAX_TOTAL_MESSAGE_LENGTH) {
-    throw new Error('messages total content is too long');
+    throw new ChatRequestError('messages total content is too long');
   }
 }
 
@@ -116,12 +176,12 @@ function assertParameterRecord(value: unknown, context: string): void {
   }
 
   if (!isRecord(value)) {
-    throw new Error(`${context} must be an object`);
+    throw new ChatRequestError(`${context} must be an object`);
   }
 
   Object.entries(value).forEach(([key, parameterValue]) => {
     if (!isGraphParameterValue(parameterValue)) {
-      throw new Error(`${context}.${key} is invalid`);
+      throw new ChatRequestError(`${context}.${key} is invalid`);
     }
   });
 }
@@ -132,12 +192,12 @@ function assertStringRecord(value: unknown, context: string): void {
   }
 
   if (!isRecord(value)) {
-    throw new Error(`${context} must be an object`);
+    throw new ChatRequestError(`${context} must be an object`);
   }
 
   Object.entries(value).forEach(([key, recordValue]) => {
     if (typeof recordValue !== 'string') {
-      throw new Error(`${context}.${key} must be a string`);
+      throw new ChatRequestError(`${context}.${key} must be a string`);
     }
   });
 }
@@ -148,7 +208,7 @@ function assertOptionalStringOrNull(value: unknown, context: string): void {
   }
 
   if (typeof value !== 'string') {
-    throw new Error(`${context} must be a string`);
+    throw new ChatRequestError(`${context} must be a string`);
   }
 }
 
@@ -158,11 +218,11 @@ function assertOptionalNonEmptyString(value: unknown, context: string): void {
   }
 
   if (typeof value !== 'string' || !value.trim()) {
-    throw new Error(`${context} must be a non-empty string`);
+    throw new ChatRequestError(`${context} must be a non-empty string`);
   }
 
   if (value.length > MAX_THREAD_ID_LENGTH || !/^[A-Za-z0-9_-]+$/.test(value)) {
-    throw new Error(`${context} has an invalid format`);
+    throw new ChatRequestError(`${context} has an invalid format`);
   }
 }
 
@@ -174,16 +234,18 @@ function assertGraphStateSnapshot(
     !Array.isArray(value.nodes) ||
     !Array.isArray(value.edges)
   ) {
-    throw new Error('initialState must include nodes and edges arrays');
+    throw new ChatRequestError(
+      'initialState must include nodes and edges arrays'
+    );
   }
 
   if (value.nodes.length > MAX_GRAPH_NODES) {
-    throw new Error(
+    throw new ChatRequestError(
       `initialState.nodes must contain at most ${MAX_GRAPH_NODES} items`
     );
   }
   if (value.edges.length > MAX_GRAPH_EDGES) {
-    throw new Error(
+    throw new ChatRequestError(
       `initialState.edges must contain at most ${MAX_GRAPH_EDGES} items`
     );
   }
@@ -192,30 +254,38 @@ function assertGraphStateSnapshot(
 
   value.nodes.forEach((node, index) => {
     if (!isRecord(node)) {
-      throw new Error(`initialState.nodes[${index}] must be an object`);
+      throw new ChatRequestError(
+        `initialState.nodes[${index}] must be an object`
+      );
     }
 
     if (typeof node.id !== 'string' || !node.id.trim()) {
-      throw new Error(`initialState.nodes[${index}].id is invalid`);
+      throw new ChatRequestError(`initialState.nodes[${index}].id is invalid`);
     }
 
     if (nodeIds.has(node.id)) {
-      throw new Error(`initialState.nodes[${index}].id is duplicated`);
+      throw new ChatRequestError(
+        `initialState.nodes[${index}].id is duplicated`
+      );
     }
     nodeIds.add(node.id);
 
     if (!isRecord(node.position)) {
-      throw new Error(`initialState.nodes[${index}].position is invalid`);
+      throw new ChatRequestError(
+        `initialState.nodes[${index}].position is invalid`
+      );
     }
 
     if (!isFiniteNumber(node.position.x) || !isFiniteNumber(node.position.y)) {
-      throw new Error(
+      throw new ChatRequestError(
         `initialState.nodes[${index}].position must use finite numbers`
       );
     }
 
     if (!isRecord(node.data) || typeof node.data.type !== 'string') {
-      throw new Error(`initialState.nodes[${index}].data.type is invalid`);
+      throw new ChatRequestError(
+        `initialState.nodes[${index}].data.type is invalid`
+      );
     }
 
     assertParameterRecord(
@@ -225,7 +295,9 @@ function assertGraphStateSnapshot(
 
     if (node.data.ports !== undefined) {
       if (!isRecord(node.data.ports)) {
-        throw new Error(`initialState.nodes[${index}].data.ports is invalid`);
+        throw new ChatRequestError(
+          `initialState.nodes[${index}].data.ports is invalid`
+        );
       }
 
       assertStringRecord(
@@ -241,15 +313,21 @@ function assertGraphStateSnapshot(
 
   value.edges.forEach((edge, index) => {
     if (!isRecord(edge)) {
-      throw new Error(`initialState.edges[${index}] must be an object`);
+      throw new ChatRequestError(
+        `initialState.edges[${index}] must be an object`
+      );
     }
 
     if (typeof edge.source !== 'string' || !edge.source.trim()) {
-      throw new Error(`initialState.edges[${index}].source is invalid`);
+      throw new ChatRequestError(
+        `initialState.edges[${index}].source is invalid`
+      );
     }
 
     if (typeof edge.target !== 'string' || !edge.target.trim()) {
-      throw new Error(`initialState.edges[${index}].target is invalid`);
+      throw new ChatRequestError(
+        `initialState.edges[${index}].target is invalid`
+      );
     }
 
     assertOptionalStringOrNull(
@@ -262,16 +340,20 @@ function assertGraphStateSnapshot(
     );
 
     if (!nodeIds.has(edge.source)) {
-      throw new Error(`initialState.edges[${index}].source is missing`);
+      throw new ChatRequestError(
+        `initialState.edges[${index}].source is missing`
+      );
     }
 
     if (!nodeIds.has(edge.target)) {
-      throw new Error(`initialState.edges[${index}].target is missing`);
+      throw new ChatRequestError(
+        `initialState.edges[${index}].target is missing`
+      );
     }
   });
 }
 
-export async function* chatWithAgent(
+async function* streamChat(
   messages: ChatMessage[],
   settings: AISettings,
   initialState: GraphStateSnapshot,
@@ -285,24 +367,23 @@ export async function* chatWithAgent(
   assertGraphStateSnapshot(initialState);
   assertOptionalNonEmptyString(threadId, 'threadId');
   if (action !== undefined && !VALID_ACTIONS.has(action)) {
-    throw new Error('action is invalid');
+    throw new ChatRequestError('action is invalid');
   }
   if (action !== undefined && !threadId?.trim()) {
-    throw new Error('threadId is required for approval actions');
+    throw new ChatRequestError('threadId is required for approval actions');
   }
 
   if (!userId && threadId && !ANONYMOUS_THREAD_ID_PATTERN.test(threadId)) {
     // 匿名会话的 threadId 就是唯一凭据，必须是不可猜测的 UUID。
-    throw new Error('threadId has an invalid format');
+    throw new ChatRequestError('threadId has an invalid format');
   }
 
   // 登录用户使用数据库中加密保存的设置；匿名用户只使用本次请求携带的
   // 密钥，不读取或写入任何用户数据。
-  // 登录用户使用数据库中加密保存的设置；匿名用户只使用本次请求携带的
-  // 密钥，不读取或写入任何用户数据。
-  const resolvedSettings = userId
-    ? await resolveAISettingsForUser(userId, settings)
-    : resolveAnonymousSettings(settings);
+  const resolvedSettings = await resolveSettings(userId, settings);
+  if (!resolvedSettings.apiKey) {
+    throw new ChatRequestError('请先配置AI API密钥');
+  }
 
   const agent = Agent.getInstance();
   // 客户端 threadId 只作为公开会话标识；数据库 key 必须绑定当前用户，
@@ -325,5 +406,31 @@ export async function* chatWithAgent(
   for await (const part of generator) {
     // Ensure the return value is serializable
     yield JSON.parse(JSON.stringify(part));
+  }
+}
+
+/**
+ * Server Action 抛出的异常在生产环境会被 Next.js 打码为 digest，客户端无从得知原因。
+ * 因此所有失败都转换为 `error` 事件返回，详细堆栈只写入服务端日志。
+ */
+export async function* chatWithAgent(
+  messages: ChatMessage[],
+  settings: AISettings,
+  initialState: GraphStateSnapshot,
+  threadId?: string,
+  action?: 'approve' | 'reject'
+) {
+  try {
+    yield* streamChat(messages, settings, initialState, threadId, action);
+  } catch (error) {
+    const apiKey =
+      isRecord(settings) && typeof settings.apiKey === 'string'
+        ? settings.apiKey.trim()
+        : undefined;
+    const event = toChatErrorEvent(error, apiKey);
+    if (event.code === 'internal') {
+      logger.error('Chat request failed', error);
+    }
+    yield event;
   }
 }

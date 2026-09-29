@@ -281,6 +281,7 @@
       "configureApi": "Configure an AI model API key in Settings first.",
       "settingsPath": "Open Settings > AI Models",
       "unknownError": "Unknown error",
+      "serverError": "The server hit an unexpected error. Please try again later.",
       "requestError": "Sorry, the request failed: {message}",
       "requiresApproval": "Your approval is required to continue.",
       "approvalRequired": "Approval required",
