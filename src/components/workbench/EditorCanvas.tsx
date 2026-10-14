@@ -21,6 +21,7 @@ import { isValidModuleConnection } from './connectionValidation';
 import { useShallow } from 'zustand/react/shallow';
 import { useCanvasAutosave } from './useCanvasAutosave';
 import { SubpatchOverlay } from './SubpatchOverlay';
+import { pruneNodeViewCache } from './nodeViewCache';
 import {
   useCanvasLodStore,
   useNodeDetailLevel,
@@ -61,6 +62,21 @@ function CanvasLodController() {
     setZoom(store.getState().transform[2]);
     return store.subscribe((state) => setZoom(state.transform[2]));
   }, [store]);
+
+  useEffect(
+    () =>
+      useFlowStore.subscribe((state, previous) => {
+        // 拖拽时 nodes 每帧都会变，只在节点增删或切换项目时清理
+        if (
+          state.nodes.length >= previous.nodes.length &&
+          state.currentProjectId === previous.currentProjectId
+        ) {
+          return;
+        }
+        pruneNodeViewCache(new Set(state.nodes.map((node) => node.id)));
+      }),
+    []
+  );
 
   return null;
 }

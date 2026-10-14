@@ -301,7 +301,7 @@ export class MIDIInputModule extends AudioModuleBase {
 
       // 更新参数选项
       if (this.parameterMeta['inputDevice']) {
-        this.parameterMeta['inputDevice'].options = deviceOptions;
+        this.setParameterOptions('inputDevice', deviceOptions);
         const nextDeviceId =
           this.selectedInput && deviceOptions.includes(this.selectedInput.id)
             ? this.selectedInput.id

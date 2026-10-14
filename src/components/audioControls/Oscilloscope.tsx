@@ -108,7 +108,8 @@ const Oscilloscope: React.FC<OscilloscopeProps> = ({ moduleId }) => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
+    // 画布最大会被放大到 2 倍左右，按 2x 设备像素渲染避免放大后发糊
+    const pixelRatio = Math.max(1, window.devicePixelRatio || 1) * 2;
     canvas.width = WIDTH * pixelRatio;
     canvas.height = HEIGHT * pixelRatio;
 

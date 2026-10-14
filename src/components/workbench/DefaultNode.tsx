@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentType, RefObject } from 'react';
 import { ParameterType, PortType } from '@/core/base/ModuleBase';
 import type { FlowNodeData, RuntimeModuleSnapshot } from '@/core/graph/types';
@@ -26,7 +26,12 @@ import {
 import { getModuleDescription } from '@/core/modules';
 import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
 import { cn } from '@/lib/utils';
-import LowDetailNode, { rememberNodeSize } from './LowDetailNode';
+import LowDetailNode from './LowDetailNode';
+import {
+  getOpenParameterGroup,
+  rememberNodeSize,
+  setOpenParameterGroup,
+} from './nodeViewCache';
 
 interface DefaultNodeProps {
   data: FlowNodeData;
@@ -121,6 +126,36 @@ const FullDetailNode = ({ data, id, selected }: DefaultNodeProps) => {
   const commitHistoryTransaction = useFlowStore(
     (state) => state.commitHistoryTransaction
   );
+  // 记录本卡片开启但尚未结束的编辑事务：拖动中途切档导致卸载时补交，
+  // 否则事务深度停在 1，之后的所有编辑都会被并进同一条历史。
+  const openEdits = useRef(0);
+  const handleEditStart = useCallback(() => {
+    openEdits.current += 1;
+    beginHistoryTransaction();
+  }, [beginHistoryTransaction]);
+  const handleEditEnd = useCallback(() => {
+    if (openEdits.current === 0) return;
+    openEdits.current -= 1;
+    commitHistoryTransaction();
+  }, [commitHistoryTransaction]);
+  useEffect(
+    () => () => {
+      while (openEdits.current > 0) {
+        openEdits.current -= 1;
+        commitHistoryTransaction();
+      }
+    },
+    [commitHistoryTransaction]
+  );
+  // 切档会卸载完整卡片，分组展开状态存在 nodeViewCache，放大回来时恢复
+  const [openGroup, setOpenGroup] = useState(() => getOpenParameterGroup(id));
+  const handleOpenGroupChange = useCallback(
+    (group: string) => {
+      setOpenGroup(group);
+      setOpenParameterGroup(id, group);
+    },
+    [id]
+  );
   const isTransportPlaying = useTransportRuntimeStore(
     (state) => state.isPlaying
   );
@@ -185,8 +220,8 @@ const FullDetailNode = ({ data, id, selected }: DefaultNodeProps) => {
           moduleId={id}
           paramValues={paramValues}
           onParamChange={handleParameterChange}
-          onEditStart={beginHistoryTransaction}
-          onEditEnd={commitHistoryTransaction}
+          onEditStart={handleEditStart}
+          onEditEnd={handleEditEnd}
           {...customUIProps}
         />
       </div>
@@ -213,8 +248,8 @@ const FullDetailNode = ({ data, id, selected }: DefaultNodeProps) => {
       label={parameter.label}
       description={parameter.describe}
       readonly={parameter.readonly}
-      onEditStart={beginHistoryTransaction}
-      onEditEnd={commitHistoryTransaction}
+      onEditStart={handleEditStart}
+      onEditEnd={handleEditEnd}
     />
   );
 
@@ -254,7 +289,13 @@ const FullDetailNode = ({ data, id, selected }: DefaultNodeProps) => {
       {groupedParameters[''].map(renderParameter)}
       {groups.length > 0 && (
         <div className="mt-2">
-          <Accordion type="single" collapsible className="w-full">
+          <Accordion
+            type="single"
+            collapsible
+            className="w-full"
+            value={openGroup}
+            onValueChange={handleOpenGroupChange}
+          >
             {groups.map((group) => (
               <AccordionItem value={group} key={group}>
                 <AccordionTrigger className="py-2 text-xs">
@@ -306,7 +347,14 @@ const DefaultNode = (props: DefaultNodeProps) => {
   if (level === 'full') {
     return <FullDetailNode {...props} />;
   }
-  return <LowDetailNode id={props.id} data={props.data} level={level} />;
+  return (
+    <LowDetailNode
+      id={props.id}
+      data={props.data}
+      level={level}
+      selected={Boolean(props.selected)}
+    />
+  );
 };
 
 export default memo(DefaultNode);

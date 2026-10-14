@@ -153,14 +153,17 @@ reconciliation boundary:
   own `ModuleBase`, Tone.js, or Web Audio objects
 - `src/core/hooks/useRuntimeModule.ts`: exposes throttled, serializable runtime
   snapshots through `useSyncExternalStore`. `useRuntimeModule` carries
-  structure (parameters, metadata, port types, custom UI) and does not change
-  on port activity; port values live in `useRuntimeModuleTelemetry`, which only
+  structure (parameters, metadata, port types, custom UI) and only changes on
+  port activity when a port-driven custom UI (for example piano key highlights)
+  actually changes; port values live in `useRuntimeModuleTelemetry`, which only
   components that display them (selected-port labels, Oscilloscope, DevTools)
   should subscribe to
 - `src/store/canvas-lod-store.ts`: zoom-based node detail level
   (`full`/`compact`/`minimal`) with hysteresis; low levels render the
   read-only `LowDetailNode` without runtime subscriptions, and the
-  `nodeDetailMode` canvas setting can pin a fixed level
+  `nodeDetailMode` canvas setting can pin a fixed level. Modules that mutate
+  parameter metadata in place (such as list options) must call
+  `setParameterOptions` so the runtime refreshes its snapshot
 
 React Flow nodes must contain only serializable declaration data (`type`,
 `label`, `parameters`, and `enabled`). Never put a `ModuleBase`, AudioNode,

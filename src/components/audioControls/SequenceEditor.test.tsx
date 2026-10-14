@@ -1,3 +1,4 @@
+import { Profiler } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import SequenceEditor from './SequenceEditor';
@@ -26,27 +27,26 @@ afterEach(() => {
 });
 
 describe('SequenceEditor', () => {
-  it('moves the playhead without re-rendering the note grid', () => {
+  it('moves the playhead without re-rendering the editor', () => {
     const clip = parseMidiClipJson('');
     const lengthTicks = getClipLengthTicks(clip);
+    const onRender = vi.fn();
     render(
-      <SequenceEditor
-        moduleId="seq"
-        paramValues={{ clip: '' }}
-        onParamChange={vi.fn()}
-      />
+      <Profiler id="sequence-editor" onRender={onRender}>
+        <SequenceEditor
+          moduleId="seq"
+          paramValues={{ clip: '' }}
+          onParamChange={vi.fn()}
+        />
+      </Profiler>
     );
     const playhead = screen.getByTestId('sequence-playhead');
-    const grid = playhead.parentElement as HTMLElement;
-    const gridChildren = Array.from(grid.children);
+    const commitsAfterMount = onRender.mock.calls.length;
 
     act(() => {
       useTransportRuntimeStore.setState({ positionTicks: lengthTicks / 2 });
     });
-
     expect(playhead.style.transform).toBe('translateX(50%)');
-    // 播放位置变化不应重建音符节点
-    expect(Array.from(grid.children)).toEqual(gridChildren);
 
     act(() => {
       useTransportRuntimeStore.setState({
@@ -54,5 +54,7 @@ describe('SequenceEditor', () => {
       });
     });
     expect(playhead.style.transform).toBe('translateX(25%)');
+    // 播放位置变化只写 DOM，不触发任何 React 提交
+    expect(onRender).toHaveBeenCalledTimes(commitsAfterMount);
   });
 });

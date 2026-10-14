@@ -1,5 +1,5 @@
 import { Subscription } from 'rxjs';
-import { throttleTime } from 'rxjs/operators';
+import { distinctUntilChanged, throttleTime } from 'rxjs/operators';
 import { AudioModuleBase } from '@/core/base/AudioModuleBase';
 import {
   ModuleBase,
@@ -83,6 +83,11 @@ function sanitizeProps(
   return value;
 }
 
+/** 模块会原地修改元数据对象，快照必须保存副本才能按内容比较。 */
+function cloneJson<T>(value: T): T {
+  return value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
+}
+
 function isSameJson(a: unknown, b: unknown): boolean {
   return a === b || JSON.stringify(a) === JSON.stringify(b);
 }
@@ -122,6 +127,8 @@ export class AudioGraphRuntime {
   private telemetry = new Map<string, RuntimeModuleTelemetry>();
   private dirtyTelemetry = new Set<string>();
   private telemetryListeners = new Map<string, Set<RuntimeListener>>();
+  /** 无人订阅期间可能已过期的自定义 UI，等到有订阅者时再刷新。 */
+  private staleCustomUI = new Set<string>();
 
   /** 返回音频调度器的权威播放位置，不向 UI 暴露 Tone 对象。 */
   getTransportPositionTicks(): number | undefined {
@@ -162,7 +169,12 @@ export class AudioGraphRuntime {
 
   /** 订阅结构快照：参数、启用状态、端口类型与自定义 UI。端口值变化不会触发。 */
   subscribeModule(moduleId: string, listener: RuntimeListener): () => void {
-    return addListener(this.listeners, moduleId, listener);
+    const unsubscribe = addListener(this.listeners, moduleId, listener);
+    // useSyncExternalStore 订阅后会重新读取快照，此时补上延迟的自定义 UI 刷新
+    if (this.staleCustomUI.delete(moduleId)) {
+      this.refreshCustomUI(moduleId);
+    }
+    return unsubscribe;
   }
 
   /**
@@ -270,6 +282,7 @@ export class AudioGraphRuntime {
     this.actions.clear();
     this.telemetry.clear();
     this.dirtyTelemetry.clear();
+    this.staleCustomUI.clear();
     this.listeners.forEach((listeners) => {
       listeners.forEach((listener) => listener());
     });
@@ -344,6 +357,7 @@ export class AudioGraphRuntime {
     this.actions.delete(moduleId);
     this.telemetry.delete(moduleId);
     this.dirtyTelemetry.delete(moduleId);
+    this.staleCustomUI.delete(moduleId);
     this.emit(moduleId);
     this.emitTelemetry(moduleId);
   }
@@ -353,11 +367,18 @@ export class AudioGraphRuntime {
 
     Object.values(moduleInstance.parameters).forEach((subject) => {
       subscriptions.push(
-        subject.subscribe(() => {
+        // 部分模块会以相同值反复写参数（如计算器的 status），去重避免无效刷新
+        subject.pipe(distinctUntilChanged()).subscribe(() => {
           this.refreshSnapshot(moduleInstance.id);
         })
       );
     });
+
+    subscriptions.push(
+      moduleInstance.metadataChanges.subscribe(() => {
+        this.refreshSnapshot(moduleInstance.id);
+      })
+    );
 
     [
       ...Object.values(moduleInstance.inputPorts),
@@ -402,10 +423,22 @@ export class AudioGraphRuntime {
 
     // 少数自定义 UI 的 props 由端口事件驱动（例如钢琴键盘的按下状态），
     // 只有其内容确实变化时才刷新结构快照，避免整张卡片跟着端口值重渲染。
-    const current = this.snapshots.get(moduleInstance.id)?.customUI;
+    // 没有自定义 UI 的模块直接跳过；无人订阅时推迟到订阅时再比较。
+    if (!this.snapshots.get(moduleInstance.id)?.customUI) return;
+    if (!this.listeners.has(moduleInstance.id)) {
+      this.staleCustomUI.add(moduleInstance.id);
+      return;
+    }
+    this.refreshCustomUI(moduleInstance.id);
+  }
+
+  private refreshCustomUI(moduleId: string): void {
+    const moduleInstance = moduleManager.getModule(moduleId);
+    if (!moduleInstance || moduleInstance.isDisposed()) return;
+    const current = this.snapshots.get(moduleId)?.customUI;
     const { customUI } = this.buildCustomUI(moduleInstance);
     if (!isSameJson(current, customUI)) {
-      this.refreshSnapshot(moduleInstance.id);
+      this.refreshSnapshot(moduleId);
     }
   }
 
@@ -425,7 +458,7 @@ export class AudioGraphRuntime {
       Object.fromEntries(
         Object.keys(moduleInstance.parameters).map((key) => [
           key,
-          moduleInstance.getParameterMeta(key),
+          cloneJson(moduleInstance.getParameterMeta(key)),
         ])
       )
     );

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BehaviorSubject, Subscription } from 'rxjs';
+import { BehaviorSubject, Subject, Subscription } from 'rxjs';
 import {
   createMidiFrame,
   getLegacyMidiScheduledTime,
@@ -89,6 +89,12 @@ export abstract class ModuleBase {
       };
     };
   };
+
+  /**
+   * 参数元数据（如列表选项）被原地修改时发出，运行时据此刷新快照。
+   * 参数值本身的变化走 parameters，不需要这里通知。
+   */
+  public readonly metadataChanges = new Subject<void>();
 
   // 添加自定义UI支持
   protected customUI?: {
@@ -183,6 +189,16 @@ export abstract class ModuleBase {
 
     // 设置内部绑定
     this.setupInternalBindings();
+  }
+
+  /**
+   * 更新列表参数的可选项并通知运行时刷新快照。
+   */
+  protected setParameterOptions(paramKey: string, options: string[]): void {
+    const meta = this.parameterMeta[paramKey];
+    if (!meta) return;
+    meta.options = [...options];
+    this.metadataChanges.next();
   }
 
   /**
@@ -958,5 +974,7 @@ export abstract class ModuleBase {
     Object.values(this.outputPorts).forEach((port) => {
       port.complete();
     });
+
+    this.metadataChanges.complete();
   }
 }

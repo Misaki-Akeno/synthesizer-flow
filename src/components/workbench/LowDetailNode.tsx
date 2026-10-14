@@ -27,25 +27,7 @@ import {
 import { SequenceNotePreview } from '@/components/audioControls/SequenceEditor';
 import type { NodeDetailLevel } from '@/store/canvas-lod-store';
 import { cn } from '@/lib/utils';
-
-export interface NodeSize {
-  width: number;
-  height: number;
-}
-
-/**
- * 记录每个节点在完整档位下的尺寸。低档位按同样尺寸渲染占位卡片，
- * 端口 Handle 位置也不变，切换档位时连线不会跳动。
- */
-const measuredNodeSizes = new Map<string, NodeSize>();
-
-export function rememberNodeSize(id: string, size: NodeSize): void {
-  if (size.width > 0 && size.height > 0) measuredNodeSizes.set(id, size);
-}
-
-export function getRememberedNodeSize(id: string): NodeSize | undefined {
-  return measuredNodeSizes.get(id);
-}
+import { getRememberedNodeSize, type NodeSize } from './nodeViewCache';
 
 const COMPACT_PARAMETER_LIMIT = 3;
 
@@ -110,9 +92,7 @@ interface ModuleShape {
  */
 function readModuleShape(id: string, type: string): ModuleShape {
   const snapshot = audioGraphRuntime.getModuleSnapshot(id);
-  const definition =
-    moduleDefinitionRegistry.get(type) ??
-    moduleDefinitionRegistry.resolve(type);
+  const definition = moduleDefinitionRegistry.resolve(type);
   return {
     inputPortTypes:
       snapshot?.inputPortTypes ?? definition?.inputPortTypes ?? {},
@@ -182,13 +162,14 @@ interface LowDetailNodeProps {
   id: string;
   data: FlowNodeData;
   level: Exclude<NodeDetailLevel, 'full'>;
+  selected: boolean;
 }
 
 /**
  * 缩小画布时使用的精简/极简卡片：只读、无运行时订阅，
  * 但保留与完整卡片相同的尺寸和端口 Handle，保证连线稳定。
  */
-const LowDetailNode = ({ id, data, level }: LowDetailNodeProps) => {
+const LowDetailNode = ({ id, data, level, selected }: LowDetailNodeProps) => {
   const shape = useMemo(() => readModuleShape(id, data.type), [id, data.type]);
   const metadata = getModuleMetadata(data.type);
   const size = getRememberedNodeSize(id) ?? estimateNodeSize(shape);
@@ -227,7 +208,9 @@ const LowDetailNode = ({ id, data, level }: LowDetailNodeProps) => {
       className={cn(
         'node-container node-drag-handle relative cursor-move rounded-md border shadow-sm',
         level === 'minimal' ? categoryStyle : 'bg-white',
-        !data.enabled && 'opacity-50'
+        !data.enabled && 'opacity-50',
+        // 全局样式去掉了 React Flow 的选中描边，低档位没有端口标签可提示，单独高亮
+        selected && 'ring-4 ring-sky-500 ring-offset-2'
       )}
     >
       {/* 内容层单独裁剪，避免把贴边的端口 Handle 一起裁掉 */}
