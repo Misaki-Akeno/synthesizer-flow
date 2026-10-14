@@ -20,18 +20,20 @@ import { createAgentToolRegistry } from '../tools/definitions';
 import { AgentSkillSession } from '../skills';
 import { createAIChatModel } from '@/lib/ai/modelFactory';
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
+import { anonymousCheckpointer, AnonymousSessionError } from '../anonymousCheckpointer';
 
 const logger = createModuleLogger('Agent');
 
 export interface AgentDependencies {
   createModel: typeof createAIChatModel;
-  createCheckpointer: () => BaseCheckpointSaver | Promise<BaseCheckpointSaver>;
+  createCheckpointer: (anonymous?: boolean) => BaseCheckpointSaver | Promise<BaseCheckpointSaver>;
   createExecutor: (initialState: GraphStateSnapshot) => ToolExecutor;
 }
 
 const DEFAULT_AGENT_DEPENDENCIES: AgentDependencies = {
   createModel: createAIChatModel,
-  createCheckpointer: async () => {
+  createCheckpointer: async (anonymous) => {
+    if (anonymous) return anonymousCheckpointer;
     const { DrizzleCheckpointer } = await import('../drizzleCheckpointer');
     return new DrizzleCheckpointer();
   },
@@ -220,7 +222,8 @@ export class Agent {
 
       // 先读取 checkpoint。审批恢复必须从服务端影子画布继续，而不能依赖
       // 早已失效的浏览器快照；普通新回合则以本轮浏览器快照为准。
-      const checkpointer = await this.dependencies.createCheckpointer();
+      const anonymous = checkpointThreadId?.startsWith('anon:') === true;
+      const checkpointer = await this.dependencies.createCheckpointer(anonymous);
       const config = {
         configurable: {
           model,
@@ -228,6 +231,7 @@ export class Agent {
         },
       };
       let executor = this.dependencies.createExecutor(initialState);
+      executor.setKnowledgeSearchAllowed(!anonymous);
       let skillSession = new AgentSkillSession();
       let pendingOperations: AgentExecutionContext['pendingOperations'] = [];
       let toolRegistry = createAgentToolRegistry(executor, skillSession);
@@ -238,6 +242,9 @@ export class Agent {
       }));
 
       const checkpointState = await graph.getState(config);
+      if (anonymous && action && !checkpointState.values.messages?.length) {
+        throw new AnonymousSessionError('匿名会话已过期，请重新发送请求');
+      }
       const restoredExecution = checkpointState.values.execution as
         | AgentExecutionContext
         | undefined;
@@ -246,6 +253,7 @@ export class Agent {
         executor = this.dependencies.createExecutor(
           restoredExecution.shadowState
         );
+        executor.setKnowledgeSearchAllowed(!anonymous);
         skillSession = new AgentSkillSession();
         skillSession.restore(restoredExecution.loadedSkillIds);
         pendingOperations = restoredExecution.pendingOperations;
@@ -330,7 +338,16 @@ export class Agent {
         return;
       } else {
         stream = graph.streamEvents(
-          { messages: inputs },
+          {
+            messages: inputs,
+            // 每一轮都先替换 execution；首个工具即触发 interruptBefore 时，
+            // checkpoint 也必须属于本轮画布，而不是上一轮工具节点的快照。
+            execution: {
+              shadowState: executor.getShadowState(),
+              pendingOperations: [],
+              loadedSkillIds: skillSession.getLoadedSkillIds(),
+            },
+          },
           { ...config, version: 'v2' }
         );
       }

@@ -105,6 +105,13 @@ describe('chatWithAgent', () => {
 
   describe('anonymous users', () => {
     const anonThreadId = '123e4567-e89b-42d3-a456-426614174000';
+    const settings: AISettings = {
+      providerId: 'openrouter',
+      modelName: 'qwen',
+      apiEndpoint: 'https://openrouter.ai/api/v1',
+      apiKey: 'sk-test',
+      hasServerApiKey: false,
+    };
 
     beforeEach(() => {
       mockAuth.mockResolvedValue(null);
@@ -117,15 +124,15 @@ describe('chatWithAgent', () => {
       expect(mockStreamMessage).toHaveBeenCalledWith(
         messages,
         expect.objectContaining({
-          providerId: 'custom',
+          providerId: 'openrouter',
           apiKey: 'sk-test',
-          apiEndpoint: 'https://example.com/v1',
+          apiEndpoint: 'https://openrouter.ai/api/v1',
           hasServerApiKey: false,
         }),
         graphState,
+        expect.any(String),
         undefined,
-        undefined,
-        undefined
+        expect.stringMatching(/^anon:/)
       );
     });
 
@@ -146,16 +153,23 @@ describe('chatWithAgent', () => {
       expect(resolved.apiEndpoint).not.toContain('169.254.169.254');
     });
 
-    it('rejects non-http custom endpoints', async () => {
+    it.each([
+      'https://example.com/v1',
+      'http://127.0.0.1/v1',
+      'http://169.254.169.254/',
+      'http://[::1]/v1',
+      'file:///etc/passwd',
+    ])('requires login for a custom endpoint: %s', async (apiEndpoint) => {
       await expect(
         collect(
           chatWithAgent(
             messages,
-            { ...settings, apiEndpoint: 'file:///etc/passwd' },
+            { ...settings, providerId: 'custom', apiEndpoint },
             graphState
           )
         )
-      ).rejects.toThrow(/http or https/);
+      ).rejects.toThrow(/请先登录/);
+      expect(mockStreamMessage).not.toHaveBeenCalled();
     });
 
     it('scopes checkpoints to an anon namespace with UUID thread ids', async () => {
@@ -178,6 +192,23 @@ describe('chatWithAgent', () => {
         collect(chatWithAgent(messages, settings, graphState, 'thread_abc'))
       ).rejects.toThrow('threadId has an invalid format');
     });
+  });
+
+  it.each(['approve', 'reject'] as const)(
+    'resumes %s with empty messages from the user-scoped checkpoint',
+    async (action) => {
+      await collect(chatWithAgent([], settings, graphState, 'thread-1', action));
+      expect(mockStreamMessage).toHaveBeenCalledWith(
+        [], settings, graphState, 'thread-1', action, 'user-1:thread-1'
+      );
+    }
+  );
+
+  it('still rejects empty messages for ordinary chat', async () => {
+    await expect(
+      collect(chatWithAgent([], settings, graphState, 'thread-1'))
+    ).rejects.toThrow(/non-empty array/);
+    expect(mockStreamMessage).not.toHaveBeenCalled();
   });
 
   it('rejects malformed messages before creating the agent', async () => {

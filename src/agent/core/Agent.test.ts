@@ -51,6 +51,59 @@ function createTestAgent(model: ReturnType<typeof createMockModel>) {
 }
 
 describe('Agent checkpoint execution context', () => {
+  it('uses this turn canvas when its first tool requires approval', async () => {
+    const model = createMockModel((messages) => {
+      const last = messages[messages.length - 1];
+      if (last._getType() === 'human' && latestHuman(messages) === 'delete new') {
+        return new AIMessage({ content: '', tool_calls: [
+          toolCall('delete-new', 'module_delete', { moduleId: 'new-node' }),
+        ] });
+      }
+      return new AIMessage('done');
+    });
+    const agent = createTestAgent(model);
+    await agent.sendMessage(
+      [{ id: 'first', role: 'user', content: 'hello' }], settings, emptyCanvas, 'fresh-turn'
+    );
+    const newCanvas: GraphStateSnapshot = {
+      nodes: [{ id: 'new-node', position: { x: 0, y: 0 },
+        data: { type: 'numberinput', parameters: { value: 42 } } }],
+      edges: [],
+    };
+    const pending = await agent.sendMessage(
+      [{ id: 'second', role: 'user', content: 'delete new' }],
+      settings, newCanvas, 'fresh-turn'
+    );
+    expect(pending.approvalRequired).toBe(true);
+    const approved = await agent.sendMessage(
+      [], settings, emptyCanvas, 'fresh-turn', 'approve'
+    );
+    expect(approved.clientOperations).toEqual([
+      expect.objectContaining({ type: 'DELETE_MODULE' }),
+    ]);
+  });
+
+  it('prevents anonymous knowledge tools from invoking the server embedding service', async () => {
+    const searchDocuments = vi.fn();
+    const model = createMockModel((messages) => {
+      if (messages[messages.length - 1]._getType() === 'human') {
+        return new AIMessage({ content: '', tool_calls: [
+          toolCall('knowledge', 'knowledge_search', { query: 'synthesis' }),
+        ] });
+      }
+      return new AIMessage('done');
+    });
+    const agent = Agent.create({
+      createModel: async () => model as never,
+      createCheckpointer: () => new MemorySaver(),
+      createExecutor: (state) => new ToolExecutor(state, { searchDocuments }),
+    });
+    await agent.sendMessage(
+      [{ role: 'user', content: 'search' }], settings, emptyCanvas,
+      'anonymous', undefined, 'anon:anonymous'
+    );
+    expect(searchDocuments).not.toHaveBeenCalled();
+  });
   it('keeps a three-turn history once when the client submits only stable new message IDs', async () => {
     const model = createMockModel(
       (messages) => new AIMessage(`reply:${latestHuman(messages)}`)

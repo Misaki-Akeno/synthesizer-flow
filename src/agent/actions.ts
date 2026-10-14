@@ -32,6 +32,9 @@ function toChatErrorEvent(error: unknown, apiKey?: string): ChatErrorEvent {
   if (error instanceof Error && error.name === 'AISettingsValidationError') {
     return { type: 'error', code: 'invalid_request', message: error.message };
   }
+  if (error instanceof Error && error.name === 'AnonymousSessionError') {
+    return { type: 'error', code: 'invalid_request', message: error.message };
+  }
 
   // 模型服务返回的 HTTP 错误（密钥无效、模型不存在、额度不足等）对用户有诊断价值。
   const status =
@@ -79,7 +82,7 @@ const ANONYMOUS_THREAD_ID_PATTERN =
 
 /**
  * 匿名请求的设置只信任提供商注册表：固定提供商忽略客户端传入的 endpoint，
- * 自定义提供商必须是 http(s) URL。
+ * 自定义提供商需要登录，避免匿名请求借服务端访问任意目标地址。
  */
 function resolveAnonymousSettings(settings: AISettings): AISettings {
   if (!isRecord(settings) || !isAIProviderId(settings.providerId)) {
@@ -87,19 +90,8 @@ function resolveAnonymousSettings(settings: AISettings): AISettings {
   }
 
   const provider = getAIProvider(settings.providerId);
-  let apiEndpoint = provider.apiEndpoint;
-
   if (provider.allowsCustomEndpoint) {
-    let url: URL;
-    try {
-      url = new URL(String(settings.apiEndpoint ?? '').trim());
-    } catch {
-      throw new ChatRequestError('apiEndpoint must be a valid URL');
-    }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-      throw new ChatRequestError('apiEndpoint must use http or https');
-    }
-    apiEndpoint = url.toString();
+    throw new ChatRequestError('请先登录后使用自定义 AI endpoint');
   }
 
   return {
@@ -108,7 +100,7 @@ function resolveAnonymousSettings(settings: AISettings): AISettings {
       typeof settings.modelName === 'string' && settings.modelName.trim()
         ? settings.modelName.trim()
         : provider.defaultModel,
-    apiEndpoint,
+    apiEndpoint: provider.apiEndpoint,
     apiKey: typeof settings.apiKey === 'string' ? settings.apiKey.trim() : '',
     hasServerApiKey: false,
   };
@@ -118,8 +110,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function assertChatMessages(value: unknown): asserts value is ChatMessage[] {
-  if (!Array.isArray(value) || value.length === 0) {
+function assertChatMessages(
+  value: unknown,
+  allowEmpty: boolean = false
+): asserts value is ChatMessage[] {
+  if (!Array.isArray(value) || (!allowEmpty && value.length === 0)) {
     throw new ChatRequestError('messages must be a non-empty array');
   }
 
@@ -363,7 +358,6 @@ async function* streamChat(
   const session = await auth();
   const userId = session?.user?.id;
 
-  assertChatMessages(messages);
   assertGraphStateSnapshot(initialState);
   assertOptionalNonEmptyString(threadId, 'threadId');
   if (action !== undefined && !VALID_ACTIONS.has(action)) {
@@ -372,6 +366,8 @@ async function* streamChat(
   if (action !== undefined && !threadId?.trim()) {
     throw new ChatRequestError('threadId is required for approval actions');
   }
+  // 审批从 checkpoint 恢复，不需要客户端再次发送聊天消息。
+  assertChatMessages(messages, action !== undefined);
 
   if (!userId && threadId && !ANONYMOUS_THREAD_ID_PATTERN.test(threadId)) {
     // 匿名会话的 threadId 就是唯一凭据，必须是不可猜测的 UUID。
@@ -389,16 +385,17 @@ async function* streamChat(
   // 客户端 threadId 只作为公开会话标识；数据库 key 必须绑定当前用户，
   // 防止仅凭另一个用户的 threadId 恢复或批准其 LangGraph 状态。
   // 匿名会话使用独立的 anon 命名空间，与任何用户 id 不会冲突（用户 id 经过编码且不含该前缀）。
-  const checkpointThreadId = threadId
+  const effectiveThreadId = threadId ?? (!userId ? crypto.randomUUID() : undefined);
+  const checkpointThreadId = effectiveThreadId
     ? userId
-      ? `${encodeURIComponent(userId)}:${threadId}`
-      : `anon:${threadId}`
+      ? `${encodeURIComponent(userId)}:${effectiveThreadId}`
+      : `anon:${effectiveThreadId}`
     : undefined;
   const generator = agent.streamMessage(
     messages,
     resolvedSettings,
     initialState,
-    threadId,
+    effectiveThreadId,
     action,
     checkpointThreadId
   );

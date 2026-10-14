@@ -680,7 +680,8 @@ export const useFlowStore = create<FlowState>((rawSet, get) => {
       });
       if (!changed) return;
       const committed = commitGraph(nodes, get().edges);
-      set({ nodes, edges: committed.edges });
+      // 自动化回放是已有文档的播放结果，不使等待中的 Agent 编辑失效。
+      set({ nodes, edges: committed.edges, revision: get().revision });
     },
 
     clearAutomationLane: (laneId) => {

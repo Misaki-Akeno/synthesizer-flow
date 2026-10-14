@@ -735,12 +735,16 @@ describe('canvas store history', () => {
     }));
     useFlowStore.getState().beginAutomationRecording();
 
+    const revisionBeforePlayback = useFlowStore.getState().revision;
     useFlowStore.getState().applyAutomationAtTick(50);
 
+    expect(useFlowStore.getState().revision).toBe(revisionBeforePlayback);
     expect(useFlowStore.getState().nodes[0].data.parameters.value).toBe(500);
     expect(moduleManager.getModule('number')?.getParameterValue('value')).toBe(
       500
     );
+    useFlowStore.getState().updateModuleParameter('number', 'value', 600);
+    expect(useFlowStore.getState().revision).toBeGreaterThan(revisionBeforePlayback);
   });
 
   it('persists Subpatch macros and restores grouping through history', () => {

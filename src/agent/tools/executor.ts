@@ -82,6 +82,11 @@ export class ToolExecutor {
   private edges: FlowEdge[];
   private operations: ClientOperation[] = [];
   private readonly searchDocuments: AgentKnowledgeSearch;
+  private knowledgeSearchAllowed = true;
+
+  public setKnowledgeSearchAllowed(allowed: boolean): void {
+    this.knowledgeSearchAllowed = allowed;
+  }
 
   constructor(
     initialState: GraphStateSnapshot,
@@ -879,6 +884,9 @@ export class ToolExecutor {
    * 直接调用 RAG Service 逻辑，避免 fetch 调用失败
    */
   public async ragSearch(query: string, topK?: unknown) {
+    if (!this.knowledgeSearchAllowed) {
+      return { success: false, error: '请先登录后检索知识库' };
+    }
     if (!query || typeof query !== 'string') {
       return { success: false, error: 'query is required' };
     }
