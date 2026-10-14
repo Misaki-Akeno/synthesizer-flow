@@ -91,6 +91,16 @@
     }
   },
   "Workbench": {
+    "saveStatus": {
+      "idle": "尚未保存",
+      "disabled": "自动保存已关闭",
+      "saving-local": "正在保存草稿…",
+      "saved-local": "本地已保存",
+      "syncing-cloud": "正在同步云端…",
+      "saved-cloud": "云端已同步",
+      "conflict": "云端版本冲突",
+      "error": "保存失败"
+    },
     "navigation": {
       "projects": "项目管理器",
       "modules": "模块浏览器",

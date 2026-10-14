@@ -18,6 +18,7 @@ import { usePersistStore } from '@/store/projects-store';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { isValidModuleConnection } from './connectionValidation';
 import { useShallow } from 'zustand/react/shallow';
+import { useCanvasAutosave } from './useCanvasAutosave';
 
 const nodeTypes = {
   default: DefaultNode,
@@ -58,6 +59,9 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
 
   const loadProject = usePersistStore((state) => state.loadProject);
   const currentProject = usePersistStore((state) => state.currentProject);
+  const hasHydratedProjects = usePersistStore(
+    (state) => state.hasHydratedProjects
+  );
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -70,8 +74,11 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
 
   const reactFlowInstance = useReactFlow();
 
+  useCanvasAutosave();
+
   // 在组件挂载时加载项目
   useEffect(() => {
+    if (!hasHydratedProjects) return;
     // 如果已经手动加载了项目，不再执行自动加载
     if (hasLoadedProject.current) return;
 
@@ -81,16 +88,8 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
 
       // 1. 如果 URL 指定了 ID
       if (projectId) {
-        // 关键检查：如果 URL 的 ID 和本地缓存的项目 ID 一致，
-        // 我们应该优先加载本地缓存！因为本地缓存可能包含未保存的修改。
-        // 如果直接从服务器加载(loadProject(projectId))，会覆盖本地修改。
-        if (cachedProject && cachedProject.id === projectId) {
-          hasLoadedProject.current = true;
-          await loadProject(cachedProject);
-          return;
-        }
-
-        // 如果 ID 不匹配，说明要切换项目，从服务器/列表加载
+        // loadProject 仅在存在本地草稿时优先使用它；干净缓存需要重新拉取
+        // 云端详情，避免旧 IndexedDB 缓存永久覆盖远端版本。
         hasLoadedProject.current = true;
         await loadProject(projectId);
         return;
@@ -99,7 +98,6 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
       // 2. 如果没有 URL 参数，尝试恢复本地缓存
       if (cachedProject) {
         hasLoadedProject.current = true;
-        if (onAutoLoad) onAutoLoad();
         await loadProject(cachedProject);
         return;
       }
@@ -111,7 +109,7 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
 
     loadInitialProject();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [hasHydratedProjects, loadProject, onAutoLoad, projectId]);
 
   useEffect(() => {
     if (!currentProject) return;
@@ -127,6 +125,10 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
     const locale = pathname.split('/')[1] || 'zh-CN';
     const params = new URLSearchParams(searchParams);
     params.delete('project');
+    if (currentProject.isLocalDraft) {
+      router.replace(`/${locale}?${params.toString()}`, { scroll: false });
+      return;
+    }
     const newPathname = `/${locale}/${currentProject.id}`;
 
     router.replace(`${newPathname}?${params.toString()}`, { scroll: false });

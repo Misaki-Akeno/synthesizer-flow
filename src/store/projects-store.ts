@@ -16,7 +16,10 @@ import {
   getBuiltInPresets,
 } from '@/actions/project.actions';
 import { nanoid } from 'nanoid';
-import { getIndexedDbStorage } from './persist-storage';
+import {
+  getIndexedDbStorage,
+  hasPersistentBrowserStorage,
+} from './persist-storage';
 
 // 创建项目管理器专用日志记录器
 const logger = createModuleLogger('ProjectManager');
@@ -35,7 +38,18 @@ export interface ProjectConfig {
   schemaVersion?: number; // 服务端项目数据结构版本
   revision?: number; // 服务端乐观并发版本
   isBuiltIn?: boolean; // 标记是否为内置预设
+  /** 尚未保存到云端的本地草稿。 */
+  isLocalDraft?: boolean;
 }
+
+export type ProjectSyncStatus =
+  | 'idle'
+  | 'saving-local'
+  | 'saved-local'
+  | 'syncing-cloud'
+  | 'saved-cloud'
+  | 'conflict'
+  | 'error';
 
 export interface FetchProjectsOptions {
   force?: boolean;
@@ -56,6 +70,8 @@ export interface ProjectPersistState {
 
   // 当前加载的项目 (包含完整数据)
   currentProject: ProjectConfig | null;
+  /** 已编辑但尚未成功同步的画布，按项目保存以避免切换项目时丢失。 */
+  localDrafts: Record<string, ProjectConfig>;
 
   // 状态标志
   isLoading: boolean;
@@ -63,6 +79,9 @@ export interface ProjectPersistState {
   hasHydratedProjects: boolean;
   projectsLastFetchedAt: string | null;
   projectListError: ProjectListErrorCode | null;
+  syncStatus: ProjectSyncStatus;
+  syncError: string | null;
+  lastAutosavedAt: string | null;
 
   // 动作
   fetchProjects: (options?: FetchProjectsOptions) => Promise<void>;
@@ -76,10 +95,12 @@ export interface ProjectPersistState {
 
   // 项目管理方法
   saveCurrentCanvas: (name: string, description?: string) => Promise<boolean>;
+  saveLocalDraft: (canvasData?: string) => Promise<boolean>;
+  syncCurrentProjectDraft: (projectId?: string) => Promise<boolean>;
   saveAsPreset: (name: string, description?: string) => Promise<boolean>;
   loadProject: (projectOrId: ProjectConfig | string) => Promise<boolean>;
   deleteProject: (projectId: string) => Promise<boolean>;
-  exportProjectToFile: (projectIdOrName: string) => void;
+  exportProjectToFile: (projectId: string) => Promise<boolean>;
   importProjectFromJson: (jsonData: string) => Promise<boolean>;
 }
 
@@ -105,9 +126,72 @@ function isLocalImportedProject(project: ProjectConfig): boolean {
   return project.id.startsWith('imported_');
 }
 
+function isLocalOnlyProject(project: ProjectConfig): boolean {
+  return Boolean(project.isLocalDraft) || isLocalImportedProject(project);
+}
+
+function isProjectConflict(error: string | null | undefined): boolean {
+  return Boolean(error?.toLowerCase().includes('modified elsewhere'));
+}
+
+function makeLocalDraftProject(canvasData: string): ProjectConfig {
+  const now = new Date().toISOString();
+  return {
+    id: `draft_${nanoid(8)}`,
+    name: '未命名草稿',
+    created: now,
+    lastModified: now,
+    data: canvasData,
+    isBuiltIn: false,
+    isLocalDraft: true,
+  };
+}
+
 const PROJECT_LIST_CACHE_TTL_MS = 60_000;
+const PROJECT_PERSISTENCE_NAME = 'synthesizerflow-projects';
 const PROJECT_DATABASE_MIGRATION_REQUIRED =
   'PROJECT_DATABASE_MIGRATION_REQUIRED';
+const projectSyncLocks = new Map<string, Promise<void>>();
+let projectLoadGeneration = 0;
+let projectCacheWriteQueue: Promise<void> = Promise.resolve();
+
+async function persistProjectCacheSnapshot(
+  state: ProjectPersistState
+): Promise<void> {
+  if (
+    typeof window !== 'undefined' &&
+    !hasPersistentBrowserStorage(() => window.localStorage)
+  ) {
+    throw new Error('项目本地存储不可用');
+  }
+  const storage = useProjectStore.persist.getOptions().storage;
+  if (!storage) {
+    throw new Error('项目本地存储不可用');
+  }
+  const value = {
+    state: {
+      currentProject: state.currentProject,
+      localDrafts: state.localDrafts,
+      userProjects: state.userProjects,
+      builtInProjects: state.builtInProjects.map((project) => ({
+        ...project,
+        data: undefined,
+      })),
+      projectsLastFetchedAt: state.projectsLastFetchedAt,
+    },
+    version: 4,
+  };
+  // IndexedDB writes are asynchronous. Serialize snapshots so an older project
+  // cannot finish after a newer project switch and overwrite the recoverable cache.
+  const write = projectCacheWriteQueue
+    .catch(() => undefined)
+    .then(() => storage.setItem(PROJECT_PERSISTENCE_NAME, value));
+  projectCacheWriteQueue = write.then(
+    () => undefined,
+    () => undefined
+  );
+  await write;
+}
 
 function resolveProjectListError(
   userError: string | null,
@@ -142,14 +226,170 @@ export const useProjectStore = create<ProjectPersistState>()(
       // 初始时使用本地硬编码预设作为 fallback，fetchProjects 后会被覆盖
       builtInProjects: [],
       currentProject: null,
+      localDrafts: {},
       isLoading: false,
       isProjectListLoading: false,
       hasHydratedProjects: false,
       projectsLastFetchedAt: null,
       projectListError: null,
+      syncStatus: 'idle',
+      syncError: null,
+      lastAutosavedAt: null,
 
       markProjectsHydrated: () => {
         set({ hasHydratedProjects: true });
+      },
+
+      saveLocalDraft: async (canvasData) => {
+        const data = canvasData ?? useFlowStore.getState().exportCanvasToJson();
+        const currentProject = get().currentProject;
+        const now = new Date().toISOString();
+        const draft = currentProject
+          ? {
+              ...currentProject,
+              data,
+              lastModified: now,
+            }
+          : makeLocalDraftProject(data);
+
+        set((state) => ({
+          currentProject: draft,
+          localDrafts: {
+            ...state.localDrafts,
+            [draft.id]: draft,
+          },
+          syncStatus: 'saving-local',
+          syncError: null,
+          lastAutosavedAt: state.lastAutosavedAt,
+        }));
+        if (useFlowStore.getState().currentProjectId !== draft.id) {
+          useFlowStore.getState().setCurrentProjectId(draft.id);
+        }
+        try {
+          await persistProjectCacheSnapshot(get());
+          set({
+            syncStatus: 'saved-local',
+            syncError: null,
+            lastAutosavedAt: now,
+          });
+          return true;
+        } catch (error) {
+          logger.error('本地草稿保存失败', error);
+          set({
+            syncStatus: 'error',
+            syncError: '无法写入本地草稿；请释放存储空间后重试。',
+          });
+          return false;
+        }
+      },
+
+      syncCurrentProjectDraft: async (projectId) => {
+        const currentProject = projectId
+          ? (get().localDrafts[projectId] ??
+            (get().currentProject?.id === projectId
+              ? get().currentProject
+              : null))
+          : get().currentProject;
+        if (
+          !currentProject ||
+          currentProject.isBuiltIn ||
+          isLocalOnlyProject(currentProject)
+        ) {
+          return true;
+        }
+
+        const draft = get().localDrafts[currentProject.id];
+        const canvasData = draft?.data ?? currentProject.data;
+        if (!canvasData) {
+          return true;
+        }
+
+        const pendingSync = projectSyncLocks.get(currentProject.id);
+        if (pendingSync) {
+          // 同一个项目的自动保存必须按 revision 串行。前一个请求完成后重新
+          // 读取草稿，确保不会把编辑期间产生的新内容用旧 revision 覆盖。
+          await pendingSync;
+          return get().syncCurrentProjectDraft();
+        }
+
+        let releaseSync!: () => void;
+        const syncLock = new Promise<void>((resolve) => {
+          releaseSync = resolve;
+        });
+        projectSyncLocks.set(currentProject.id, syncLock);
+
+        try {
+          let dataToSave: unknown;
+          try {
+            dataToSave = JSON.parse(canvasData);
+          } catch (error) {
+            logger.error('本地草稿无法解析，未同步到云端', error);
+            set({
+              syncStatus: 'error',
+              syncError: '本地草稿数据无效，已保留在本机。',
+            });
+            return false;
+          }
+
+          set({ syncStatus: 'syncing-cloud', syncError: null });
+          const result = await saveProject(currentProject.name, dataToSave, {
+            projectId: currentProject.id,
+            description: currentProject.description,
+            expectedRevision: currentProject.revision,
+            metadata: currentProject.metadata,
+          });
+
+          if (!result.success || !result.projectId) {
+            const error = result.error ?? '云端同步失败';
+            set({
+              syncStatus: isProjectConflict(error) ? 'conflict' : 'error',
+              syncError: isProjectConflict(error)
+                ? '云端版本已更新；本地草稿已保留，请重新加载后手动合并。'
+                : `${error}；本地草稿已保留。`,
+            });
+            return false;
+          }
+
+          const now = new Date().toISOString();
+          set((state) => {
+            const nextDrafts = { ...state.localDrafts };
+            const hasNewerLocalDraft =
+              nextDrafts[currentProject.id]?.data !== canvasData;
+            if (!hasNewerLocalDraft) {
+              delete nextDrafts[currentProject.id];
+            }
+            const activeProject =
+              state.currentProject?.id === currentProject.id
+                ? {
+                    ...state.currentProject,
+                    data: hasNewerLocalDraft
+                      ? state.currentProject.data
+                      : canvasData,
+                    lastModified: now,
+                    revision: result.revision,
+                  }
+                : state.currentProject;
+
+            return {
+              currentProject: activeProject,
+              localDrafts: nextDrafts,
+              syncStatus: hasNewerLocalDraft ? 'saved-local' : 'saved-cloud',
+              syncError: null,
+              lastAutosavedAt: now,
+            };
+          });
+          return true;
+        } catch (error) {
+          logger.error('自动同步项目失败', error);
+          set({
+            syncStatus: 'error',
+            syncError: '云端同步失败；本地草稿已保留。',
+          });
+          return false;
+        } finally {
+          projectSyncLocks.delete(currentProject.id);
+          releaseSync();
+        }
       },
 
       fetchProjects: async (options = {}) => {
@@ -200,6 +440,18 @@ export const useProjectStore = create<ProjectPersistState>()(
             }));
             set({ userProjects: mappedProjects });
           } else {
+            if (userRes.error === 'Unauthorized') {
+              // 持久化缓存不带用户作用域。退出登录后绝不能继续展示上个账号的项目。
+              set((state) => ({
+                userProjects: [],
+                currentProject:
+                  state.currentProject &&
+                  !state.currentProject.isBuiltIn &&
+                  !isLocalOnlyProject(state.currentProject)
+                    ? null
+                    : state.currentProject,
+              }));
+            }
             // 仅当非授权错误时才记录错误，避免未登录时的噪音
             if (userRes.error !== 'Unauthorized') {
               logger.error('获取用户项目列表失败', userRes.error);
@@ -275,7 +527,11 @@ export const useProjectStore = create<ProjectPersistState>()(
       saveCurrentCanvas: async (name: string, description?: string) => {
         try {
           logger.info(`保存项目: "${name}"`);
-          set({ isLoading: true });
+          set({
+            isLoading: true,
+            syncStatus: 'syncing-cloud',
+            syncError: null,
+          });
 
           // 获取当前画布的JSON
           const canvasData = useFlowStore.getState().exportCanvasToJson();
@@ -290,6 +546,11 @@ export const useProjectStore = create<ProjectPersistState>()(
           }
 
           const { currentProject } = get();
+          // 手动保存也先落到 IndexedDB；网络错误或并发冲突不应丢失当前编辑。
+          if (!(await get().saveLocalDraft(canvasData))) {
+            return false;
+          }
+          const projectIdAtSaveStart = get().currentProject?.id;
           // 当前非预设项目始终按 ID 更新；改名不应隐式创建副本。
           let projectIdToUpdate: string | undefined = undefined;
 
@@ -334,16 +595,52 @@ export const useProjectStore = create<ProjectPersistState>()(
               isBuiltIn: false,
             };
 
-            set({ currentProject: newProjectConfig });
+            // 异步保存期间用户可能已切换项目；不要把旧请求的结果重新
+            // 设为当前画布，但仍保留已成功写入云端的结果。
+            if (get().currentProject?.id !== projectIdAtSaveStart) {
+              set((state) => {
+                const localDrafts = { ...state.localDrafts };
+                if (currentProject) {
+                  delete localDrafts[currentProject.id];
+                }
+                return { localDrafts };
+              });
+              return true;
+            }
+
+            set((state) => {
+              const nextDrafts = { ...state.localDrafts };
+              if (currentProject) {
+                delete nextDrafts[currentProject.id];
+              }
+              delete nextDrafts[result.projectId!];
+              return {
+                currentProject: newProjectConfig,
+                localDrafts: nextDrafts,
+                syncStatus: 'saved-cloud',
+                syncError: null,
+                lastAutosavedAt: now,
+              };
+            });
             useFlowStore.getState().setCurrentProjectId(result.projectId);
             logger.success(`项目"${name}"保存成功`);
             return true;
           } else {
             logger.error('保存失败', result.error);
+            set({
+              syncStatus: isProjectConflict(result.error)
+                ? 'conflict'
+                : 'error',
+              syncError: result.error ?? '保存失败；本地草稿已保留。',
+            });
             return false;
           }
         } catch (error) {
           logger.error('保存画布失败', error);
+          set({
+            syncStatus: 'error',
+            syncError: '保存失败；本地草稿已保留。',
+          });
           return false;
         } finally {
           set({ isLoading: false });
@@ -389,6 +686,19 @@ export const useProjectStore = create<ProjectPersistState>()(
 
       loadProject: async (projectOrId: ProjectConfig | string) => {
         try {
+          const loadGeneration = ++projectLoadGeneration;
+          const activeProject = get().currentProject;
+          // 切换项目前先把正在编辑的画布写入本地草稿。水合出的缓存尚未
+          // 导入画布时 currentProjectId 为空，不能用空画布覆盖它。
+          if (
+            activeProject &&
+            useFlowStore.getState().currentProjectId === activeProject.id
+          ) {
+            if (!(await get().saveLocalDraft())) {
+              return false;
+            }
+          }
+
           let projectConfig: ProjectConfig | null = null;
 
           if (typeof projectOrId === 'string') {
@@ -422,6 +732,13 @@ export const useProjectStore = create<ProjectPersistState>()(
             }
           } else {
             projectConfig = projectOrId;
+          }
+
+          const requestedProjectId =
+            typeof projectOrId === 'string' ? projectOrId : projectOrId.id;
+          const localDraft = get().localDrafts[requestedProjectId];
+          if (localDraft) {
+            projectConfig = localDraft;
           }
 
           if (!projectConfig) {
@@ -465,6 +782,10 @@ export const useProjectStore = create<ProjectPersistState>()(
             }
           }
 
+          if (loadGeneration !== projectLoadGeneration) {
+            return false;
+          }
+
           if (!fullData) {
             logger.error('项目数据为空');
             set({ isLoading: false });
@@ -488,12 +809,14 @@ export const useProjectStore = create<ProjectPersistState>()(
             .getState()
             .importCanvasFromJson(jsonData, projectConfig.id);
 
-          if (success) {
+          if (success && loadGeneration === projectLoadGeneration) {
             set({
               currentProject: {
                 ...projectConfig,
                 data: jsonData, // 更新为完整数据
               },
+              syncStatus: localDraft ? 'saved-local' : 'idle',
+              syncError: null,
             });
             logger.success(`项目"${projectConfig.name}"加载成功`);
           } else {
@@ -527,7 +850,11 @@ export const useProjectStore = create<ProjectPersistState>()(
 
             const { currentProject } = get();
             if (currentProject?.id === projectId) {
-              set({ currentProject: null });
+              set((state) => {
+                const localDrafts = { ...state.localDrafts };
+                delete localDrafts[projectId];
+                return { currentProject: null, localDrafts };
+              });
               useFlowStore.getState().setCurrentProjectId('');
             }
             logger.success('项目删除成功');
@@ -544,29 +871,42 @@ export const useProjectStore = create<ProjectPersistState>()(
         }
       },
 
-      exportProjectToFile: (projectIdOrName: string) => {
-        // 支持根据 ID 或 Name 查找
+      exportProjectToFile: async (projectId: string) => {
         const { userProjects, builtInProjects, currentProject } = get();
-        const allProject = [...builtInProjects, ...userProjects];
-        if (currentProject) allProject.push(currentProject);
-
-        // 优先匹配 ID，其次匹配 Name
         const project =
-          allProject.find((p) => p.id === projectIdOrName) ||
-          allProject.find((p) => p.name === projectIdOrName);
+          (currentProject?.id === projectId ? currentProject : undefined) ??
+          [...builtInProjects, ...userProjects].find(
+            (candidate) => candidate.id === projectId
+          );
 
         if (!project) {
-          logger.error(`找不到要导出的项目: "${projectIdOrName}"`);
-          return;
+          logger.error(`找不到要导出的项目: "${projectId}"`);
+          return false;
         }
 
-        if (!project.data) {
-          logger.warn('项目数据未加载，请先加载项目后再导出');
-          return;
+        let data = project.data;
+        // 当前画布是唯一可信的实时副本；列表项只有元数据，需要取得详情。
+        if (currentProject?.id === project.id) {
+          data = useFlowStore.getState().exportCanvasToJson();
+        } else if (!data) {
+          const result = await getProjectById(project.id);
+          if (!result.success || !result.data) {
+            logger.error('导出项目详情失败', result.error);
+            return false;
+          }
+          data = JSON.stringify(result.data.data);
         }
 
         try {
-          const jsonData = jsonUtils.restoreUrlSafeJson(project.data);
+          const jsonData = jsonUtils.restoreUrlSafeJson(data);
+          const parsed = validateAndParseJson(
+            jsonData,
+            validateSerializedCanvas
+          );
+          if (!parsed.success) {
+            logger.error('导出项目数据验证失败', parsed.error);
+            return false;
+          }
           const dataBlob = new Blob([jsonData], { type: 'application/json' });
           const url = URL.createObjectURL(dataBlob);
           const filename = `synthesizerflow_${project.name}_${new Date().toISOString().slice(0, 10)}.json`;
@@ -577,8 +917,10 @@ export const useProjectStore = create<ProjectPersistState>()(
           link.click();
           URL.revokeObjectURL(url);
           logger.success(`项目导出成功: ${filename}`);
+          return true;
         } catch (error) {
           logger.error(`项目导出失败`, error);
+          return false;
         }
       },
 
@@ -601,13 +943,23 @@ export const useProjectStore = create<ProjectPersistState>()(
             lastModified: now,
             data: jsonData,
             isBuiltIn: false,
+            isLocalDraft: true,
           };
 
           const success = useFlowStore
             .getState()
             .importCanvasFromJson(jsonData, importedProject.id);
           if (success) {
-            set({ currentProject: importedProject });
+            set((state) => ({
+              currentProject: importedProject,
+              localDrafts: {
+                ...state.localDrafts,
+                [importedProject.id]: importedProject,
+              },
+              syncStatus: 'saved-local',
+              syncError: null,
+              lastAutosavedAt: now,
+            }));
             logger.success('项目导入成功，在保存前仅存在于本地');
             return true;
           }
@@ -623,6 +975,7 @@ export const useProjectStore = create<ProjectPersistState>()(
       // 持久化项目列表和当前项目，实现“本地缓存”
       partialize: (state) => ({
         currentProject: state.currentProject,
+        localDrafts: state.localDrafts,
         userProjects: state.userProjects,
         builtInProjects: state.builtInProjects.map((project) => ({
           ...project,
@@ -630,7 +983,7 @@ export const useProjectStore = create<ProjectPersistState>()(
         })),
         projectsLastFetchedAt: state.projectsLastFetchedAt,
       }),
-      version: 3,
+      version: 4,
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== 'object') {
           return persistedState as ProjectPersistState;
@@ -639,6 +992,7 @@ export const useProjectStore = create<ProjectPersistState>()(
         const state = persistedState as Partial<ProjectPersistState>;
         return {
           ...state,
+          localDrafts: state.localDrafts ?? {},
           builtInProjects: (state.builtInProjects ?? []).map((project) => ({
             ...project,
             data: undefined,

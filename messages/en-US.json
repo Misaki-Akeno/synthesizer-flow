@@ -91,6 +91,16 @@
     }
   },
   "Workbench": {
+    "saveStatus": {
+      "idle": "Not saved",
+      "disabled": "Autosave off",
+      "saving-local": "Saving draft…",
+      "saved-local": "Saved locally",
+      "syncing-cloud": "Syncing…",
+      "saved-cloud": "Synced to cloud",
+      "conflict": "Cloud version conflict",
+      "error": "Save failed"
+    },
     "navigation": {
       "projects": "Project Manager",
       "modules": "Module Browser",

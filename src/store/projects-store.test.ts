@@ -5,6 +5,7 @@ import { useFlowStore } from './canvas-store';
 import { useProjectStore } from './projects-store';
 import {
   getBuiltInPresets,
+  getProjectById,
   getUserProjects,
   saveProject,
 } from '@/actions/project.actions';
@@ -28,6 +29,7 @@ const memoryStorage = {
 };
 
 const mockGetBuiltInPresets = vi.mocked(getBuiltInPresets);
+const mockGetProjectById = vi.mocked(getProjectById);
 const mockGetUserProjects = vi.mocked(getUserProjects);
 const mockSaveProject = vi.mocked(saveProject);
 
@@ -52,11 +54,15 @@ function resetStores(): void {
     userProjects: [],
     builtInProjects: [],
     currentProject: null,
+    localDrafts: {},
     isLoading: false,
     isProjectListLoading: false,
     hasHydratedProjects: true,
     projectsLastFetchedAt: null,
     projectListError: null,
+    syncStatus: 'idle',
+    syncError: null,
+    lastAutosavedAt: null,
   });
 }
 
@@ -70,6 +76,7 @@ describe('project store', () => {
       projectId: 'saved-1',
       revision: 1,
     });
+    mockGetProjectById.mockResolvedValue({ success: false, error: 'missing' });
     resetStores();
   });
 
@@ -237,5 +244,60 @@ describe('project store', () => {
         created,
       })
     );
+  });
+
+  it('keeps a local draft for an unnamed canvas and round-trips its JSON', async () => {
+    const canvas = useFlowStore.getState().exportCanvasToJson();
+
+    await expect(
+      useProjectStore.getState().saveLocalDraft(canvas)
+    ).resolves.toBe(true);
+
+    const project = useProjectStore.getState().currentProject;
+    expect(project).toEqual(
+      expect.objectContaining({
+        id: expect.stringMatching(/^draft_/),
+        isLocalDraft: true,
+        data: canvas,
+      })
+    );
+    expect(useProjectStore.getState().localDrafts[project!.id]?.data).toBe(
+      canvas
+    );
+  });
+
+  it('exports a list entry by id after fetching its full JSON', async () => {
+    const canvas = useFlowStore.getState().exportCanvasToJson();
+    useProjectStore.setState({
+      userProjects: [
+        {
+          id: 'remote-1',
+          name: 'Remote project',
+          created: '2026-01-01T00:00:00.000Z',
+          lastModified: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    mockGetProjectById.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'remote-1',
+        data: JSON.parse(canvas),
+      },
+    } as Awaited<ReturnType<typeof getProjectById>>);
+    const createObjectURL = vi.fn(() => 'blob:project');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+    const click = vi.fn();
+    vi.spyOn(document, 'createElement').mockReturnValue({
+      click,
+    } as unknown as HTMLAnchorElement);
+
+    await expect(
+      useProjectStore.getState().exportProjectToFile('remote-1')
+    ).resolves.toBe(true);
+
+    expect(mockGetProjectById).toHaveBeenCalledWith('remote-1');
+    expect(click).toHaveBeenCalledOnce();
   });
 });
