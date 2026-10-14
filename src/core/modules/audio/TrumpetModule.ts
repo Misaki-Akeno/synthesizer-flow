@@ -388,18 +388,26 @@ export class TrumpetModule extends AudioModuleBase {
 
   private handleMidiFrame(frame: MidiFrame): void {
     if (!this.monoSynth) return;
+    const scheduledTime =
+      typeof frame.scheduledTime === 'number' && Number.isFinite(frame.scheduledTime)
+        ? frame.scheduledTime
+        : undefined;
 
     const targetNote = frame.activeNotes[frame.activeNotes.length - 1];
     if (!targetNote) {
-      this.releaseAllNotes();
+      this.releaseAllNotes(scheduledTime);
       return;
     }
 
-    this.triggerMidiAttack(targetNote);
+    this.triggerMidiAttack(targetNote, scheduledTime);
   }
 
-  private triggerMidiAttack(activeNote: MidiActiveNote): void {
-    this.triggerAttack(activeNote.midi + activeNote.pitchBend * 48, activeNote.velocity);
+  private triggerMidiAttack(activeNote: MidiActiveNote, scheduledTime?: number): void {
+    this.triggerAttack(
+      activeNote.midi + activeNote.pitchBend * 48,
+      activeNote.velocity,
+      scheduledTime
+    );
 
     if (this.expressionGain) {
       this.applyParameterRamp(
@@ -419,30 +427,30 @@ export class TrumpetModule extends AudioModuleBase {
     }
   }
 
-  private triggerAttack(note: number, velocity: number): void {
+  private triggerAttack(note: number, velocity: number, scheduledTime?: number): void {
     if (!this.monoSynth) return;
 
     const frequency = midiToFrequency(note);
 
     if (this.currentNote === note) {
       if (Math.abs(this.currentVelocity - velocity) > 0.02) {
-        this.monoSynth.envelope.triggerAttack(undefined, velocity);
+        this.monoSynth.envelope.triggerAttack(scheduledTime, velocity);
       }
       this.currentVelocity = velocity;
       return;
     }
 
     if (this.currentNote === null) {
-      this.monoSynth.triggerAttack(frequency, undefined, velocity);
+      this.monoSynth.triggerAttack(frequency, scheduledTime, velocity);
     } else {
-      const now = this.Tone.now();
+      const time = scheduledTime ?? this.Tone.now();
       const portamentoTime = Math.max(this.monoSynth.portamento ?? 0, 0);
-      if (portamentoTime > 0) {
+      if (portamentoTime > 0 && scheduledTime === undefined) {
         this.monoSynth.frequency.rampTo(frequency, portamentoTime);
       } else {
-        this.monoSynth.frequency.setValueAtTime(frequency, now);
+        this.monoSynth.frequency.setValueAtTime(frequency, time);
       }
-      this.monoSynth.envelope.triggerAttack(now, velocity);
+      this.monoSynth.envelope.triggerAttack(time, velocity);
     }
 
     this.currentNote = note;
@@ -459,10 +467,10 @@ export class TrumpetModule extends AudioModuleBase {
     }
   }
 
-  private releaseAllNotes(): void {
+  private releaseAllNotes(scheduledTime?: number): void {
     if (!this.monoSynth) return;
 
-    this.monoSynth.triggerRelease(this.Tone.now());
+    this.monoSynth.triggerRelease(scheduledTime ?? this.Tone.now());
     this.currentNote = null;
     this.currentVelocity = 0.8;
   }
@@ -484,5 +492,46 @@ export class TrumpetModule extends AudioModuleBase {
     const min = 450;
     const max = 4200;
     return min + (max - min) * clamp(amount, 0, 1);
+  }
+
+  protected cleanupFailedAudioInitialization(): void {
+    this.disposeAudioNodes([
+      this.monoSynth,
+      this.vibrato,
+      this.toneShaper,
+      this.brightnessFilter,
+      this.expressionGain,
+      this.outputGain,
+      this.dynamicsCompressor,
+    ]);
+    this.monoSynth = null;
+    this.vibrato = null;
+    this.toneShaper = null;
+    this.brightnessFilter = null;
+    this.expressionGain = null;
+    this.outputGain = null;
+    this.dynamicsCompressor = null;
+    super.cleanupFailedAudioInitialization();
+  }
+
+  public dispose(): void {
+    this.releaseAllNotes();
+    this.disposeAudioNodes([
+      this.monoSynth,
+      this.vibrato,
+      this.toneShaper,
+      this.brightnessFilter,
+      this.expressionGain,
+      this.outputGain,
+      this.dynamicsCompressor,
+    ]);
+    this.monoSynth = null;
+    this.vibrato = null;
+    this.toneShaper = null;
+    this.brightnessFilter = null;
+    this.expressionGain = null;
+    this.outputGain = null;
+    this.dynamicsCompressor = null;
+    super.dispose();
   }
 }

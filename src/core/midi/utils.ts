@@ -13,6 +13,32 @@ const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 
 
 let frameSerial = 0;
 let generatedNoteId = 0;
+const LEGACY_SCHEDULED_TIME = Symbol('synthesizerflow-midi-scheduled-time');
+
+type ScheduledLegacyArray = unknown[] & {
+  [LEGACY_SCHEDULED_TIME]?: number;
+};
+
+/** Carries an audio-clock timestamp without changing legacy array contents or JSON shape. */
+export function getLegacyMidiScheduledTime(value: unknown): number | undefined {
+  const time = Array.isArray(value)
+    ? (value as ScheduledLegacyArray)[LEGACY_SCHEDULED_TIME]
+    : undefined;
+  return typeof time === 'number' && Number.isFinite(time) ? time : undefined;
+}
+
+export function setLegacyMidiScheduledTime<T extends unknown[]>(
+  values: T,
+  scheduledTime?: number
+): T {
+  if (typeof scheduledTime === 'number' && Number.isFinite(scheduledTime)) {
+    Object.defineProperty(values, LEGACY_SCHEDULED_TIME, {
+      configurable: true,
+      value: scheduledTime,
+    });
+  }
+  return values;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -41,12 +67,16 @@ export function createMidiNoteId(prefix = 'note'): string {
 
 export function createMidiFrame(
   activeNotes: MidiActiveNote[] = [],
-  events: MidiEvent[] = []
+  events: MidiEvent[] = [],
+  scheduledTime?: number
 ): MidiFrame {
   frameSerial += 1;
   return {
     type: 'midi-frame',
     serial: frameSerial,
+    ...(typeof scheduledTime === 'number' && Number.isFinite(scheduledTime)
+      ? { scheduledTime }
+      : {}),
     activeNotes: activeNotes.map(normalizeActiveNote),
     events: events.map(normalizeMidiEvent).filter((event): event is MidiEvent => Boolean(event)),
   };
@@ -57,6 +87,8 @@ export function isMidiFrame(value: unknown): value is MidiFrame {
     isRecord(value) &&
     value.type === 'midi-frame' &&
     typeof value.serial === 'number' &&
+    (value.scheduledTime === undefined ||
+      (typeof value.scheduledTime === 'number' && Number.isFinite(value.scheduledTime))) &&
     Array.isArray(value.activeNotes) &&
     Array.isArray(value.events)
   );
@@ -67,8 +99,14 @@ export function midiFrameToLegacyArrays(frame: MidiFrame): {
   velocities: number[];
 } {
   return {
-    notes: frame.activeNotes.map((note) => note.midi),
-    velocities: frame.activeNotes.map((note) => note.velocity),
+    notes: setLegacyMidiScheduledTime(
+      frame.activeNotes.map((note) => note.midi),
+      frame.scheduledTime
+    ),
+    velocities: setLegacyMidiScheduledTime(
+      frame.activeNotes.map((note) => note.velocity),
+      frame.scheduledTime
+    ),
   };
 }
 
@@ -96,7 +134,11 @@ export function legacyArraysToMidiFrame(
     });
   });
 
-  return createMidiFrame(activeNotes, []);
+  return createMidiFrame(
+    activeNotes,
+    [],
+    getLegacyMidiScheduledTime(notes) ?? getLegacyMidiScheduledTime(velocities)
+  );
 }
 
 export function noteNameToMidi(noteName: string): number | null {

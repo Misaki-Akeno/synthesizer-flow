@@ -281,6 +281,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         `[${this.moduleType}Module ${this.id}] 音频初始化失败:`,
         error
       );
+      throw error;
     }
   }
 
@@ -554,12 +555,13 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    */
   private handleMidiFrame(frame: MidiFrame): void {
     if (!this.mixer || !this.isEnabled()) return;
+    const scheduledTime = this.getScheduledTime(frame);
 
     const activeNoteIds = new Set(frame.activeNotes.map((note) => note.id));
 
     this.voices.forEach((voice, noteId) => {
       if (!activeNoteIds.has(noteId) && voice.active) {
-        this.releaseVoice(noteId);
+        this.releaseVoice(noteId, scheduledTime);
       }
     });
 
@@ -567,9 +569,9 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
       const existingVoice = this.voices.get(note.id);
 
       if (existingVoice && existingVoice.active) {
-        this.updateVoiceExpression(note);
+        this.updateVoiceExpression(note, scheduledTime);
       } else {
-        this.triggerVoice(note);
+        this.triggerVoice(note, scheduledTime);
       }
     });
   }
@@ -579,7 +581,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * @param note MIDI音符
    * @param velocity 力度值 (0-1)
    */
-  private triggerVoice(activeNote: MidiActiveNote): void {
+  private triggerVoice(activeNote: MidiActiveNote, scheduledTime?: number): void {
     const { id: noteId, midi: note, velocity } = activeNote;
     // 如果声部已经存在但没激活，重用它
     if (this.voices.has(noteId)) {
@@ -587,15 +589,11 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
       // 更新音符（频率）
       voice.note = note;
-      this.applyParameterRamp(
-        voice.oscillator.frequency,
-        this.getExpressiveFrequency(activeNote),
-        0.01
-      );
+      this.setVoiceFrequency(voice, activeNote, scheduledTime);
 
       // 触发包络
-      this.triggerEnvelope(voice, velocity);
-      this.updateVoiceExpression(activeNote);
+      this.triggerEnvelope(voice, velocity, scheduledTime);
+      this.updateVoiceExpression(activeNote, scheduledTime);
 
       this.debugInfo = `重用声部: note=${note}, 频率=${midiNoteToFrequency(note).toFixed(2)}Hz, 力度=${velocity.toFixed(2)}`;
     }
@@ -675,7 +673,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         velGain.connect(this.mixer);
 
         // 启动振荡器
-        osc.start();
+        osc.start(scheduledTime);
 
         const now = Date.now();
 
@@ -696,8 +694,8 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
         };
 
         this.voices.set(noteId, voiceData);
-        this.triggerEnvelope(voiceData, velocity);
-        this.updateVoiceExpression(activeNote);
+        this.triggerEnvelope(voiceData, velocity, scheduledTime);
+        this.updateVoiceExpression(activeNote, scheduledTime);
 
         this.debugInfo = `创建声部: note=${note}, 频率=${midiNoteToFrequency(note).toFixed(2)}Hz, 力度=${velocity.toFixed(2)}`;
       } catch (error) {
@@ -729,7 +727,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * @param voice 声部对象
    * @param velocity 力度值（0-1）
    */
-  private triggerEnvelope(voice: any, velocity: number): void {
+  private triggerEnvelope(voice: any, velocity: number, scheduledTime?: number): void {
     voice.velocity = velocity;
     voice.triggerTime = Date.now();
     voice.active = true;
@@ -755,24 +753,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     voice.envelope.release = this.releaseTime;
 
     // 触发包络
-    voice.envelope.triggerAttack();
-
-    // 如果设置了延音衰减时间，设置延音结束处理
-    if (this.sustainFade > 0) {
-      const fadeStartTime =
-        voice.triggerTime + (this.attackTime + this.decayTime) * 1000;
-      setTimeout(() => {
-        if (
-          this.voices.has(voice.noteId) &&
-          this.voices.get(voice.noteId)!.active
-        ) {
-          voice.velocityGain.gain.linearRampToValueAtTime(
-            0,
-            this.Tone.now() + this.sustainFade
-          );
-        }
-      }, Math.max(0, fadeStartTime - Date.now()));
-    }
+    voice.envelope.triggerAttack(scheduledTime);
   }
 
   private refreshActiveVoicesEnvelope(): void {
@@ -793,14 +774,14 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
    * 释放一个声部（不销毁，只停止发声）
    * @param note MIDI音符
    */
-  private releaseVoice(noteId: string): void {
+  private releaseVoice(noteId: string, scheduledTime?: number): void {
     if (!this.voices.has(noteId)) return;
 
     const voice = this.voices.get(noteId)!;
 
     // 应用释放渐变
     if (voice.envelope) {
-      voice.envelope.triggerRelease();
+      voice.envelope.triggerRelease(scheduledTime);
     } else {
       this.applyParameterRamp(voice.velocityGain.gain, 0, this.releaseTime);
     }
@@ -865,7 +846,7 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     }
   }
 
-  private updateVoiceExpression(activeNote: MidiActiveNote): void {
+  private updateVoiceExpression(activeNote: MidiActiveNote, scheduledTime?: number): void {
     const voice = this.voices.get(activeNote.id);
     if (!voice) return;
 
@@ -879,16 +860,27 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     voice.timbre = activeNote.timbre;
 
     if (voice.oscillator?.frequency) {
-      this.applyParameterRamp(
-        voice.oscillator.frequency,
-        this.getExpressiveFrequency(activeNote),
-        0.01
-      );
+      this.setVoiceFrequency(voice, activeNote, scheduledTime);
     }
   }
 
   private getExpressiveFrequency(activeNote: MidiActiveNote): number {
     return midiNoteToFrequency(activeNote.midi + activeNote.pitchBend * 48);
+  }
+
+  private setVoiceFrequency(voice: any, activeNote: MidiActiveNote, scheduledTime?: number): void {
+    const frequency = this.getExpressiveFrequency(activeNote);
+    if (scheduledTime !== undefined && typeof voice.oscillator?.frequency?.setValueAtTime === 'function') {
+      voice.oscillator.frequency.setValueAtTime(frequency, scheduledTime);
+      return;
+    }
+    this.applyParameterRamp(voice.oscillator?.frequency, frequency, 0.01);
+  }
+
+  private getScheduledTime(frame: MidiFrame): number | undefined {
+    return typeof frame.scheduledTime === 'number' && Number.isFinite(frame.scheduledTime)
+      ? frame.scheduledTime
+      : undefined;
   }
 
   /**
@@ -975,5 +967,14 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
     console.debug(`[${this.moduleType}Module ${this.id}] 释放资源`);
     super.dispose();
+  }
+
+  protected cleanupFailedAudioInitialization(): void {
+    this.voices.forEach((_, noteId) => this.disposeVoice(noteId));
+    this.disposeAudioNodes([this.mixer, this.mainGainDb, this.gainNode]);
+    this.mixer = undefined;
+    this.mainGainDb = undefined;
+    this.gainNode = undefined;
+    super.cleanupFailedAudioInitialization();
   }
 }

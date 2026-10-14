@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parseMidiClipJson } from '@/core/midi/utils';
 import { MidiClip, MidiEvent } from '@/core/midi/types';
 import { SequencerModule } from './SequencerModule';
@@ -100,5 +100,89 @@ describe('SequencerModule MIDI clip scheduling', () => {
       [67],
       [72],
     ]);
+  });
+
+  it('emits timestamped MIDI from the Part callback before deferring legacy ports to Draw', () => {
+    const sequencer = new SequencerModule('sequencer-clock-test');
+    const drawSchedule = vi.fn();
+    (
+      sequencer as unknown as {
+        Tone: {
+          Draw: { schedule: typeof drawSchedule };
+          Frequency: (value: number) => { toFrequency: () => number };
+        };
+        scheduleFrame: (frame: ScheduledMidiFrame, time: number) => void;
+      }
+    ).Tone = {
+      Draw: { schedule: drawSchedule },
+      Frequency: (value: number) => ({ toFrequency: () => value }),
+    };
+
+    (
+      sequencer as unknown as {
+        scheduleFrame: (frame: ScheduledMidiFrame, time: number) => void;
+      }
+    ).scheduleFrame(
+      {
+        tick: 0,
+        timeSeconds: 0,
+        events: [{ type: 'noteOn', noteId: 'clock-note', midi: 69, velocity: 0.8 }],
+      },
+      12.345
+    );
+
+    expect(sequencer.outputPorts['midi'].getValue()).toMatchObject({
+      scheduledTime: 12.345,
+      activeNotes: [{ id: 'clock-note', midi: 69 }],
+      events: [{ type: 'noteOn', noteId: 'clock-note' }],
+    });
+    expect(sequencer.outputPorts['activeNotes'].getValue()).toEqual([]);
+    expect(drawSchedule).toHaveBeenCalledWith(expect.any(Function), 12.345);
+  });
+
+  it('cancels scheduled playback and emits allNotesOff when disposed', () => {
+    const sequencer = new SequencerModule('sequencer-stop-test');
+    const cancel = vi.fn();
+    const dispose = vi.fn();
+    (
+      sequencer as unknown as {
+        Tone: {
+          now: () => number;
+          Draw: { cancel: (time: number) => void };
+          Transport: { state: string; stop: () => void; position: number };
+          Frequency: (value: number) => { toFrequency: () => number };
+        };
+        sequencePart: { cancel: typeof cancel; dispose: typeof dispose };
+        scheduleFrame: (frame: ScheduledMidiFrame, time: number) => void;
+      }
+    ).Tone = {
+      now: () => 3,
+      Draw: { cancel },
+      Transport: { state: 'stopped', stop: vi.fn(), position: 0 },
+      Frequency: (value: number) => ({ toFrequency: () => value }),
+    };
+    (
+      sequencer as unknown as {
+        sequencePart: { cancel: typeof cancel; dispose: typeof dispose };
+        scheduleFrame: (frame: ScheduledMidiFrame, time: number) => void;
+      }
+    ).sequencePart = { cancel, dispose };
+    (
+      sequencer as unknown as {
+        scheduleFrame: (frame: ScheduledMidiFrame, time: number) => void;
+      }
+    ).scheduleFrame(
+      { tick: 0, timeSeconds: 0, events: [{ type: 'noteOn', noteId: 'live', midi: 60, velocity: 1 }] },
+      3
+    );
+
+    sequencer.dispose();
+
+    expect(cancel).toHaveBeenCalledWith(0);
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(sequencer.outputPorts['midi'].getValue()).toMatchObject({
+      activeNotes: [],
+      events: [{ type: 'allNotesOff' }],
+    });
   });
 });

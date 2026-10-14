@@ -1,5 +1,3 @@
-'use client';
-
 import { AudioModuleBase } from '@/core/base/AudioModuleBase';
 import {
   ModuleMetadata,
@@ -36,6 +34,8 @@ export class SequencerModule extends AudioModuleBase {
 
   private activeNotes: Map<string, MidiActiveNote> = new Map();
   private sequencePart: any = null;
+  // Invalidates callbacks that Tone's look-ahead scheduler already handed to us.
+  private playbackGeneration = 0;
 
   constructor(id: string, name: string = 'MIDI Clip') {
     const moduleType = 'sequencer';
@@ -142,8 +142,10 @@ export class SequencerModule extends AudioModuleBase {
 
   private recreateSequence(): void {
     if (!isBrowser || !this.Tone) return;
+    const playbackGeneration = ++this.playbackGeneration;
 
     if (this.sequencePart) {
+      this.sequencePart.cancel?.(0);
       this.sequencePart.dispose();
       this.sequencePart = null;
     }
@@ -165,7 +167,9 @@ export class SequencerModule extends AudioModuleBase {
 
     this.sequencePart = new this.Tone.Part(
       (time: number, frame: ScheduledMidiFrame) => {
-        this.scheduleFrame(frame, time);
+        if (playbackGeneration === this.playbackGeneration && !this.isDisposed()) {
+          this.scheduleFrame(frame, time);
+        }
       },
       scheduledEvents.map((frame) => [frame.timeSeconds, frame])
     );
@@ -250,14 +254,15 @@ export class SequencerModule extends AudioModuleBase {
   }
 
   private scheduleFrame(frame: ScheduledMidiFrame, time: number): void {
-    this.Tone.Draw.schedule(() => {
-      this.applyMidiEvents(frame.events);
-    }, time);
+    // Part callbacks run on Tone's look-ahead scheduler. Audio consumers receive the
+    // AudioContext timestamp and must schedule their envelopes with it; Draw is only
+    // appropriate for DOM work and would add a frame of MIDI jitter here.
+    this.applyMidiEvents(frame.events, time);
   }
 
-  private applyMidiEvents(events: MidiEvent[]): void {
+  private applyMidiEvents(events: MidiEvent[], scheduledTime?: number): void {
     events.forEach((event) => this.applyMidiEvent(event));
-    this.updateOutputPorts(events);
+    this.updateOutputPorts(events, scheduledTime);
   }
 
   private applyMidiEvent(event: MidiEvent): void {
@@ -311,27 +316,42 @@ export class SequencerModule extends AudioModuleBase {
     this.updateOutputPorts([{ type: 'allNotesOff' }]);
   }
 
-  private updateOutputPorts(events: MidiEvent[] = []): void {
+  private updateOutputPorts(events: MidiEvent[] = [], scheduledTime?: number): void {
     const frame = createMidiFrame(
       Array.from(this.activeNotes.values()),
-      events
+      events,
+      scheduledTime
     );
-    this.outputPorts['midi'].next(frame);
+    this.setOutputValueAtTime('midi', frame, scheduledTime);
 
+    // Legacy array values retain their original number[] shape and gain a private
+    // timestamp sideband. Compatible receivers can schedule at the same audio time.
+    this.updateLegacyOutputPorts(frame);
+  }
+
+  private updateLegacyOutputPorts(frame: ReturnType<typeof createMidiFrame>): void {
     const legacy = midiFrameToLegacyArrays(frame);
-    this.outputPorts['activeNotes'].next(legacy.notes);
-    this.outputPorts['activeVelocities'].next(legacy.velocities);
+    this.setOutputValueAtTime('activeNotes', legacy.notes, frame.scheduledTime);
+    this.setOutputValueAtTime(
+      'activeVelocities',
+      legacy.velocities,
+      frame.scheduledTime
+    );
 
     if (legacy.notes.length > 0) {
       const lastNoteMidi = legacy.notes[legacy.notes.length - 1];
       if (this.outputPorts['frequency']) {
-        this.outputPorts['frequency'].next(
-          this.Tone.Frequency(lastNoteMidi, 'midi').toFrequency()
+        this.setOutputValueAtTime(
+          'frequency',
+          this.Tone.Frequency(lastNoteMidi, 'midi').toFrequency(),
+          frame.scheduledTime
         );
       }
-      if (this.outputPorts['gate']) this.outputPorts['gate'].next(1);
+      if (this.outputPorts['gate']) {
+        this.setOutputValueAtTime('gate', 1, frame.scheduledTime);
+      }
     } else if (this.outputPorts['gate']) {
-      this.outputPorts['gate'].next(0);
+      this.setOutputValueAtTime('gate', 0, frame.scheduledTime);
     }
   }
 
@@ -347,10 +367,24 @@ export class SequencerModule extends AudioModuleBase {
   }
 
   public dispose(): void {
+    this.playbackGeneration += 1;
+    this.allNotesOff();
     if (this.sequencePart) {
+      this.sequencePart.cancel?.(0);
       this.sequencePart.dispose();
+      this.sequencePart = null;
     }
     transportService.stop(this.id, this.Tone);
     super.dispose();
+  }
+
+  protected cleanupFailedAudioInitialization(): void {
+    this.playbackGeneration += 1;
+    this.sequencePart?.cancel?.(0);
+    this.sequencePart?.dispose?.();
+    this.sequencePart = null;
+    this.activeNotes.clear();
+    transportService.stop(this.id, this.Tone);
+    super.cleanupFailedAudioInitialization();
   }
 }

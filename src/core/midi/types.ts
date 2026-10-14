@@ -49,6 +49,8 @@ export interface MidiActiveNote extends MidiExpression {
 export interface MidiFrame {
   type: 'midi-frame';
   serial: number;
+  /** AudioContext seconds supplied by Tone.Transport/Part for sample-accurate consumers. */
+  scheduledTime?: number;
   activeNotes: MidiActiveNote[];
   events: MidiEvent[];
 }
