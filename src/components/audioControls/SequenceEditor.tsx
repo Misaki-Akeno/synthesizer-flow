@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { memo, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
 import {
@@ -8,6 +8,7 @@ import {
   midiToNoteName,
   parseMidiClipJson,
 } from '@/core/midi/utils';
+import type { MidiNote } from '@/core/midi/types';
 import { Pause, Play, PanelBottomOpen, Music2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useFlowStore } from '@/store/canvas-store';
@@ -43,25 +44,7 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
     (state) => state.setSequencersRunning
   );
   const isRunning = useTransportRuntimeStore((state) => state.isPlaying);
-  const positionTicks = useTransportRuntimeStore(
-    (state) => state.positionTicks
-  );
   const clipLengthTicks = Math.max(1, getClipLengthTicks(clip));
-  const playheadPercent =
-    ((positionTicks % clipLengthTicks) / clipLengthTicks) * 100;
-
-  const pitchRange = useMemo(() => {
-    if (clip.notes.length === 0) {
-      return { min: 60, max: 72 };
-    }
-    return clip.notes.reduce(
-      (range, note) => ({
-        min: Math.min(range.min, note.midi),
-        max: Math.max(range.max, note.midi),
-      }),
-      { min: clip.notes[0].midi, max: clip.notes[0].midi }
-    );
-  }, [clip.notes]);
 
   const openEditor = () => {
     const params = new URLSearchParams(searchParams);
@@ -146,12 +129,87 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
       )}
 
       <div className="relative h-20 bg-[linear-gradient(90deg,color-mix(in_oklab,var(--chart-5)_18%,transparent)_1px,transparent_1px),linear-gradient(0deg,color-mix(in_oklab,var(--border)_70%,transparent)_1px,transparent_1px)] bg-[length:25%_100%,100%_20%]">
-        <div
-          className={`pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)] ${isRunning ? 'opacity-100' : 'opacity-30'}`}
-          style={{ left: `${playheadPercent}%` }}
+        <SequencePlayhead
+          clipLengthTicks={clipLengthTicks}
+          isRunning={isRunning}
         />
-        {clip.notes.map((note) => {
-          const lengthTicks = clipLengthTicks;
+        <SequenceNotePreview
+          notes={clip.notes}
+          clipLengthTicks={clipLengthTicks}
+        />
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 播放头每帧移动，但只通过 store 订阅直接改 DOM transform，
+ * 不让音序器卡片随播放位置以 60fps 重渲染。
+ */
+const SequencePlayhead = ({
+  clipLengthTicks,
+  isRunning,
+}: {
+  clipLengthTicks: number;
+  isRunning: boolean;
+}) => {
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    let lastPercent: number | undefined;
+    const apply = (positionTicks: number) => {
+      const percent =
+        ((positionTicks % clipLengthTicks) / clipLengthTicks) * 100;
+      if (percent === lastPercent) return;
+      lastPercent = percent;
+      track.style.transform = `translateX(${percent}%)`;
+    };
+    apply(useTransportRuntimeStore.getState().positionTicks);
+    return useTransportRuntimeStore.subscribe((state) =>
+      apply(state.positionTicks)
+    );
+  }, [clipLengthTicks]);
+
+  return (
+    <div
+      ref={trackRef}
+      data-testid="sequence-playhead"
+      className="pointer-events-none absolute inset-0 z-20 will-change-transform"
+    >
+      <div
+        className={`absolute bottom-0 left-0 top-0 w-px bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)] ${isRunning ? 'opacity-100' : 'opacity-30'}`}
+      />
+    </div>
+  );
+};
+
+/** 音符网格只随 clip 内容变化；LOD 精简模式也复用它作为静态缩略图。 */
+export const SequenceNotePreview = memo(
+  ({
+    notes,
+    clipLengthTicks,
+  }: {
+    notes: MidiNote[];
+    clipLengthTicks: number;
+  }) => {
+    const pitchRange = useMemo(() => {
+      if (notes.length === 0) {
+        return { min: 60, max: 72 };
+      }
+      return notes.reduce(
+        (range, note) => ({
+          min: Math.min(range.min, note.midi),
+          max: Math.max(range.max, note.midi),
+        }),
+        { min: notes[0].midi, max: notes[0].midi }
+      );
+    }, [notes]);
+
+    return (
+      <>
+        {notes.map((note) => {
           const top =
             pitchRange.max === pitchRange.min
               ? 34
@@ -159,8 +217,11 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
                 ((pitchRange.max - note.midi) /
                   (pitchRange.max - pitchRange.min)) *
                   52;
-          const left = (note.startTick / lengthTicks) * 100;
-          const width = Math.max(4, (note.durationTicks / lengthTicks) * 100);
+          const left = (note.startTick / clipLengthTicks) * 100;
+          const width = Math.max(
+            4,
+            (note.durationTicks / clipLengthTicks) * 100
+          );
 
           return (
             <div
@@ -176,14 +237,15 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
             />
           );
         })}
-        {clip.notes.length === 0 && (
+        {notes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center text-[11px] text-muted-foreground">
             Empty clip
           </div>
         )}
-      </div>
-    </div>
-  );
-};
+      </>
+    );
+  }
+);
+SequenceNotePreview.displayName = 'SequenceNotePreview';
 
 export default SequenceEditor;

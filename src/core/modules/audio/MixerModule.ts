@@ -107,12 +107,6 @@ export class MixerModule extends AudioModuleBase {
     sourcePortName: string
   ): void {
     if (!this.initialized) {
-      this.pendingAudioInputs.push({
-        inputPortName,
-        sourceModuleId,
-        sourcePortName,
-        audioInput,
-      });
       this.inputPorts[inputPortName].next(audioInput);
       return;
     }

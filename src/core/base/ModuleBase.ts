@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { BehaviorSubject, Subscription } from 'rxjs';
-import { createMidiFrame } from '@/core/midi/utils';
+import { BehaviorSubject, Subject, Subscription } from 'rxjs';
+import {
+  createMidiFrame,
+  getLegacyMidiScheduledTime,
+  setLegacyMidiScheduledTime,
+} from '@/core/midi/utils';
 
 // 接口类型枚举
 export enum PortType {
@@ -86,6 +90,12 @@ export abstract class ModuleBase {
     };
   };
 
+  /**
+   * 参数元数据（如列表选项）被原地修改时发出，运行时据此刷新快照。
+   * 参数值本身的变化走 parameters，不需要这里通知。
+   */
+  public readonly metadataChanges = new Subject<void>();
+
   // 添加自定义UI支持
   protected customUI?: {
     type: string;
@@ -106,6 +116,10 @@ export abstract class ModuleBase {
 
   // 存储订阅关系以便取消订阅
   private subscriptions: { [key: string]: Subscription } = {};
+  private audioInputBindings = new Map<
+    string,
+    { inputPortName: string; sourceModule: ModuleBase; sourcePortName: string }
+  >();
 
   // 存储输出连接
   private outputConnections: Map<
@@ -123,6 +137,8 @@ export abstract class ModuleBase {
   // Map<inputPortName, Map<bindingKey, any[]>>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private arrayInputValues: Map<string, Map<string, any[]>> = new Map();
+  private inputPortScheduledTimes = new Map<string, number>();
+  private outputPortScheduledTimes = new Map<string, number>();
   type: string | undefined;
 
   constructor(
@@ -177,6 +193,16 @@ export abstract class ModuleBase {
 
     // 设置内部绑定
     this.setupInternalBindings();
+  }
+
+  /**
+   * 更新列表参数的可选项并通知运行时刷新快照。
+   */
+  protected setParameterOptions(paramKey: string, options: string[]): void {
+    const meta = this.parameterMeta[paramKey];
+    if (!meta) return;
+    meta.options = [...options];
+    this.metadataChanges.next();
   }
 
   /**
@@ -452,6 +478,28 @@ export abstract class ModuleBase {
     }
   }
 
+  /** Emit a legacy value together with an internal audio-clock sideband. */
+  protected setOutputValueAtTime(
+    portName: string,
+    value: ModuleInterface,
+    scheduledTime?: number
+  ): void {
+    if (typeof scheduledTime === 'number' && Number.isFinite(scheduledTime)) {
+      this.outputPortScheduledTimes.set(portName, scheduledTime);
+    } else {
+      this.outputPortScheduledTimes.delete(portName);
+    }
+    this.setOutputValue(portName, value);
+  }
+
+  public getOutputPortScheduledTime(portName: string): number | undefined {
+    return this.outputPortScheduledTimes.get(portName);
+  }
+
+  protected getInputPortScheduledTime(portName: string): number | undefined {
+    return this.inputPortScheduledTimes.get(portName);
+  }
+
   /**
    * 绑定此模块的输入端口到另一个模块的输出端口
    * @param inputPortName 输入端口名
@@ -507,9 +555,23 @@ export abstract class ModuleBase {
       this.subscriptions[bindingKey].unsubscribe();
     }
 
+    if (isAudioPort) {
+      this.audioInputBindings.set(bindingKey, {
+        inputPortName,
+        sourceModule,
+        sourcePortName,
+      });
+    }
+
     this.subscriptions[bindingKey] = sourceModule.outputPorts[
       sourcePortName
     ].subscribe((value) => {
+      const scheduledTime = sourceModule.getOutputPortScheduledTime(sourcePortName);
+      if (scheduledTime !== undefined) {
+        this.inputPortScheduledTimes.set(inputPortName, scheduledTime);
+      } else {
+        this.inputPortScheduledTimes.delete(inputPortName);
+      }
       if (isAudioPort) {
         // 对于音频端口，保留输入值的引用，但不直接修改BehaviorSubject
         // 让模块内部处理多个音频输入
@@ -541,6 +603,12 @@ export abstract class ModuleBase {
               aggregated.push(...val);
             }
           });
+          // Preserve the source's non-enumerable audio-clock sideband for legacy MIDI
+          // arrays. This leaves their public number[] shape unchanged.
+          setLegacyMidiScheduledTime(
+            aggregated,
+            getLegacyMidiScheduledTime(value) ?? scheduledTime
+          );
 
           this.inputPorts[inputPortName].next(aggregated);
         }
@@ -567,6 +635,20 @@ export abstract class ModuleBase {
     // 默认实现：直接更新端口值
     // 子类可以重写此方法以实现自定义的多音频处理
     this.inputPorts[inputPortName].next(audioInput);
+  }
+
+  /** 音频节点重建后，从仍有效的源端口恢复所有输入，包含多源及多输入端口。 */
+  protected restoreAudioInputBindings(): void {
+    this.audioInputBindings.forEach(
+      ({ inputPortName, sourceModule, sourcePortName }) => {
+        this.handleAudioInput(
+          inputPortName,
+          sourceModule.getOutputValue(sourcePortName),
+          sourceModule.id,
+          sourcePortName
+        );
+      }
+    );
   }
 
   /**
@@ -627,6 +709,7 @@ export abstract class ModuleBase {
       if (this.subscriptions[bindingKey]) {
         this.subscriptions[bindingKey].unsubscribe();
         delete this.subscriptions[bindingKey];
+        this.audioInputBindings.delete(bindingKey);
 
         if (isAudioPort) {
           // 通知模块音频连接已移除
@@ -654,6 +737,7 @@ export abstract class ModuleBase {
           if (key.startsWith(`input_${inputPortName}_${sourceModuleId}_`)) {
             this.subscriptions[key].unsubscribe();
             delete this.subscriptions[key];
+            this.audioInputBindings.delete(key);
             if (isArrayPort) {
               cleanArrayCache(key);
             }
@@ -686,6 +770,7 @@ export abstract class ModuleBase {
         if (key.startsWith(`input_${inputPortName}_`)) {
           this.subscriptions[key].unsubscribe();
           delete this.subscriptions[key];
+          this.audioInputBindings.delete(key);
           unbound = true;
         }
       });
@@ -855,6 +940,12 @@ export abstract class ModuleBase {
     subscriptions.forEach((sub) => this.internalSubscriptions.push(sub));
   }
 
+  /** Clear setup-time subscriptions without disposing ports, for a safe audio retry. */
+  protected clearInternalSubscriptions(): void {
+    this.internalSubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.internalSubscriptions = [];
+  }
+
   /**
    * 获取模块的自定义UI组件信息
    * @returns 自定义UI组件信息，包含类型和props
@@ -896,12 +987,10 @@ export abstract class ModuleBase {
       subscription.unsubscribe();
     });
     this.subscriptions = {};
+    this.audioInputBindings.clear();
 
     // 取消所有内部订阅
-    this.internalSubscriptions.forEach((subscription) => {
-      subscription.unsubscribe();
-    });
-    this.internalSubscriptions = [];
+    this.clearInternalSubscriptions();
 
     // 完成所有BehaviorSubject
     Object.values(this.parameters).forEach((param) => {
@@ -915,5 +1004,7 @@ export abstract class ModuleBase {
     Object.values(this.outputPorts).forEach((port) => {
       port.complete();
     });
+
+    this.metadataChanges.complete();
   }
 }

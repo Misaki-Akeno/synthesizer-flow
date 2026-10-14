@@ -41,6 +41,25 @@ export function getBrowserStorage(
   }
 }
 
+/** 是否至少有一种可实际写入的浏览器持久化介质。 */
+export function hasPersistentBrowserStorage(
+  getStorage: () => Storage | undefined
+): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  if (typeof indexedDB !== 'undefined') {
+    return true;
+  }
+
+  try {
+    const storage = getStorage();
+    return Boolean(storage && canUseStorage(storage));
+  } catch {
+    return false;
+  }
+}
+
 interface IndexedDbStorageOptions {
   databaseName: string;
   storeName: string;
@@ -86,6 +105,7 @@ export function getIndexedDbStorage({
   getFallbackStorage,
 }: IndexedDbStorageOptions): StateStorage {
   const fallbackStorage = getBrowserStorage(getFallbackStorage);
+  const hasFallbackStorage = fallbackStorage !== noopStorage;
 
   if (typeof window === 'undefined' || typeof indexedDB === 'undefined') {
     return fallbackStorage;
@@ -99,40 +119,56 @@ export function getIndexedDbStorage({
     }
 
     databasePromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(databaseName, 1);
+      const openWithStore = (version?: number) => {
+        const request =
+          version === undefined
+            ? indexedDB.open(databaseName)
+            : indexedDB.open(databaseName, version);
 
-      request.addEventListener('upgradeneeded', () => {
-        if (!request.result.objectStoreNames.contains(storeName)) {
-          request.result.createObjectStore(storeName);
-        }
-      });
-      request.addEventListener(
-        'success',
-        () => {
-          request.result.addEventListener('versionchange', () => {
-            request.result.close();
+        request.addEventListener('upgradeneeded', () => {
+          if (!request.result.objectStoreNames.contains(storeName)) {
+            request.result.createObjectStore(storeName);
+          }
+        });
+        request.addEventListener(
+          'success',
+          () => {
+            const database = request.result;
+            // 旧应用可能已用同一数据库创建了 v1，却没有本次需要的 store。
+            // 此时升级一次而不是静默回退到容量较小的 localStorage。
+            if (!database.objectStoreNames.contains(storeName)) {
+              const nextVersion = database.version + 1;
+              database.close();
+              openWithStore(nextVersion);
+              return;
+            }
+            database.addEventListener('versionchange', () => {
+              database.close();
+              databasePromise = null;
+            });
+            resolve(database);
+          },
+          { once: true }
+        );
+        request.addEventListener(
+          'error',
+          () => {
             databasePromise = null;
-          });
-          resolve(request.result);
-        },
-        { once: true }
-      );
-      request.addEventListener(
-        'error',
-        () => {
-          databasePromise = null;
-          reject(request.error);
-        },
-        { once: true }
-      );
-      request.addEventListener(
-        'blocked',
-        () => {
-          databasePromise = null;
-          reject(new Error('IndexedDB upgrade was blocked'));
-        },
-        { once: true }
-      );
+            reject(request.error);
+          },
+          { once: true }
+        );
+        request.addEventListener(
+          'blocked',
+          () => {
+            databasePromise = null;
+            reject(new Error('IndexedDB upgrade was blocked'));
+          },
+          { once: true }
+        );
+      };
+
+      openWithStore();
     });
 
     return databasePromise;
@@ -175,6 +211,9 @@ export function getIndexedDbStorage({
       await transactionComplete;
       await fallbackStorage.removeItem(key);
     } catch {
+      if (!hasFallbackStorage) {
+        throw new Error('No durable browser storage is available');
+      }
       await fallbackStorage.setItem(key, value);
     }
   };

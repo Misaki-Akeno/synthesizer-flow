@@ -35,4 +35,9 @@ export class AgentSkillSession {
   public getLoadedSkillIds(): string[] {
     return Array.from(this.loadedSkills.keys());
   }
+
+  /** 从 checkpoint 恢复已加载的 Skill；未知或已删除的 Skill 会被忽略。 */
+  public restore(skillIds: readonly string[] | undefined): void {
+    skillIds?.forEach((skillId) => this.load(skillId));
+  }
 }

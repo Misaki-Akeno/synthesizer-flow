@@ -82,6 +82,11 @@ export class ToolExecutor {
   private edges: FlowEdge[];
   private operations: ClientOperation[] = [];
   private readonly searchDocuments: AgentKnowledgeSearch;
+  private knowledgeSearchAllowed = true;
+
+  public setKnowledgeSearchAllowed(allowed: boolean): void {
+    this.knowledgeSearchAllowed = allowed;
+  }
 
   constructor(
     initialState: GraphStateSnapshot,
@@ -102,7 +107,28 @@ export class ToolExecutor {
   }
 
   public getOperations(): ClientOperation[] {
-    return this.operations;
+    return [...this.operations];
+  }
+
+  /** 返回可持久化的影子画布，供审批中断后的新请求继续执行。 */
+  public getShadowState(): GraphStateSnapshot {
+    return {
+      nodes: this.nodes.map((node) => ({
+        id: node.id,
+        type: node.type,
+        position: { ...node.position },
+        selected: node.selected,
+        data: {
+          type: node.data.type || node.type || 'default',
+          label: node.data.label,
+          parameters: {
+            ...(node.data.parameters || {}),
+          } as GraphStateSnapshot['nodes'][number]['data']['parameters'],
+          ports: this.getNodePorts(node),
+        },
+      })),
+      edges: this.edges.map((edge) => ({ ...edge })),
+    };
   }
 
   public diagnoseCanvas() {
@@ -858,6 +884,9 @@ export class ToolExecutor {
    * 直接调用 RAG Service 逻辑，避免 fetch 调用失败
    */
   public async ragSearch(query: string, topK?: unknown) {
+    if (!this.knowledgeSearchAllowed) {
+      return { success: false, error: '请先登录后检索知识库' };
+    }
     if (!query || typeof query !== 'string') {
       return { success: false, error: 'query is required' };
     }

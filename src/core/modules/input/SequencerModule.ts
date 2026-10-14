@@ -1,5 +1,3 @@
-'use client';
-
 import { AudioModuleBase } from '@/core/base/AudioModuleBase';
 import {
   ModuleMetadata,
@@ -36,6 +34,10 @@ export class SequencerModule extends AudioModuleBase {
 
   private activeNotes: Map<string, MidiActiveNote> = new Map();
   private sequencePart: any = null;
+  // Invalidates callbacks that Tone's look-ahead scheduler already handed to us.
+  private playbackGeneration = 0;
+  private legacyTimers = new Set<ReturnType<typeof setTimeout>>();
+  private detachLoopListener: (() => void) | null = null;
 
   constructor(id: string, name: string = 'MIDI Clip') {
     const moduleType = 'sequencer';
@@ -173,8 +175,12 @@ export class SequencerModule extends AudioModuleBase {
 
   private recreateSequence(): void {
     if (!isBrowser || !this.Tone) return;
+    const playbackGeneration = ++this.playbackGeneration;
+    this.detachLoopListener?.();
+    this.detachLoopListener = null;
 
     if (this.sequencePart) {
+      this.sequencePart.cancel?.(0);
       this.sequencePart.dispose();
       this.sequencePart = null;
     }
@@ -194,9 +200,12 @@ export class SequencerModule extends AudioModuleBase {
       return;
     }
 
+    transportService.syncTempo(this.Tone);
     this.sequencePart = new this.Tone.Part(
       (time: number, frame: ScheduledMidiFrame) => {
-        this.scheduleFrame(frame, time);
+        if (this.isCurrentPlayback(playbackGeneration)) {
+          this.scheduleFrame(frame, time);
+        }
       },
       scheduledEvents.map((frame) => [frame.timeSeconds, frame])
     );
@@ -207,15 +216,48 @@ export class SequencerModule extends AudioModuleBase {
       clip
     );
     this.sequencePart.start(0);
+
+    // 全局循环跳回起点时，在同一音频时间释放仍在发声的音符；起点上的
+    // note-on 随后照常触发。跨越循环点的音符不会挂住。
+    const onTransportLoop = (time: number) => {
+      if (!this.isCurrentPlayback(playbackGeneration)) return;
+      if (this.activeNotes.size === 0) return;
+      this.applyMidiEvents([{ type: 'allNotesOff' }], time);
+    };
+    const transport = this.Tone.Transport;
+    transport.on?.('loop', onTransportLoop);
+    this.detachLoopListener = () => transport.off?.('loop', onTransportLoop);
+
     transportService.start(this.id, this.Tone);
+  }
+
+  /** 禁用的片段保持与 Transport 同步运行，但不输出任何 MIDI。 */
+  private isCurrentPlayback(playbackGeneration: number): boolean {
+    return (
+      playbackGeneration === this.playbackGeneration &&
+      !this.isDisposed() &&
+      this.isEnabled()
+    );
+  }
+
+  protected onEnabledStateChanged(enabled: boolean): void {
+    // 基类构造期间就会回调，此时子类字段尚未初始化
+    if (enabled || !this.activeNotes) return;
+    // 释放正在发声以及预调度窗口内即将发声的音符
+    this.allNotesOff();
   }
 
   private buildScheduledEvents(clip: MidiClip): ScheduledMidiFrame[] {
     const events: MidiEvent[] = [];
     const transpose = this.getParameterValue('transpose') as number;
+    const loop = this.getParameterValue('loop') as boolean;
     const clipLengthTicks = getClipLengthTicks(clip);
+    if (clipLengthTicks <= 0) return [];
 
     clip.notes.forEach((note) => {
+      // 片段外的内容不播放：起点在末尾之后的音符跳过，跨越末尾的音符在末尾截断，
+      // 保证每个 note-on 都有同一轮内的 note-off。
+      if (note.startTick >= clipLengthTicks) return;
       const midi = Math.max(0, Math.min(127, note.midi + transpose));
       events.push({
         type: 'noteOn',
@@ -233,7 +275,7 @@ export class SequencerModule extends AudioModuleBase {
         noteId: note.id,
         midi,
         channel: note.channel,
-        tick: note.startTick + note.durationTicks,
+        tick: Math.min(note.startTick + note.durationTicks, clipLengthTicks),
       });
     });
 
@@ -243,8 +285,12 @@ export class SequencerModule extends AudioModuleBase {
 
     events
       .filter((event) => typeof event.tick === 'number')
+      // 不循环时 Part 只播放一遍：末尾的 note-off 必须留在末尾，不能折回开头
+      .filter((event) => loop || (event.tick ?? 0) <= clipLengthTicks)
       .forEach((event) => {
-        const tick = this.getLoopedEventTick(event.tick ?? 0, clipLengthTicks);
+        const tick = loop
+          ? this.getLoopedEventTick(event.tick ?? 0, clipLengthTicks)
+          : Math.max(0, Math.round(event.tick ?? 0));
         const normalizedEvent = { ...event, tick };
         const tickEvents = eventsByTick.get(tick) ?? [];
         tickEvents.push(normalizedEvent);
@@ -281,14 +327,15 @@ export class SequencerModule extends AudioModuleBase {
   }
 
   private scheduleFrame(frame: ScheduledMidiFrame, time: number): void {
-    this.Tone.Draw.schedule(() => {
-      this.applyMidiEvents(frame.events);
-    }, time);
+    // Part callbacks run on Tone's look-ahead scheduler. Audio consumers receive the
+    // AudioContext timestamp and must schedule their envelopes with it; Draw is only
+    // appropriate for DOM work and would add a frame of MIDI jitter here.
+    this.applyMidiEvents(frame.events, time);
   }
 
-  private applyMidiEvents(events: MidiEvent[]): void {
+  private applyMidiEvents(events: MidiEvent[], scheduledTime?: number): void {
     events.forEach((event) => this.applyMidiEvent(event));
-    this.updateOutputPorts(events);
+    this.updateOutputPorts(events, scheduledTime);
   }
 
   private applyMidiEvent(event: MidiEvent): void {
@@ -340,31 +387,67 @@ export class SequencerModule extends AudioModuleBase {
   }
 
   private allNotesOff(): void {
+    this.legacyTimers.forEach((timer) => clearTimeout(timer));
+    this.legacyTimers.clear();
     this.activeNotes.clear();
     this.updateOutputPorts([{ type: 'allNotesOff' }]);
   }
 
-  private updateOutputPorts(events: MidiEvent[] = []): void {
+  private updateOutputPorts(events: MidiEvent[] = [], scheduledTime?: number): void {
     const frame = createMidiFrame(
       Array.from(this.activeNotes.values()),
-      events
+      events,
+      scheduledTime
     );
-    this.outputPorts['midi'].next(frame);
+    this.setOutputValueAtTime('midi', frame, scheduledTime);
 
+    // MIDI 消费者可使用音频时间戳提前调度。旧版 NUMBER/ARRAY 消费者可能
+    // 忽略时间戳，因此必须到实际播放时间再发布旧端口值。
+    if (scheduledTime === undefined) {
+      this.updateLegacyOutputPorts(frame);
+      return;
+    }
+    const generation = this.playbackGeneration;
+    const publish = () => {
+      if (generation !== this.playbackGeneration || this.isDisposed()) return;
+      const now = this.Tone.immediate?.() ?? this.Tone.now?.() ?? 0;
+      const remaining = scheduledTime - now;
+      if (remaining <= 0) {
+        this.updateLegacyOutputPorts(frame);
+        return;
+      }
+      const timer = setTimeout(() => {
+        this.legacyTimers.delete(timer);
+        publish();
+      }, Math.max(1, Math.ceil(remaining * 1000)));
+      this.legacyTimers.add(timer);
+    };
+    publish();
+  }
+
+  private updateLegacyOutputPorts(frame: ReturnType<typeof createMidiFrame>): void {
     const legacy = midiFrameToLegacyArrays(frame);
-    this.outputPorts['activeNotes'].next(legacy.notes);
-    this.outputPorts['activeVelocities'].next(legacy.velocities);
+    this.setOutputValueAtTime('activeNotes', legacy.notes, frame.scheduledTime);
+    this.setOutputValueAtTime(
+      'activeVelocities',
+      legacy.velocities,
+      frame.scheduledTime
+    );
 
     if (legacy.notes.length > 0) {
       const lastNoteMidi = legacy.notes[legacy.notes.length - 1];
       if (this.outputPorts['frequency']) {
-        this.outputPorts['frequency'].next(
-          this.Tone.Frequency(lastNoteMidi, 'midi').toFrequency()
+        this.setOutputValueAtTime(
+          'frequency',
+          this.Tone.Frequency(lastNoteMidi, 'midi').toFrequency(),
+          frame.scheduledTime
         );
       }
-      if (this.outputPorts['gate']) this.outputPorts['gate'].next(1);
+      if (this.outputPorts['gate']) {
+        this.setOutputValueAtTime('gate', 1, frame.scheduledTime);
+      }
     } else if (this.outputPorts['gate']) {
-      this.outputPorts['gate'].next(0);
+      this.setOutputValueAtTime('gate', 0, frame.scheduledTime);
     }
   }
 
@@ -380,10 +463,30 @@ export class SequencerModule extends AudioModuleBase {
   }
 
   public dispose(): void {
+    this.playbackGeneration += 1;
+    this.detachLoopListener?.();
+    this.detachLoopListener = null;
+    this.allNotesOff();
     if (this.sequencePart) {
+      this.sequencePart.cancel?.(0);
       this.sequencePart.dispose();
+      this.sequencePart = null;
     }
     transportService.stop(this.id, this.Tone);
     super.dispose();
+  }
+
+  protected cleanupFailedAudioInitialization(): void {
+    this.playbackGeneration += 1;
+    this.detachLoopListener?.();
+    this.detachLoopListener = null;
+    this.legacyTimers.forEach((timer) => clearTimeout(timer));
+    this.legacyTimers.clear();
+    this.sequencePart?.cancel?.(0);
+    this.sequencePart?.dispose?.();
+    this.sequencePart = null;
+    this.activeNotes.clear();
+    transportService.stop(this.id, this.Tone);
+    super.cleanupFailedAudioInitialization();
   }
 }

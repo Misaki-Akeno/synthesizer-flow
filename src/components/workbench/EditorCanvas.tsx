@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -8,6 +8,7 @@ import {
   BackgroundVariant,
   IsValidConnection,
   useReactFlow,
+  useStoreApi,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import DefaultNode from './DefaultNode';
@@ -18,7 +19,13 @@ import { usePersistStore } from '@/store/projects-store';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { isValidModuleConnection } from './connectionValidation';
 import { useShallow } from 'zustand/react/shallow';
+import { useCanvasAutosave } from './useCanvasAutosave';
 import { SubpatchOverlay } from './SubpatchOverlay';
+import { pruneNodeViewCache } from './nodeViewCache';
+import {
+  useCanvasLodStore,
+  useNodeDetailLevel,
+} from '@/store/canvas-lod-store';
 
 const nodeTypes = {
   default: DefaultNode,
@@ -43,6 +50,37 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
+/**
+ * 把视口缩放同步到 LOD store。直接订阅 React Flow 内部 store，
+ * 缩放过程中不触发任何 React 渲染，只有跨档时节点才会更新。
+ */
+function CanvasLodController() {
+  const store = useStoreApi();
+
+  useEffect(() => {
+    const { setZoom } = useCanvasLodStore.getState();
+    setZoom(store.getState().transform[2]);
+    return store.subscribe((state) => setZoom(state.transform[2]));
+  }, [store]);
+
+  useEffect(
+    () =>
+      useFlowStore.subscribe((state, previous) => {
+        // 拖拽时 nodes 每帧都会变，只在节点增删或切换项目时清理
+        if (
+          state.nodes.length >= previous.nodes.length &&
+          state.currentProjectId === previous.currentProjectId
+        ) {
+          return;
+        }
+        pruneNodeViewCache(new Set(state.nodes.map((node) => node.id)));
+      }),
+    []
+  );
+
+  return null;
+}
+
 // 内部Canvas组件，包含实际的ReactFlow
 const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } =
@@ -59,6 +97,9 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
 
   const loadProject = usePersistStore((state) => state.loadProject);
   const currentProject = usePersistStore((state) => state.currentProject);
+  const hasHydratedProjects = usePersistStore(
+    (state) => state.hasHydratedProjects
+  );
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -70,9 +111,25 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
     useFlowContextMenu();
 
   const reactFlowInstance = useReactFlow();
+  const detailLevel = useNodeDetailLevel();
+
+  // 低档位下连线关闭动画；极简档位改用直线，减少路径计算与重绘。
+  const displayEdges = useMemo(() => {
+    if (detailLevel === 'full') return edges;
+    return edges.map((edge) => ({
+      ...edge,
+      animated: false,
+      ...(detailLevel === 'minimal' && (!edge.type || edge.type === 'default')
+        ? { type: 'straight' }
+        : {}),
+    }));
+  }, [detailLevel, edges]);
+
+  useCanvasAutosave();
 
   // 在组件挂载时加载项目
   useEffect(() => {
+    if (!hasHydratedProjects) return;
     // 如果已经手动加载了项目，不再执行自动加载
     if (hasLoadedProject.current) return;
 
@@ -82,16 +139,8 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
 
       // 1. 如果 URL 指定了 ID
       if (projectId) {
-        // 关键检查：如果 URL 的 ID 和本地缓存的项目 ID 一致，
-        // 我们应该优先加载本地缓存！因为本地缓存可能包含未保存的修改。
-        // 如果直接从服务器加载(loadProject(projectId))，会覆盖本地修改。
-        if (cachedProject && cachedProject.id === projectId) {
-          hasLoadedProject.current = true;
-          await loadProject(cachedProject);
-          return;
-        }
-
-        // 如果 ID 不匹配，说明要切换项目，从服务器/列表加载
+        // loadProject 仅在存在本地草稿时优先使用它；干净缓存需要重新拉取
+        // 云端详情，避免旧 IndexedDB 缓存永久覆盖远端版本。
         hasLoadedProject.current = true;
         await loadProject(projectId);
         return;
@@ -100,7 +149,6 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
       // 2. 如果没有 URL 参数，尝试恢复本地缓存
       if (cachedProject) {
         hasLoadedProject.current = true;
-        if (onAutoLoad) onAutoLoad();
         await loadProject(cachedProject);
         return;
       }
@@ -112,7 +160,7 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
 
     loadInitialProject();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [hasHydratedProjects, loadProject, onAutoLoad, projectId]);
 
   useEffect(() => {
     if (!currentProject) return;
@@ -128,6 +176,10 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
     const locale = pathname.split('/')[1] || 'zh-CN';
     const params = new URLSearchParams(searchParams);
     params.delete('project');
+    if (currentProject.isLocalDraft) {
+      router.replace(`/${locale}?${params.toString()}`, { scroll: false });
+      return;
+    }
     const newPathname = `/${locale}/${currentProject.id}`;
 
     router.replace(`${newPathname}?${params.toString()}`, { scroll: false });
@@ -214,7 +266,7 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
   return (
     <ReactFlow
       nodes={nodes}
-      edges={edges}
+      edges={displayEdges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
@@ -225,7 +277,11 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
       isValidConnection={isValidConnection}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
+      // React Flow 默认 minZoom 为 0.5，放宽后才能缩小到极简档位查看大项目全局
+      minZoom={0.1}
+      data-detail-level={detailLevel}
     >
+      <CanvasLodController />
       <Controls />
       <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
       <SubpatchOverlay />

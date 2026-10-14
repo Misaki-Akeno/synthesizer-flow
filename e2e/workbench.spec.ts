@@ -86,6 +86,21 @@ test('模块浏览器可以滚动到列表底部并添加模块', async ({ page 
   await expect(page.locator('[data-module-type="speaker"]')).toHaveCount(1);
 });
 
+test('刷新后会恢复自动保存的未命名草稿', async ({ page }) => {
+  await openBlankWorkbench(page);
+  await openModuleBrowser(page);
+
+  await page.getByRole('button', { name: '添加模块：数字输入' }).click();
+  await expect(page.locator('[data-module-type="numberinput"]')).toHaveCount(1);
+
+  // 自动保存经过防抖后先写入 IndexedDB；刷新不应丢失未命名画布。
+  await page.waitForTimeout(1_100);
+  await page.reload();
+
+  await expect(page.getByTestId('editor-canvas')).toBeVisible();
+  await expect(page.locator('[data-module-type="numberinput"]')).toHaveCount(1);
+});
+
 test('AI 助手操作位于面板标题栏而不是输入区', async ({ page }) => {
   await openBlankWorkbench(page);
   await page.getByRole('button', { name: 'AI 助手面板' }).click();

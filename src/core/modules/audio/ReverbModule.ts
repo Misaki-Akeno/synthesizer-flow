@@ -111,7 +111,9 @@ export class ReverbModule extends AudioModuleBase {
     });
 
     // 生成混响卷积响应
-    await this.reverb.generate();
+    const reverb = this.reverb;
+    await reverb.generate();
+    if (this.isDisposed() || this.reverb !== reverb) return;
 
     // 创建音频输入处理器
     this.audioInputHandler = new AudioInputHandler(this.reverb, this.Tone);
@@ -152,26 +154,8 @@ export class ReverbModule extends AudioModuleBase {
     if (!this.reverb) return;
 
     const decaySubscription = this.parameters['decay'].subscribe(
-      async (value: number | boolean | string) => {
-        if (this.reverb && typeof value === 'number') {
-          // 缓存当前 wet 值，因为生成新卷积响应后需要重新应用
-          const currentWet = this.reverb.wet.value;
-
-          // 将 wet 渐变到 0，避免在重新生成卷积响应时产生爆破音
-          this.applyParameterRamp(this.reverb.wet, 0, this.smoothTime);
-
-          // 等待一小段时间让渐变生效
-          await new Promise((resolve) =>
-            setTimeout(resolve, this.smoothTime * 1000)
-          );
-
-          // 更新 decay 参数并重新生成卷积响应
-          this.reverb.decay = value;
-          await this.reverb.generate();
-
-          // 将 wet 渐变回原始值
-          this.applyParameterRamp(this.reverb.wet, currentWet, this.smoothTime);
-        }
+      (value: number | boolean | string) => {
+        if (typeof value === 'number') void this.regenerateReverb('decay', value);
       }
     );
 
@@ -185,21 +169,8 @@ export class ReverbModule extends AudioModuleBase {
     );
 
     const preDelaySubscription = this.parameters['preDelay'].subscribe(
-      async (value: number | boolean | string) => {
-        if (this.reverb && typeof value === 'number') {
-          // 与 decay 参数相同的平滑处理
-          const currentWet = this.reverb.wet.value;
-
-          this.applyParameterRamp(this.reverb.wet, 0, this.smoothTime);
-          await new Promise((resolve) =>
-            setTimeout(resolve, this.smoothTime * 1000)
-          );
-
-          this.reverb.preDelay = value;
-          await this.reverb.generate();
-
-          this.applyParameterRamp(this.reverb.wet, currentWet, this.smoothTime);
-        }
+      (value: number | boolean | string) => {
+        if (typeof value === 'number') void this.regenerateReverb('preDelay', value);
       }
     );
 
@@ -208,6 +179,25 @@ export class ReverbModule extends AudioModuleBase {
       wetSubscription,
       preDelaySubscription,
     ]);
+  }
+
+  private async regenerateReverb(parameter: 'decay' | 'preDelay', value: number): Promise<void> {
+    const reverb = this.reverb;
+    if (!reverb || this.isDisposed()) return;
+    const currentWet = reverb.wet.value;
+    try {
+      this.applyParameterRamp(reverb.wet, 0, this.smoothTime);
+      await new Promise((resolve) => setTimeout(resolve, this.smoothTime * 1000));
+      if (this.isDisposed() || this.reverb !== reverb) return;
+      reverb[parameter] = value;
+      await reverb.generate();
+      if (this.isDisposed() || this.reverb !== reverb) return;
+      this.applyParameterRamp(reverb.wet, currentWet, this.smoothTime);
+    } catch (error) {
+      if (!this.isDisposed() && this.reverb === reverb) {
+        console.warn(`[ReverbModule ${this.id}] Failed to regenerate reverb`, error);
+      }
+    }
   }
 
   /**
@@ -225,5 +215,11 @@ export class ReverbModule extends AudioModuleBase {
       }
     }
     super.dispose();
+  }
+
+  protected cleanupFailedAudioInitialization(): void {
+    this.disposeAudioNodes([this.reverb]);
+    this.reverb = undefined;
+    super.cleanupFailedAudioInitialization();
   }
 }

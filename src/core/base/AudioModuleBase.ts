@@ -16,15 +16,12 @@ export abstract class AudioModuleBase extends ModuleBase {
   protected fadeTime: number = 0.001;
   // 较长的渐变时间，用于某些参数的平滑变化
   protected smoothTime: number = 0.005;
-  // 待处理的音频输入队列
-  protected pendingAudioInputs: Array<{
-    inputPortName: string;
-    sourceModuleId: string;
-    sourcePortName: string;
-    audioInput: any;
-  }> = [];
   // 音频处理器对象
   protected audioInputHandler: AudioInputHandler | null = null;
+  // 注册版本用于防止相同 id 的旧异步实例覆盖新实例的生命周期。
+  private initGeneration: number;
+  private initializationPromise: Promise<void> | null = null;
+  private initializationInFlight = false;
 
   // 模块启用状态（新增）
   public enabled: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true);
@@ -51,11 +48,17 @@ export abstract class AudioModuleBase extends ModuleBase {
     this.handleEnabledChange();
 
     // 注册为待初始化模块
-    moduleInitManager.registerPendingModule(this.id);
+    this.initGeneration = moduleInitManager.registerPendingModule(this.id);
 
     // 仅在浏览器环境下初始化Tone.js
     if (typeof window !== 'undefined') {
-      this.initializeTone();
+      this.initializationPromise = this.initializeTone(this.initGeneration);
+    } else {
+      moduleInitManager.markModuleAsFailed(
+        this.id,
+        new Error('Audio modules can only initialize in a browser'),
+        this.initGeneration
+      );
     }
   }
 
@@ -104,11 +107,16 @@ export abstract class AudioModuleBase extends ModuleBase {
   /**
    * 动态加载Tone.js库
    */
-  protected async initializeTone(): Promise<void> {
+  protected async initializeTone(generation: number = this.initGeneration): Promise<void> {
+    this.initializationInFlight = true;
     try {
       const ToneModule = await import('tone');
 
-      if (this.isDisposed()) {
+      if (
+        this.isDisposed() ||
+        generation !== this.initGeneration ||
+        !moduleInitManager.isCurrentRegistration(this.id, generation)
+      ) {
         return;
       }
 
@@ -117,57 +125,91 @@ export abstract class AudioModuleBase extends ModuleBase {
       // 执行子类特定的初始化
       await this.initializeAudio();
 
-      // initializeAudio 期间可能发生项目切换或撤销重建。再次调用动态
-      // dispose，让子类释放刚刚创建的 Tone 节点，避免旧实例复活。
-      if (this.isDisposed()) {
-        this.initialized = true;
-        this.dispose();
+      // initializeAudio 期间可能已销毁。清理晚到的资源，避免再次调用
+      // 非幂等的子类 dispose，也不能重新订阅已经完成的端口。
+      if (
+        this.isDisposed() ||
+        generation !== this.initGeneration ||
+        !moduleInitManager.isCurrentRegistration(this.id, generation) ||
+        !moduleInitManager.isModulePending(this.id)
+      ) {
+        this.initialized = false;
+        this.cleanupFailedAudioInitialization();
         return;
       }
 
       // 标记初始化完成
       this.initialized = true;
-      moduleInitManager.markModuleAsInitialized(this.id);
+      moduleInitManager.markModuleAsInitialized(this.id, generation);
 
-      // 处理待处理的音频输入
-      this.processPendingInputs();
+      // 读取现有接线的最新输出，
+      // 同时恢复初始化失败后上游没有再次发射的音频连接。
+      if (!this.isDisposed()) this.restoreAudioInputBindings();
     } catch (error) {
-      if (this.isDisposed()) {
+      if (
+        this.isDisposed() ||
+        generation !== this.initGeneration ||
+        !moduleInitManager.isCurrentRegistration(this.id, generation)
+      ) {
+        if (generation === this.initGeneration) {
+          this.cleanupFailedAudioInitialization();
+        }
         return;
       }
       console.error(
         `[${this.moduleType}Module ${this.id}] Failed to initialize Tone.js:`,
         error
       );
+      this.initialized = false;
+      this.cleanupFailedAudioInitialization();
+      moduleInitManager.markModuleAsFailed(this.id, error, generation);
+    } finally {
+      if (generation === this.initGeneration) this.initializationInFlight = false;
     }
+  }
+
+  /**
+   * Recreate this module's Tone graph after a failed dynamic import or setup error.
+   * A disposed module cannot be retried because it no longer owns a valid graph.
+   */
+  public retryModuleInitialization(): Promise<void> {
+    if (this.isDisposed()) {
+      return Promise.reject(new Error(`Module ${this.id} has been disposed`));
+    }
+    if (typeof window === 'undefined') {
+      return Promise.reject(new Error('Audio modules can only initialize in a browser'));
+    }
+    if (this.initializationInFlight && this.initializationPromise) {
+      return this.initializationPromise.then(() =>
+        this.initialized ? undefined : this.retryModuleInitialization()
+      );
+    }
+    if (this.initialized) return Promise.resolve();
+    this.cleanupFailedAudioInitialization();
+    this.initialized = false;
+    this.initGeneration = moduleInitManager.registerPendingModule(this.id);
+    this.initializationPromise = this.initializeTone(this.initGeneration);
+    return this.initializationPromise;
+  }
+
+  /**
+   * Releases base-owned resources before retrying a failed setup. Subclasses that
+   * allocate nodes before their setup can throw should override this hook and release
+   * those nodes without completing the module's BehaviorSubjects.
+   */
+  protected cleanupFailedAudioInitialization(): void {
+    // Parameter/input bindings are recreated by initializeAudio. Keeping the old ones
+    // would duplicate reactions after retry; restore the base enabled-state observer.
+    this.clearInternalSubscriptions();
+    if (!this.isDisposed()) this.handleEnabledChange();
+    this.audioInputHandler?.dispose();
+    this.audioInputHandler = null;
   }
 
   /**
    * 子类必须实现的音频初始化方法
    */
   protected abstract initializeAudio(): Promise<void>;
-
-  /**
-   * 处理待处理的音频输入
-   */
-  protected processPendingInputs(): void {
-    if (!this.initialized || this.isDisposed()) return;
-
-    // 处理所有待处理的输入
-    this.pendingAudioInputs.forEach(
-      ({ inputPortName, sourceModuleId, sourcePortName, audioInput }) => {
-        this.handleAudioInput(
-          inputPortName,
-          audioInput,
-          sourceModuleId,
-          sourcePortName
-        );
-      }
-    );
-
-    // 清空队列
-    this.pendingAudioInputs = [];
-  }
 
   /**
    * 启动音频上下文
@@ -279,13 +321,6 @@ export abstract class AudioModuleBase extends ModuleBase {
     sourcePortName: string
   ): void {
     if (!this.initialized) {
-      // 将音频输入添加到待处理队列
-      this.pendingAudioInputs.push({
-        inputPortName,
-        sourceModuleId,
-        sourcePortName,
-        audioInput,
-      });
       // 更新输入端口状态
       this.inputPorts[inputPortName].next(audioInput);
       return;
@@ -358,7 +393,11 @@ export abstract class AudioModuleBase extends ModuleBase {
 
     // Tone Context 属于应用级共享资源，不应由任意单个模块销毁。
     // 模块只注销自身并释放自己创建的节点。
-    moduleInitManager.recordDisposal(this.id);
+    moduleInitManager.recordDisposal(
+      this.id,
+      this.initGeneration,
+      false
+    );
     this.enabled.complete();
 
     // 调用父类的dispose方法清理基础资源

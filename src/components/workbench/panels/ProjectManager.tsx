@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import {
   usePersistStore,
   type ProjectConfig,
@@ -37,8 +37,10 @@ import {
   RefreshCcw,
   Info,
   AlertTriangle,
+  Upload,
 } from 'lucide-react';
 import { WorkbenchPanelHeader } from '@/components/layout/WorkbenchPanel';
+import { toast } from 'sonner';
 
 import { useSearchParams } from 'next/navigation';
 
@@ -49,6 +51,9 @@ interface ProjectManagerProps {
 export function ProjectManager({ onClose }: ProjectManagerProps) {
   const [projectName, setProjectName] = useState('新项目');
   const [projectDesc, setProjectDesc] = useState('');
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [isSavingProject, setIsSavingProject] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const searchParams = useSearchParams();
   const initialTab =
@@ -65,11 +70,14 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
     loadProject,
     deleteProject,
     exportProjectToFile,
-    isLoading,
+    importProjectFromJson,
     isProjectListLoading,
     hasHydratedProjects,
     projectsLastFetchedAt,
     projectListError,
+    syncStatus,
+    syncError,
+    lastAutosavedAt,
     fetchProjects,
   } = usePersistStore();
 
@@ -108,6 +116,23 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
     projectListError === 'projects-unavailable' ||
     projectListError === 'built-in-projects-unavailable';
 
+  const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      const imported = await importProjectFromJson(await file.text());
+      if (imported) {
+        toast.success('项目已导入为本地草稿');
+      } else {
+        toast.error('项目文件无效，未导入任何内容。');
+      }
+    } catch {
+      toast.error('无法读取项目文件。');
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col relative">
       <WorkbenchPanelHeader
@@ -129,6 +154,25 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
                 size={15}
                 className={isProjectListLoading ? 'animate-spin' : ''}
               />
+            </Button>
+
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              aria-label="导入项目 JSON"
+              onChange={handleImport}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => importInputRef.current?.click()}
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              title="导入项目 JSON"
+              aria-label="导入项目 JSON"
+            >
+              <Upload size={15} />
             </Button>
 
             {/* Current Project Info Dialog */}
@@ -193,7 +237,7 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
             </Dialog>
 
             {/* Save Project Dialog */}
-            <Dialog>
+            <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
               <DialogTrigger asChild>
                 <Button
                   variant="ghost"
@@ -242,27 +286,29 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
                       取消
                     </Button>
                   </DialogClose>
-                  <DialogClose asChild>
-                    <Button
-                      className="text-xs px-6"
-                      disabled={isLoading && !hasCache && !hasFetchedProjects}
-                      onClick={async () => {
-                        if (!projectName.trim()) {
-                          alert('请输入项目名称');
-                          return;
-                        }
-                        const success = await saveCurrentCanvas(
-                          projectName,
-                          projectDesc
-                        );
-                        if (!success) {
-                          alert('保存失败，请检查网络或权限');
-                        }
-                      }}
-                    >
-                      确认保存
-                    </Button>
-                  </DialogClose>
+                  <Button
+                    className="text-xs px-6"
+                    disabled={isSavingProject}
+                    onClick={async () => {
+                      if (!projectName.trim()) {
+                        alert('请输入项目名称');
+                        return;
+                      }
+                      setIsSavingProject(true);
+                      const success = await saveCurrentCanvas(
+                        projectName,
+                        projectDesc
+                      );
+                      setIsSavingProject(false);
+                      if (success) {
+                        setIsSaveDialogOpen(false);
+                      } else {
+                        alert('保存失败，本地草稿已保留。');
+                      }
+                    }}
+                  >
+                    {isSavingProject ? '保存中…' : '确认保存'}
+                  </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -301,6 +347,17 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
           <ProjectSyncError
             error={projectListError}
             onRetry={() => fetchProjects({ force: true })}
+          />
+        )}
+
+        {(syncStatus === 'saved-local' ||
+          syncStatus === 'syncing-cloud' ||
+          syncStatus === 'conflict' ||
+          syncStatus === 'error') && (
+          <ProjectSaveStatus
+            status={syncStatus}
+            error={syncError}
+            savedAt={lastAutosavedAt}
           />
         )}
 
@@ -386,8 +443,8 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
                         key={project.id || project.name}
                         project={project}
                         onLoad={() => loadProject(project)}
-                        onExport={() => exportProjectToFile(project.name)}
-                        isActive={currentProject?.name === project.name}
+                        onExport={() => void exportProjectToFile(project.id)}
+                        isActive={currentProject?.id === project.id}
                         isBuiltIn
                       />
                     ))
@@ -439,6 +496,45 @@ function ProjectSyncError({
       >
         重试
       </Button>
+    </div>
+  );
+}
+
+function ProjectSaveStatus({
+  status,
+  error,
+  savedAt,
+}: {
+  status: 'saved-local' | 'syncing-cloud' | 'conflict' | 'error';
+  error: string | null;
+  savedAt: string | null;
+}) {
+  const isProblem = status === 'conflict' || status === 'error';
+  const text =
+    error ??
+    (status === 'syncing-cloud'
+      ? '正在同步云端项目…'
+      : savedAt
+        ? `已保存本地草稿（${new Date(savedAt).toLocaleTimeString('zh-CN')}）`
+        : '已保存本地草稿');
+
+  return (
+    <div
+      role={isProblem ? 'alert' : 'status'}
+      className={`mx-4 mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+        isProblem
+          ? 'border-amber-500/25 bg-amber-500/[0.07] text-amber-950 dark:text-amber-100'
+          : 'border-primary/15 bg-primary/[0.04] text-muted-foreground'
+      }`}
+    >
+      {isProblem ? (
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+      ) : (
+        <FolderSync
+          className={`h-3.5 w-3.5 shrink-0 text-primary ${status === 'syncing-cloud' ? 'animate-spin' : ''}`}
+        />
+      )}
+      <span>{text}</span>
     </div>
   );
 }

@@ -25,6 +25,16 @@
         "label": "Auto Save",
         "description": "Automatically save canvas state"
       },
+      "nodeDetail": {
+        "label": "Node Detail",
+        "description": "Hide card details when zoomed out to keep large projects responsive",
+        "options": {
+          "auto": "Auto (by zoom)",
+          "full": "Always full",
+          "compact": "Always compact",
+          "minimal": "Always minimal"
+        }
+      },
       "snapToGrid": {
         "label": "Snap to Grid",
         "description": "Snap modules to the grid"
@@ -91,6 +101,16 @@
     }
   },
   "Workbench": {
+    "saveStatus": {
+      "idle": "Not saved",
+      "disabled": "Autosave off",
+      "saving-local": "Saving draft…",
+      "saved-local": "Saved locally",
+      "syncing-cloud": "Syncing…",
+      "saved-cloud": "Synced to cloud",
+      "conflict": "Cloud version conflict",
+      "error": "Save failed"
+    },
     "navigation": {
       "projects": "Project Manager",
       "modules": "Module Browser",
@@ -281,6 +301,7 @@
       "configureApi": "Configure an AI model API key in Settings first.",
       "settingsPath": "Open Settings > AI Models",
       "unknownError": "Unknown error",
+      "serverError": "The server hit an unexpected error. Please try again later.",
       "requestError": "Sorry, the request failed: {message}",
       "requiresApproval": "Your approval is required to continue.",
       "approvalRequired": "Approval required",

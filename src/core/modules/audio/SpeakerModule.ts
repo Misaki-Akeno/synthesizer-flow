@@ -139,6 +139,7 @@ export class SpeakerModule extends AudioModuleBase {
       }
     } catch (error) {
       console.error(`[${this.moduleType}Module ${this.id}] 初始化失败:`, error);
+      throw error;
     }
   }
 
@@ -232,7 +233,7 @@ export class SpeakerModule extends AudioModuleBase {
     sourceModuleId: string,
     sourcePortName: string
   ): void {
-    // 基类 AudioModuleBase 会在 !this.initialized 时处理 pendingAudioInputs
+    // 初始化或重试完成后，基类会从仍有效的源端口恢复接线。
 
     // 根据输入端口选择正确的目标节点
     if (inputPortName === 'audioInRight' && this.rightInputHandler) {
@@ -319,5 +320,19 @@ export class SpeakerModule extends AudioModuleBase {
 
     this.disposeAudioNodes([this.merger, this.gainLeft, this.gainRight]);
     super.dispose();
+  }
+
+  protected cleanupFailedAudioInitialization(): void {
+    if (this.contextCheckInterval) {
+      clearInterval(this.contextCheckInterval);
+      this.contextCheckInterval = null;
+    }
+    this.rightInputHandler?.dispose();
+    this.rightInputHandler = null;
+    this.disposeAudioNodes([this.merger, this.gainLeft, this.gainRight]);
+    this.merger = undefined;
+    this.gainLeft = undefined;
+    this.gainRight = undefined;
+    super.cleanupFailedAudioInitialization();
   }
 }

@@ -76,12 +76,15 @@ interface FlowState {
   currentProjectId: string;
   transport: TransportDocument;
   subpatches: SubpatchDocument[];
+  /** 画布内容变更版本，用于草稿保存与异步操作的过期检查。 */
+  revision: number;
   canUndo: boolean;
   canRedo: boolean;
   history: {
     past: SerializedCanvas[];
     future: SerializedCanvas[];
   };
+  retryAudioModule: (nodeId: string) => Promise<boolean>;
   setCurrentProjectId: (projectId: string) => void;
   setTransportBpm: (bpm: number) => void;
   setTransportLoopEnabled: (enabled: boolean) => void;
@@ -333,7 +336,17 @@ function pruneTransportAutomation(
   };
 }
 
-export const useFlowStore = create<FlowState>((set, get) => {
+export const useFlowStore = create<FlowState>((rawSet, get) => {
+  // 统一在写入时推进内容 revision：选择、尺寸测量等纯视图变化不计入，
+  // 其余节点/连线/走带/子图/项目切换都会使依赖 revision 的草稿与 Agent
+  // 请求失效，避免在各个 action 中逐一维护计数。
+  const set = (partial: Partial<FlowState>) =>
+    rawSet((state) =>
+      partial.revision === undefined &&
+      hasContentChanged({ ...state, ...partial }, state)
+        ? { ...partial, revision: state.revision + 1 }
+        : partial
+    );
   const draggingNodeIds = new Set<string>();
   const automationWriteLanes = new Set<string>();
   const automationTouchUntil = new Map<string, number>();
@@ -440,12 +453,18 @@ export const useFlowStore = create<FlowState>((set, get) => {
     canUndo: false,
     canRedo: false,
     history: { past: [], future: [] },
+    revision: 0,
+
+    retryAudioModule: (nodeId) =>
+      audioGraphRuntime.retryModuleInitialization(nodeId),
 
     setCurrentProjectId: (currentProjectId) => set({ currentProjectId }),
 
     setTransportBpm: (bpm) => {
       const nextBpm = Math.min(320, Math.max(20, Math.round(bpm)));
       if (get().transport.bpm === nextBpm) return;
+      // 先同步 Tone Transport：随后的参数补丁会重建 Part，并按当前速度换算 tick
+      audioGraphRuntime.setTransportBpm(nextBpm);
       recordHistory();
       const nodes = get().nodes.map((node) =>
         node.data.type === 'sequencer'
@@ -467,7 +486,6 @@ export const useFlowStore = create<FlowState>((set, get) => {
         edges: committed.edges,
         transport: { ...get().transport, bpm: nextBpm },
       });
-      audioGraphRuntime.setTransportBpm(nextBpm);
     },
 
     setTransportLoopEnabled: (loopEnabled) => {
@@ -663,7 +681,8 @@ export const useFlowStore = create<FlowState>((set, get) => {
       });
       if (!changed) return;
       const committed = commitGraph(nodes, get().edges);
-      set({ nodes, edges: committed.edges });
+      // 自动化回放是已有文档的播放结果，不使等待中的 Agent 编辑失效。
+      set({ nodes, edges: committed.edges, revision: get().revision });
     },
 
     clearAutomationLane: (laneId) => {
@@ -959,6 +978,9 @@ export const useFlowStore = create<FlowState>((set, get) => {
     addNode: (type, label, position, id) => {
       if (!moduleDefinitionRegistry.has(type)) {
         throw new Error(`未知模块类型: ${type}`);
+      }
+      if (id && get().nodes.some((node) => node.id === id)) {
+        throw new Error(`模块 ID 已存在: ${id}`);
       }
       const nodeId = id || createNodeId(get().nodes.map((node) => node.id));
       recordHistory();
@@ -1279,3 +1301,44 @@ export const useFlowStore = create<FlowState>((set, get) => {
     },
   };
 });
+
+function hasSameNodeContent(next: FlowNode[], previous: FlowNode[]): boolean {
+  return (
+    next.length === previous.length &&
+    next.every((node, index) => {
+      const before = previous[index];
+      return (
+        node.id === before.id &&
+        node.data === before.data &&
+        node.position.x === before.position.x &&
+        node.position.y === before.position.y
+      );
+    })
+  );
+}
+
+function hasSameEdgeContent(next: Edge[], previous: Edge[]): boolean {
+  return (
+    next.length === previous.length &&
+    next.every((edge, index) => {
+      const before = previous[index];
+      return (
+        edge.id === before.id &&
+        edge.source === before.source &&
+        edge.target === before.target &&
+        edge.sourceHandle === before.sourceHandle &&
+        edge.targetHandle === before.targetHandle
+      );
+    })
+  );
+}
+
+function hasContentChanged(next: FlowState, previous: FlowState): boolean {
+  return (
+    next.currentProjectId !== previous.currentProjectId ||
+    next.transport !== previous.transport ||
+    next.subpatches !== previous.subpatches ||
+    !hasSameNodeContent(next.nodes, previous.nodes) ||
+    !hasSameEdgeContent(next.edges, previous.edges)
+  );
+}

@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - Released
+
+Prepared on 2026-10-14 on `development`, with a merge into `main` planned. This major milestone brings together the modular audio workbench, MIDI editing, global transport, and AI-assisted patching.
+
+### Workbench & Editing
+
+- Added canvas undo/redo, grouped history transactions, copy/paste, duplication, and Subpatch grouping with macro controls.
+- Added a graphical ADSR envelope editor, a bottom MIDI clip editor, and chat actions in the panel header.
+- Added automatic zoom-based node detail levels (full, compact, minimal), remembered node dimensions, and simpler edge rendering at lower zoom levels.
+- Split runtime structure snapshots from throttled port telemetry to reduce unnecessary node rendering.
+
+### Audio & MIDI
+
+- Introduced a declarative audio graph and reconciler. Canvas documents hold serializable data, while the runtime applies minimal patches to audio modules.
+- Added filter, VCA, mixer, noise, master limiter, and master recorder modules. Master recordings export as 16-bit WAV.
+- Added polyphonic MIDI/MPE clip editing, performance recording, quantization, and MIDI Learn mappings.
+- Added project-level BPM, time signature, playback, loop ranges, and parameter automation.
+- Moved MIDI scheduling and transport looping to the audio clock and aligned the playhead with audible output.
+- Added versioned module initialization, timeout/failure states, and retry controls; restored live audio inputs after successful retries.
+- Released held and pending notes on stop, disconnect, disable, and piano UI unmount. Preserved neutral control values when inputs disconnect.
+- Synchronized stopped Transport BPM before creating sequencer parts.
+
+### AI Agent
+
+- Added provider profiles for ModelScope, DeepSeek, OpenAI, Anthropic, Google Gemini, OpenRouter, and custom OpenAI-compatible endpoints, with encrypted server-side API key storage for signed-in users.
+- Organized tools by capability and added progressively loaded module Skills backed by shared module definitions.
+- Added deterministic audio graph diagnostics and approval-gated repair operations.
+- Added anonymous chat with request-scoped API keys and bounded, expiring in-memory checkpoints. Custom endpoints and knowledge search require login.
+- Persisted shadow canvas state, pending operations, and loaded Skills so approval actions can resume across requests.
+- Applied client operation batches as one undoable transaction and rejected responses bound to an outdated canvas revision.
+- Returned chat failures as serializable error events so production clients can display useful errors.
+
+### Projects & Persistence
+
+- Added local draft autosave with IndexedDB, cloud sync status, and optimistic revision checks.
+- Isolated project caches by account and serialized manual/automatic saves to avoid overlapping writes.
+- Preserved newer drafts when a cloud save completes and checked local/remote revisions when loading projects.
+- Added public bundled examples and improved JSON import/export and project restoration.
+- Extended project, checkpoint, and RAG metadata with versioning, audit timestamps, and supporting indexes.
+
+### Testing & Documentation
+
+- Added Agent Golden Set evaluation with deterministic scoring of tool traces, arguments, client operations, and approvals.
+- Added browser regression coverage for canvas editing, MIDI controls, local draft restoration, and audio playback.
+- Added GitHub Actions checks for types, lint, unit tests, example validation, production build, and browser tests.
+- Refreshed the README with a workbench screenshot, feature sections, module overview, setup instructions, and architecture diagram.
+
+### Known Issues
+
+- Deferred four review findings: audio E2E selectors/node visibility, BPM undo timing, missing list entries for local drafts, and saving pending edits before JSON import. Reproduction details and validation results are tracked in [Known Issues](docs/KNOWN_ISSUES.md).
+- Pre-merge validation passed type checking, lint, production build, and 355 unit/integration tests. Production browser tests passed 6 of 7 cases; the audio E2E case remains unresolved.
+
 ## [0.9.4] - 2026-06-30
 
 ### Security
@@ -68,14 +120,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.9.2] - 2026-03-30
 
 ### Architecture & Framework Upgrade
+
 - **Next.js 16 Upgrade**: Upgraded core framework to Next.js 16.2.1, including mandatory async request API migration and middleware to proxy transition.
 - **React 19.2**: Updated React and React-dom to latest version 19.2.4.
 - **Turbopack by Default**: Switched to Turbopack as the default compiler for dev and build processes, with optimized configuration for Node.js module fallbacks.
 
 ### Features & Fixes
+
 - **Auth Adapter Fix**: Updated `DrizzleAdapter` to support new `AdapterUser` requirements in `next-auth` upgrade, including the `role` field.
 - **SSR Store Safety**: Fixed a critical `TypeError` where `localStorage` was accessed during SSR in `settings-store.ts` by using `createJSONStorage` with an environment check.
-- **UI & DX Polish**: 
+- **UI & DX Polish**:
   - Renamed `src/middleware.ts` to `src/proxy.ts` following Next.js 16 conventions.
   - Suppressed redundant `Invalid option` warnings in `ModuleBase` during device enumeration.
   - Improved `tsconfig.json` and `next.config.ts` compatibility with Next.js 16.
@@ -84,7 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security & RBAC
 
-- **RBAC Framework Implementation**: Replaced hardcoded email checks with a robust Role-Based Access Control (RBAC) system. 
+- **RBAC Framework Implementation**: Replaced hardcoded email checks with a robust Role-Based Access Control (RBAC) system.
 - **Database Schema Update**: Added a `role` field to the `users` table to persist user permissions.
 - **NextAuth Integration**: Seamlessly integrated user roles into the authentication session, ensuring permissions are available both on the server and client.
 - **Centralized Permission Logic**: Introduced `src/lib/auth/rbac.ts` as a single source of truth for permission checks (`isAdmin`, `hasPermission`).
@@ -285,14 +339,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 创建专门的 `/src/store/settings.ts` 处理应用设置
   - 实现便捷的Hook函数：`useCanvasSettings()`, `useAISettings()`, `useIsAIConfigured()`
   - 内置多层安全保护，自动处理未初始化数据，解决生产环境报错问题
-
 - **分离关注点架构**: 实现项目管理与设置管理的完全分离
 
   - 重构 `/src/store/project-store.ts` 专门负责项目数据管理
   - 删除臃肿的混合文件 `persist-store.ts`，让代码更清晰专业
   - 更新所有相关组件的导入路径，保持向后兼容
-
 - **全面重写设置面板**: 使用新架构重构 `SettingPanels.tsx`
+
   - 减少60%的代码复杂度，提高可维护性
   - 更安全的类型检查 and 状态管理
   - 优化的性能和用户体验
@@ -314,13 +367,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 添加文件、编辑、视图和帮助主菜单，每个菜单含多个选项
   - 支持键盘快捷键显示和命令执行
   - 移动端自适应为下拉菜单，保持功能完整性
-
 - **对话框组件**: 添加Dialog组件系统
 
   - 实现帮助和设置对话框，提供应用信息和配置入口
   - 统一的对话框设计风格，包含标题、内容和操作按钮区域
-
 - **导航体验改进**:
+
   - 优化侧边栏提示显示位置，确保多平台一致性
   - 改善搜索栏视觉效果，去除多余的搜索图标
   - 标准化布局组件的空白和对齐方式
@@ -365,14 +417,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 实现`Logger`类和`createModuleLogger`函数，支持模块化日志记录
   - 集成控制台日志和Toast通知，提供不同级别的日志显示
   - 为关键模块添加专用日志记录器，改进错误跟踪和调试体验
-
 - **MIDI设备管理改进**:
 
   - 为MIDI输入模块添加"刷新MIDI设备"按钮，方便用户重新扫描设备
   - 实现ModuleButton组件作为可复用的模块内UI元素
   - 优化MIDI设备连接状态提示和错误处理
-
 - **数据验证增强**:
+
   - 添加SerializationValidator模块，使用Zod进行严格的数据验证
   - 为画布序列化/反序列化流程增加验证层，提高系统安全性
   - 改进项目导入导出功能的健壮性
@@ -384,8 +435,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 改进登录流程，添加登录状态Toast提示
   - 优化用户操作反馈，包括登录中和成功状态显示
   - 完善错误处理和日志记录
-
 - **模块参数调整**:
+
   - 将AdvancedOscillator默认波形从sine改为triangle，提供更丰富的泛音
 
 ### Bug Fixes

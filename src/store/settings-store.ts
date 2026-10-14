@@ -15,12 +15,24 @@ const logger = createModuleLogger('Settings');
 
 // ======== 设置类型定义 ========
 
+/**
+ * 节点卡片细节档位：auto 按缩放比例自动切换，其余值固定为对应档位。
+ */
+export const NODE_DETAIL_MODES = [
+  'auto',
+  'full',
+  'compact',
+  'minimal',
+] as const;
+export type NodeDetailMode = (typeof NODE_DETAIL_MODES)[number];
+
 export interface CanvasSettings {
   darkMode: boolean;
   autoSave: boolean;
   snapToGrid: boolean;
   gridSize: number;
   controlPanelVisible: boolean;
+  nodeDetailMode: NodeDetailMode;
 }
 
 export type AISettings = AIModelSettings;
@@ -33,6 +45,7 @@ export const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
   snapToGrid: true,
   gridSize: 10,
   controlPanelVisible: true,
+  nodeDetailMode: 'auto',
 } as const;
 
 // ======== Store 状态接口 ========
@@ -81,6 +94,11 @@ function safeCanvasSettings(settings: unknown): CanvasSettings {
       typeof obj.controlPanelVisible === 'boolean'
         ? obj.controlPanelVisible
         : DEFAULT_CANVAS_SETTINGS.controlPanelVisible,
+    nodeDetailMode: NODE_DETAIL_MODES.includes(
+      obj.nodeDetailMode as NodeDetailMode
+    )
+      ? (obj.nodeDetailMode as NodeDetailMode)
+      : DEFAULT_CANVAS_SETTINGS.nodeDetailMode,
   };
 }
 

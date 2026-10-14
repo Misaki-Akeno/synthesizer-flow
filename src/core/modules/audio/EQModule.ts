@@ -189,4 +189,10 @@ export class EQModule extends AudioModuleBase {
         }
         super.dispose();
     }
+
+    protected cleanupFailedAudioInitialization(): void {
+        this.disposeAudioNodes([this.eq]);
+        this.eq = undefined;
+        super.cleanupFailedAudioInitialization();
+    }
 }

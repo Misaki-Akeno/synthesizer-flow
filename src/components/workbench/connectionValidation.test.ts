@@ -28,8 +28,6 @@ describe('isValidModuleConnection', () => {
         numberOut: PortType.NUMBER,
         audioOut: PortType.AUDIO,
       },
-      inputValues: {},
-      outputValues: {},
     });
     moduleDefinitionRegistry.registerSnapshot({
       id: 'target',
@@ -44,8 +42,6 @@ describe('isValidModuleConnection', () => {
         audioIn: PortType.AUDIO,
       },
       outputPortTypes: {},
-      inputValues: {},
-      outputValues: {},
     });
   });
 

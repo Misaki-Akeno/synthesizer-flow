@@ -44,7 +44,10 @@ import { mergeMidiRecording, MidiClipRecorder } from '@/core/midi/recording';
 import { TRANSPORT_PPQ } from '@/core/transport/types';
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/store/canvas-store';
-import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
+import {
+  resolveLoopRange,
+  useTransportRuntimeStore,
+} from '@/store/transport-runtime-store';
 import { useMidiLearnStore } from '@/store/midi-learn-store';
 
 const AUTOMATION_FRAME_INTERVAL_MS = 1000 / 30;
@@ -212,6 +215,30 @@ export function TransportBar() {
     });
   }, [addMidiMapping, applyMidiControlChange]);
 
+  // 撤销、导入项目也会改变 BPM，不只经过 setTransportBpm
+  useEffect(() => {
+    audioGraphRuntime.setTransportBpm(transport.bpm);
+  }, [transport.bpm]);
+
+  // 循环交给 Tone Transport 在音频时钟上执行，界面帧只负责显示和自动化。
+  useEffect(() => {
+    const { startTick, endTick } = resolveLoopRange(
+      projectLengthTicks,
+      transport.loopRange.startTick,
+      transport.loopRange.endTick
+    );
+    audioGraphRuntime.setTransportLoop(
+      transport.loopEnabled,
+      startTick,
+      endTick
+    );
+  }, [
+    projectLengthTicks,
+    transport.loopEnabled,
+    transport.loopRange.endTick,
+    transport.loopRange.startTick,
+  ]);
+
   useEffect(() => {
     if (!isPlaying) return;
     let animationFrame = 0;
@@ -227,7 +254,7 @@ export function TransportBar() {
           transport.loopRange.endTick,
           audioGraphRuntime.getTransportPositionTicks()
         );
-      if (result.wrapped) {
+      if (result.requiresSeek) {
         audioGraphRuntime.seekTransport(result.positionTicks);
       }
       if (

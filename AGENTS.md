@@ -152,7 +152,18 @@ reconciliation boundary:
 - `src/core/runtime/AudioGraphRuntime.ts`: the only UI-facing service allowed to
   own `ModuleBase`, Tone.js, or Web Audio objects
 - `src/core/hooks/useRuntimeModule.ts`: exposes throttled, serializable runtime
-  snapshots through `useSyncExternalStore`
+  snapshots through `useSyncExternalStore`. `useRuntimeModule` carries
+  structure (parameters, metadata, port types, custom UI) and only changes on
+  port activity when a port-driven custom UI (for example piano key highlights)
+  actually changes; port values live in `useRuntimeModuleTelemetry`, which only
+  components that display them (selected-port labels, Oscilloscope, DevTools)
+  should subscribe to
+- `src/store/canvas-lod-store.ts`: zoom-based node detail level
+  (`full`/`compact`/`minimal`) with hysteresis; low levels render the
+  read-only `LowDetailNode` without runtime subscriptions, and the
+  `nodeDetailMode` canvas setting can pin a fixed level. Modules that mutate
+  parameter metadata in place (such as list options) must call
+  `setParameterOptions` so the runtime refreshes its snapshot
 
 React Flow nodes must contain only serializable declaration data (`type`,
 `label`, `parameters`, and `enabled`). Never put a `ModuleBase`, AudioNode,
@@ -183,6 +194,14 @@ clocks per sequencer:
 - `src/components/workbench/TransportBar.tsx`: the primary transport UI;
   compact MIDI and piano-roll controls mirror the same global state
 
+Looping runs on Tone Transport's own loop (`transportService.setLoop`), not by
+seeking from UI frames. A frame-driven seek can skip events on the loop-start
+tick, such as a note-off wrapped there, and leave notes stuck. Sequencers
+release held notes on the Transport `loop` event, truncate notes at the clip
+end, and emit nothing while disabled. The playhead reads the audible position
+(`Tone.immediate()` minus output latency), not `Transport.ticks`, which
+includes look-ahead.
+
 Automation playback must update parameters through `useFlowStore` so changes
 still reconcile into minimal graph patches. Do not write playback position into
 React Flow nodes, project history, or project JSON. New transport metadata must
@@ -204,6 +223,7 @@ remain optional so older project files continue to import with default values.
 - Manages Tone.js initialization lifecycle
 - Provides fade/smooth parameter ramps to avoid audio clicks
 - Handles audio context management and resource disposal
+- After initialization or retry, restores audio inputs from live source-port bindings; removed sources must not be restored. Late initialization cleans up resources without repeating subclass disposal or adding subscriptions to completed ports.
 
 ### Creating a New Module
 
@@ -325,6 +345,8 @@ npx vitest run src/path/to/file.test.ts
 
 - Manages project list and current project
 - Handles saving/loading from database
+- Project caches carry the current account ID. Caches without an owner (written before ownership existed) and anonymous drafts are claimed by the next signed-in account; the cache is cleared only on explicit logout or when a different account signs in, before canvas restoration. Never clear it because the session reads as unauthenticated: next-auth v4 reports failed session requests that way. Cloud loads check the latest revision before restoring a local draft; divergent drafts remain available for export and require manual merging.
+- Manual and automatic saves share a per-project lock. First cloud saves transfer newer drafts to the returned cloud ID and revision; autosave submits them without waiting for another edit.
 
 **useSettingsStore** (`src/store/settings-store.ts`):
 
@@ -365,6 +387,7 @@ npx vitest run src/path/to/file.test.ts
 - **Agent Skills**: Module guides combine curated usage advice with parameter and port schemas extracted from real module classes
 - **Agent Evals**: Golden Set benchmarks score tool traces, arguments, client operations, approvals, and response constraints
 - **Checkpointer**: Database-backed state persistence for conversations
+- **Anonymous chat**: `chatWithAgent` also serves unauthenticated users. They use only the API key sent with the request (never stored, fixed providers ignore client endpoints), use UUID thread IDs and the `anon:<threadId>` namespace; custom endpoints and knowledge searches require login. Anonymous checkpoints stay in process memory for at most 30 minutes, with 32 sessions, 128 checkpoints and 1 MB per session; process restarts invalidate them. Signed-in users keep encrypted server-side settings and `<userId>:<threadId>` database keys. Approval actions resume checkpoints with an empty messages array; ordinary chat requires non-empty messages. Every new turn seeds its execution snapshot before the first tool can interrupt.
 
 ### Tool System
 

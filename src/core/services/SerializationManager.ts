@@ -1,5 +1,3 @@
-'use client';
-
 import type { Edge } from '@xyflow/react';
 import type { FlowNode, RuntimeModuleSnapshot } from '@/core/graph/types';
 import type {

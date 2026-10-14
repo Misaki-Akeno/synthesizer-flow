@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { SearchBar } from '../workbench/SearchBar';
+import { ProjectSaveStatus } from '../workbench/ProjectSaveStatus';
 import {
   Menu,
   LayoutPanelTop,
@@ -474,6 +475,7 @@ export function Header({ className }: HeaderProps) {
 
       {/* 右侧区域：按钮 */}
       <div className="flex justify-end items-center gap-2 flex-1">
+        <ProjectSaveStatus />
         <SearchBar className="hidden w-44 xl:flex 2xl:w-56" />
         <TooltipProvider>
           <Tooltip>

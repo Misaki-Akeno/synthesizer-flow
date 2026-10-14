@@ -151,7 +151,10 @@ export default function SerializationTester() {
                 return;
               }
 
-              const success = await store.saveAsPreset(projectName, projectDesc);
+              const success = await store.saveAsPreset(
+                projectName,
+                projectDesc
+              );
               if (success) {
                 alert(`预设 "${projectName}" 已保存!`);
               } else {
@@ -284,13 +287,13 @@ export default function SerializationTester() {
                       key={project.name}
                       project={project}
                       onLoad={() => loadProject(project)}
-                      onExport={() => exportProjectToFile(project.name)}
+                      onExport={() => void exportProjectToFile(project.id)}
                       onDelete={() => {
                         if (confirm(`确定要删除项目"${project.name}"吗?`)) {
                           deleteProject(project.id);
                         }
                       }}
-                      isActive={currentProject?.name === project.name}
+                      isActive={currentProject?.id === project.id}
                     />
                   ))
                 )}
@@ -306,9 +309,9 @@ export default function SerializationTester() {
                     key={project.id || project.name}
                     project={project}
                     onLoad={() => loadProject(project)}
-                    onExport={() => exportProjectToFile(project.name)}
-                    onDelete={() => { }} // 内置预设不允许删除
-                    isActive={currentProject?.name === project.name}
+                    onExport={() => void exportProjectToFile(project.id)}
+                    onDelete={() => {}} // 内置预设不允许删除
+                    isActive={currentProject?.id === project.id}
                     isBuiltIn
                   />
                 ))}

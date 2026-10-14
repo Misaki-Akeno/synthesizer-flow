@@ -3,11 +3,15 @@ import { RunnableConfig } from '@langchain/core/runnables';
 import { AgentState } from './state';
 import { StructuredTool } from '@langchain/core/tools';
 import { normalizeLegacyToolCall } from '../tools/legacy';
+import type { AgentExecutionContext } from '../core/types';
 
 export class SequentialToolNode {
   tools: StructuredTool[];
 
-  constructor(tools: StructuredTool[]) {
+  constructor(
+    tools: StructuredTool[],
+    private readonly getExecutionContext?: () => AgentExecutionContext
+  ) {
     this.tools = tools;
   }
 
@@ -16,7 +20,12 @@ export class SequentialToolNode {
     const lastMessage = messages[messages.length - 1] as AIMessage;
 
     if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
-      return { messages: [] };
+      return {
+        messages: [],
+        ...(this.getExecutionContext
+          ? { execution: this.getExecutionContext() }
+          : {}),
+      };
     }
 
     const toolMessages: ToolMessage[] = [];
@@ -65,6 +74,11 @@ export class SequentialToolNode {
       }
     }
 
-    return { messages: toolMessages };
+    return {
+      messages: toolMessages,
+      ...(this.getExecutionContext
+        ? { execution: this.getExecutionContext() }
+        : {}),
+    };
   }
 }

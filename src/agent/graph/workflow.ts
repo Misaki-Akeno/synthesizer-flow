@@ -8,6 +8,7 @@ import { getSystemPrompt } from '../prompts/system';
 import { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
 import type { AgentToolRegistry } from '../tools/definitions';
 import { getCanonicalToolName } from '../tools/legacy';
+import type { AgentExecutionContext } from '../core/types';
 
 type ToolBindableChatModel = BaseChatModel & {
   bindTools: NonNullable<BaseChatModel['bindTools']>;
@@ -39,7 +40,8 @@ function getConfiguredModel(
 
 export function createGraph(
   toolRegistry: AgentToolRegistry,
-  checkpointer?: BaseCheckpointSaver
+  checkpointer?: BaseCheckpointSaver,
+  getExecutionContext?: () => AgentExecutionContext
 ) {
   const { tools } = toolRegistry;
   const approvalRequiredToolNames = new Set(
@@ -52,10 +54,16 @@ export function createGraph(
     approvalRequiredToolNames.has(tool.name)
   );
 
-  const safeToolNodeInstance = new SequentialToolNode(safeTools);
+  const safeToolNodeInstance = new SequentialToolNode(
+    safeTools,
+    getExecutionContext
+  );
   // 只要同一批调用中包含破坏性工具，就整体等待批准；批准后必须能够
   // 顺序执行该批次中的常规工具，否则混合调用会产生 "tool not found"。
-  const unsafeToolNodeInstance = new SequentialToolNode(tools);
+  const unsafeToolNodeInstance = new SequentialToolNode(
+    tools,
+    getExecutionContext
+  );
 
   const safeToolNode = (
     state: typeof AgentState.State,
