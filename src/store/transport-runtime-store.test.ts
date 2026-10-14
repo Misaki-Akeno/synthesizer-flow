@@ -39,7 +39,29 @@ describe('transport runtime store', () => {
       .getState()
       .advance(16, 120, 3840, true, 480, 1440, 1680);
 
-    expect(result).toMatchObject({ positionTicks: 720, wrapped: true });
+    expect(result).toMatchObject({
+      positionTicks: 720,
+      wrapped: true,
+      requiresSeek: true,
+    });
+  });
+
+  it('follows a Tone-native loop without seeking and ignores latency jitter', () => {
+    useTransportRuntimeStore.getState().play();
+    const advance = (now: number, external: number) =>
+      useTransportRuntimeStore
+        .getState()
+        .advance(now, 120, 3840, true, 0, 1920, external);
+    advance(0, 1800);
+
+    // 输出延迟估计略有回退时，播放头保持不动
+    expect(advance(16, 1790)).toMatchObject({ positionTicks: 1800, wrapped: false });
+    // Transport 已在音频时钟上跳回起点：重新应用自动化，但不能再 seek
+    expect(advance(32, 40)).toMatchObject({
+      positionTicks: 40,
+      wrapped: true,
+      requiresSeek: false,
+    });
   });
 
   it('advances in musical ticks and wraps while loop is enabled', () => {

@@ -260,4 +260,111 @@ describe('SequencerModule MIDI clip scheduling', () => {
       events: [{ type: 'allNotesOff' }],
     });
   });
+
+  it('keeps clip-end noteOff at the clip end when not looping and truncates overflow', () => {
+    const sequencer = new SequencerModule('sequencer-once-test');
+    sequencer.updateParameter('loop', false);
+    const clip = parseMidiClipJson(
+      JSON.stringify({
+        ppq: 480,
+        bars: 1,
+        timeSignature: [4, 4],
+        notes: [
+          { id: 'last', midi: 79, startTick: 1440, durationTicks: 480, velocity: 0.6 },
+          { id: 'overflow', midi: 81, startTick: 1680, durationTicks: 960, velocity: 0.6 },
+          { id: 'outside', midi: 83, startTick: 1920, durationTicks: 480, velocity: 0.6 },
+        ],
+        events: [],
+      })
+    );
+    const frames = (
+      sequencer as unknown as {
+        buildScheduledEvents: (clip: MidiClip) => ScheduledMidiFrame[];
+      }
+    ).buildScheduledEvents(clip);
+
+    // 只播放一遍时，折回 tick 0 的 note-off 永远不会触发，音符会挂住
+    expect(frames.find((frame) => frame.tick === 0)).toBeUndefined();
+    const endFrame = frames.find((frame) => frame.tick === 1920);
+    expect(endFrame?.events).toEqual([
+      expect.objectContaining({ type: 'noteOff', noteId: 'last' }),
+      expect.objectContaining({ type: 'noteOff', noteId: 'overflow' }),
+    ]);
+    expect(
+      frames.flatMap((frame) => frame.events).some((event) => 'noteId' in event && event.noteId === 'outside')
+    ).toBe(false);
+  });
+
+  describe('transport playback', () => {
+    type PartCallback = (time: number, frame: ScheduledMidiFrame) => void;
+
+    async function startPlayback(id: string) {
+      const sequencer = new SequencerModule(id);
+      await sequencer.retryModuleInitialization().catch(() => undefined);
+      const loopListeners = new Set<(time: number) => void>();
+      let partCallback: PartCallback = () => {};
+      (sequencer as unknown as { Tone: unknown }).Tone = {
+        immediate: () => 0,
+        Frequency: (value: number) => ({ toFrequency: () => value }),
+        Part: class {
+          loop = false;
+          loopEnd = 0;
+          constructor(callback: PartCallback) {
+            partCallback = callback;
+          }
+          start() {}
+          cancel() {}
+          dispose() {}
+        },
+        Transport: {
+          state: 'stopped',
+          position: 0,
+          start: vi.fn(),
+          stop: vi.fn(),
+          on: (_event: string, listener: (time: number) => void) => loopListeners.add(listener),
+          off: (_event: string, listener: (time: number) => void) => loopListeners.delete(listener),
+        },
+      };
+      sequencer.updateParameter('running', true);
+      const noteOn = (time: number) =>
+        partCallback(time, {
+          tick: 0,
+          timeSeconds: 0,
+          events: [{ type: 'noteOn', noteId: 'held', midi: 79, velocity: 0.6 }],
+        });
+      return { sequencer, loopListeners, noteOn };
+    }
+
+    it('releases notes held across a transport loop at the loop time', async () => {
+      const { sequencer, loopListeners, noteOn } = await startPlayback('sequencer-loop-release');
+      noteOn(1);
+      expect(loopListeners.size).toBe(1);
+
+      loopListeners.forEach((listener) => listener(2.5));
+
+      expect(sequencer.outputPorts.midi.getValue()).toMatchObject({
+        scheduledTime: 2.5,
+        activeNotes: [],
+        events: [{ type: 'allNotesOff' }],
+      });
+      sequencer.dispose();
+      expect(loopListeners.size).toBe(0);
+    });
+
+    it('stays silent while disabled and releases held notes when disabled', async () => {
+      const { sequencer, noteOn } = await startPlayback('sequencer-disabled');
+      noteOn(1);
+      expect(sequencer.outputPorts.midi.getValue().activeNotes).toHaveLength(1);
+
+      sequencer.setEnabled(false);
+      expect(sequencer.outputPorts.midi.getValue()).toMatchObject({
+        activeNotes: [],
+        events: [{ type: 'allNotesOff' }],
+      });
+
+      noteOn(2);
+      expect(sequencer.outputPorts.midi.getValue().activeNotes).toHaveLength(0);
+      sequencer.dispose();
+    });
+  });
 });

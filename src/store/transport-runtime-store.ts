@@ -6,7 +6,10 @@ import { TRANSPORT_PPQ } from '@/core/transport/types';
 interface AdvanceResult {
   positionTicks: number;
   ended: boolean;
+  /** 播放位置回到了循环起点，需要重新应用自动化。 */
   wrapped: boolean;
+  /** 位置由界面帧折回，音频 Transport 尚未跟随，需要 seek。 */
+  requiresSeek: boolean;
 }
 
 interface TransportRuntimeState {
@@ -29,6 +32,24 @@ interface TransportRuntimeState {
     loopEndTick?: number,
     externalPositionTicks?: number
   ) => AdvanceResult;
+}
+
+/** 把循环区间限制在项目长度内且至少一拍；界面折回与 Tone 循环共用。 */
+export function resolveLoopRange(
+  lengthTicks: number,
+  loopStartTick = 0,
+  loopEndTick = lengthTicks
+): { startTick: number; endTick: number } {
+  const safeLength = Math.max(TRANSPORT_PPQ, lengthTicks);
+  const startTick = Math.max(
+    0,
+    Math.min(loopStartTick, safeLength - TRANSPORT_PPQ)
+  );
+  const endTick = Math.max(
+    startTick + TRANSPORT_PPQ,
+    Math.min(loopEndTick, safeLength)
+  );
+  return { startTick, endTick };
 }
 
 export const useTransportRuntimeStore = create<TransportRuntimeState>(
@@ -73,6 +94,7 @@ export const useTransportRuntimeStore = create<TransportRuntimeState>(
           positionTicks: state.positionTicks,
           ended: false,
           wrapped: false,
+          requiresSeek: false,
         };
       }
       if (state.lastFrameMs === null) {
@@ -84,35 +106,46 @@ export const useTransportRuntimeStore = create<TransportRuntimeState>(
           positionTicks,
           ended: false,
           wrapped: false,
+          requiresSeek: false,
         };
       }
 
       const elapsedMs = Math.max(0, nowMs - state.lastFrameMs);
       const tickDelta = (elapsedMs / 60_000) * bpm * TRANSPORT_PPQ;
       const safeLength = Math.max(TRANSPORT_PPQ, lengthTicks);
-      const safeLoopStart = Math.max(
-        0,
-        Math.min(loopStartTick, safeLength - TRANSPORT_PPQ)
-      );
-      const safeLoopEnd = Math.max(
-        safeLoopStart + TRANSPORT_PPQ,
-        Math.min(loopEndTick, safeLength)
-      );
+      const { startTick: safeLoopStart, endTick: safeLoopEnd } =
+        resolveLoopRange(lengthTicks, loopStartTick, loopEndTick);
       let positionTicks = Number.isFinite(externalPositionTicks)
         ? (externalPositionTicks as number)
         : state.positionTicks + tickDelta;
       let ended = false;
       let wrapped = false;
+      let requiresSeek = false;
+
+      if (
+        Number.isFinite(externalPositionTicks) &&
+        positionTicks < state.positionTicks
+      ) {
+        if (state.positionTicks - positionTicks < TRANSPORT_PPQ / 8) {
+          // 输出延迟估计的微小抖动，不让播放头往回跳
+          positionTicks = state.positionTicks;
+        } else {
+          // Tone Transport 已在音频时钟上完成循环
+          wrapped = true;
+        }
+      }
 
       if (loopEnabled && positionTicks >= safeLoopEnd) {
         positionTicks =
           safeLoopStart +
           ((positionTicks - safeLoopStart) % (safeLoopEnd - safeLoopStart));
         wrapped = true;
+        requiresSeek = true;
       } else if (positionTicks >= safeLength) {
         if (loopEnabled) {
           positionTicks %= safeLength;
           wrapped = true;
+          requiresSeek = true;
         } else {
           positionTicks = safeLength;
           ended = true;
@@ -126,7 +159,7 @@ export const useTransportRuntimeStore = create<TransportRuntimeState>(
         hasStarted: ended ? false : state.hasStarted,
         isRecording: ended ? false : state.isRecording,
       });
-      return { positionTicks, ended, wrapped };
+      return { positionTicks, ended, wrapped, requiresSeek };
     },
   })
 );

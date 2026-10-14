@@ -58,4 +58,36 @@ describe('TransportService', () => {
     transportService.resume();
     expect(tone.Transport.start).toHaveBeenCalledTimes(2);
   });
+
+  it('loops on the Tone clock with tick loop points', () => {
+    const tone = createTone();
+    const transport = tone.Transport as typeof tone.Transport & {
+      loop?: boolean;
+      loopStart?: string;
+      loopEnd?: string;
+    };
+    transport.loop = false;
+    transportService.setLoop(true, 480, 1920);
+    transportService.start('clip-a', tone);
+
+    // TRANSPORT_PPQ 480 换算到 Tone PPQ 192
+    expect(transport).toMatchObject({ loop: true, loopStart: '192i', loopEnd: '768i' });
+
+    transportService.setLoop(false, 0, 1920);
+    expect(transport.loop).toBe(false);
+  });
+
+  it('reports the audible position behind the look-ahead and output latency', () => {
+    const tone = {
+      ...createTone(),
+      immediate: () => 10,
+      getContext: () => ({ rawContext: { outputLatency: 0.04, baseLatency: 0.01 } }),
+    };
+    const getTicksAtTime = vi.fn(() => 192);
+    Object.assign(tone.Transport, { getTicksAtTime });
+    transportService.start('clip-a', tone);
+
+    expect(transportService.getPositionTicks()).toBe(480);
+    expect(getTicksAtTime).toHaveBeenCalledWith(expect.closeTo(9.95, 6));
+  });
 });

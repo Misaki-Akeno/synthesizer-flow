@@ -194,6 +194,14 @@ clocks per sequencer:
 - `src/components/workbench/TransportBar.tsx`: the primary transport UI;
   compact MIDI and piano-roll controls mirror the same global state
 
+Looping runs on Tone Transport's own loop (`transportService.setLoop`), not by
+seeking from UI frames. A frame-driven seek can skip events on the loop-start
+tick, such as a note-off wrapped there, and leave notes stuck. Sequencers
+release held notes on the Transport `loop` event, truncate notes at the clip
+end, and emit nothing while disabled. The playhead reads the audible position
+(`Tone.immediate()` minus output latency), not `Transport.ticks`, which
+includes look-ahead.
+
 Automation playback must update parameters through `useFlowStore` so changes
 still reconcile into minimal graph patches. Do not write playback position into
 React Flow nodes, project history, or project JSON. New transport metadata must

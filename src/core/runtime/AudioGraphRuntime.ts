@@ -147,6 +147,10 @@ export class AudioGraphRuntime {
     transportService.seekTicks(ticks);
   }
 
+  setTransportLoop(enabled: boolean, startTicks: number, endTicks: number): void {
+    transportService.setLoop(enabled, startTicks, endTicks);
+  }
+
   setTransportBpm(bpm: number): void {
     transportService.setBpm(bpm);
   }
