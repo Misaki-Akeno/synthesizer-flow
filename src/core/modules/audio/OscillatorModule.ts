@@ -305,4 +305,11 @@ export class SimpleOscillatorModule extends AudioModuleBase {
     this.disposeAudioNodes([this.oscillator, this.gainNode]);
     super.dispose();
   }
+
+  protected cleanupFailedAudioInitialization(): void {
+    this.disposeAudioNodes([this.oscillator, this.gainNode]);
+    this.oscillator = undefined;
+    this.gainNode = undefined;
+    super.cleanupFailedAudioInitialization();
+  }
 }

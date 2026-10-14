@@ -25,6 +25,10 @@ export abstract class AudioModuleBase extends ModuleBase {
   }> = [];
   // 音频处理器对象
   protected audioInputHandler: AudioInputHandler | null = null;
+  // 注册版本用于防止相同 id 的旧异步实例覆盖新实例的生命周期。
+  private initGeneration: number;
+  private initializationPromise: Promise<void> | null = null;
+  private preserveFailureOnDispose: boolean = false;
 
   // 模块启用状态（新增）
   public enabled: BehaviorSubject<boolean> = new BehaviorSubject<boolean>(true);
@@ -51,11 +55,17 @@ export abstract class AudioModuleBase extends ModuleBase {
     this.handleEnabledChange();
 
     // 注册为待初始化模块
-    moduleInitManager.registerPendingModule(this.id);
+    this.initGeneration = moduleInitManager.registerPendingModule(this.id);
 
     // 仅在浏览器环境下初始化Tone.js
     if (typeof window !== 'undefined') {
-      this.initializeTone();
+      this.initializationPromise = this.initializeTone(this.initGeneration);
+    } else {
+      moduleInitManager.markModuleAsFailed(
+        this.id,
+        new Error('Audio modules can only initialize in a browser'),
+        this.initGeneration
+      );
     }
   }
 
@@ -104,11 +114,15 @@ export abstract class AudioModuleBase extends ModuleBase {
   /**
    * 动态加载Tone.js库
    */
-  protected async initializeTone(): Promise<void> {
+  protected async initializeTone(generation: number = this.initGeneration): Promise<void> {
     try {
       const ToneModule = await import('tone');
 
-      if (this.isDisposed()) {
+      if (
+        this.isDisposed() ||
+        generation !== this.initGeneration ||
+        !moduleInitManager.isCurrentRegistration(this.id, generation)
+      ) {
         return;
       }
 
@@ -119,27 +133,74 @@ export abstract class AudioModuleBase extends ModuleBase {
 
       // initializeAudio 期间可能发生项目切换或撤销重建。再次调用动态
       // dispose，让子类释放刚刚创建的 Tone 节点，避免旧实例复活。
-      if (this.isDisposed()) {
-        this.initialized = true;
+      if (
+        this.isDisposed() ||
+        generation !== this.initGeneration ||
+        !moduleInitManager.isCurrentRegistration(this.id, generation) ||
+        !moduleInitManager.isModulePending(this.id)
+      ) {
+        this.preserveFailureOnDispose =
+          moduleInitManager.getModuleStatus(this.id) === 'failed';
         this.dispose();
         return;
       }
 
       // 标记初始化完成
       this.initialized = true;
-      moduleInitManager.markModuleAsInitialized(this.id);
+      moduleInitManager.markModuleAsInitialized(this.id, generation);
 
       // 处理待处理的音频输入
       this.processPendingInputs();
     } catch (error) {
-      if (this.isDisposed()) {
+      if (
+        this.isDisposed() ||
+        generation !== this.initGeneration ||
+        !moduleInitManager.isCurrentRegistration(this.id, generation)
+      ) {
         return;
       }
       console.error(
         `[${this.moduleType}Module ${this.id}] Failed to initialize Tone.js:`,
         error
       );
+      this.initialized = false;
+      this.cleanupFailedAudioInitialization();
+      moduleInitManager.markModuleAsFailed(this.id, error, generation);
     }
+  }
+
+  /**
+   * Recreate this module's Tone graph after a failed dynamic import or setup error.
+   * A disposed module cannot be retried because it no longer owns a valid graph.
+   */
+  public retryModuleInitialization(): Promise<void> {
+    if (this.isDisposed()) {
+      return Promise.reject(new Error(`Module ${this.id} has been disposed`));
+    }
+    if (typeof window === 'undefined') {
+      return Promise.reject(new Error('Audio modules can only initialize in a browser'));
+    }
+    this.cleanupFailedAudioInitialization();
+    this.initialized = false;
+    this.pendingAudioInputs = [];
+    this.initGeneration = moduleInitManager.registerPendingModule(this.id);
+    this.initializationPromise = this.initializeTone(this.initGeneration);
+    return this.initializationPromise;
+  }
+
+  /**
+   * Releases base-owned resources before retrying a failed setup. Subclasses that
+   * allocate nodes before their setup can throw should override this hook and release
+   * those nodes without completing the module's BehaviorSubjects.
+   */
+  protected cleanupFailedAudioInitialization(): void {
+    // Parameter/input bindings are recreated by initializeAudio. Keeping the old ones
+    // would duplicate reactions after retry; restore the base enabled-state observer.
+    this.clearInternalSubscriptions();
+    this.handleEnabledChange();
+    this.audioInputHandler?.dispose();
+    this.audioInputHandler = null;
+    this.pendingAudioInputs = [];
   }
 
   /**
@@ -358,7 +419,11 @@ export abstract class AudioModuleBase extends ModuleBase {
 
     // Tone Context 属于应用级共享资源，不应由任意单个模块销毁。
     // 模块只注销自身并释放自己创建的节点。
-    moduleInitManager.recordDisposal(this.id);
+    moduleInitManager.recordDisposal(
+      this.id,
+      this.initGeneration,
+      this.preserveFailureOnDispose
+    );
     this.enabled.complete();
 
     // 调用父类的dispose方法清理基础资源

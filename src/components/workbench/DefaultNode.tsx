@@ -4,6 +4,7 @@ import { useFlowStore } from '@/store/canvas-store';
 import { useModuleSubscription } from '@/core/hooks/useModuleSubscription';
 import React from 'react';
 import { AudioModuleBase } from '@/core/base/AudioModuleBase';
+import { ModuleInitializationStatus } from '@/components/audioControls/ModuleInitializationStatus';
 import CustomUIComponents, {
   ParameterControl,
   InputPort,
@@ -275,6 +276,9 @@ const DefaultNode: React.FC<DefaultNodeProps> = ({ data, id, selected }) => {
       </div>
 
       {/* 自定义UI组件 */}
+      {moduleInstance instanceof AudioModuleBase && (
+        <ModuleInitializationStatus moduleId={id} />
+      )}
       {renderCustomUI()}
 
       {/* 默认组参数 */}

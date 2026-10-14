@@ -268,4 +268,15 @@ export class LFOModule extends AudioModuleBase {
     this.disposeAudioNodes([this.lfo, this.signalScaler]);
     super.dispose();
   }
+
+  protected cleanupFailedAudioInitialization(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.disposeAudioNodes([this.lfo, this.signalScaler]);
+    this.lfo = undefined;
+    this.signalScaler = undefined;
+    super.cleanupFailedAudioInitialization();
+  }
 }

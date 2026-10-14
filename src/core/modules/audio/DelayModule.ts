@@ -158,4 +158,10 @@ export class DelayModule extends AudioModuleBase {
         }
         super.dispose();
     }
+
+    protected cleanupFailedAudioInitialization(): void {
+        this.disposeAudioNodes([this.delay]);
+        this.delay = undefined;
+        super.cleanupFailedAudioInitialization();
+    }
 }

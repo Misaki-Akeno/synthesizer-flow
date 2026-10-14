@@ -139,6 +139,7 @@ export class SpeakerModule extends AudioModuleBase {
       }
     } catch (error) {
       console.error(`[${this.moduleType}Module ${this.id}] 初始化失败:`, error);
+      throw error;
     }
   }
 
@@ -319,5 +320,19 @@ export class SpeakerModule extends AudioModuleBase {
 
     this.disposeAudioNodes([this.merger, this.gainLeft, this.gainRight]);
     super.dispose();
+  }
+
+  protected cleanupFailedAudioInitialization(): void {
+    if (this.contextCheckInterval) {
+      clearInterval(this.contextCheckInterval);
+      this.contextCheckInterval = null;
+    }
+    this.rightInputHandler?.dispose();
+    this.rightInputHandler = null;
+    this.disposeAudioNodes([this.merger, this.gainLeft, this.gainRight]);
+    this.merger = undefined;
+    this.gainLeft = undefined;
+    this.gainRight = undefined;
+    super.cleanupFailedAudioInitialization();
   }
 }

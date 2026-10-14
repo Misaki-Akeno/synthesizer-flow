@@ -226,4 +226,10 @@ export class ReverbModule extends AudioModuleBase {
     }
     super.dispose();
   }
+
+  protected cleanupFailedAudioInitialization(): void {
+    this.disposeAudioNodes([this.reverb]);
+    this.reverb = undefined;
+    super.cleanupFailedAudioInitialization();
+  }
 }

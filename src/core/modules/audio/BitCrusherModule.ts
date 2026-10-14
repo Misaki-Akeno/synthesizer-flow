@@ -141,4 +141,10 @@ export class BitCrusherModule extends AudioModuleBase {
         }
         super.dispose();
     }
+
+    protected cleanupFailedAudioInitialization(): void {
+        this.disposeAudioNodes([this.bitCrusher]);
+        this.bitCrusher = undefined;
+        super.cleanupFailedAudioInitialization();
+    }
 }
