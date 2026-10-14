@@ -37,6 +37,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
 // 导入 logger 系统
+import { useProjectStore } from '@/store/projects-store';
 import { createModuleLogger } from '@/lib/logger';
 import { useTranslations } from 'next-intl';
 
@@ -107,6 +108,8 @@ export function NavUser() {
 
       // 尝试登出
       await signOut({ redirect: false });
+      // 只在明确退出时清空本账号的本地项目缓存
+      await useProjectStore.getState().setProjectOwner(null);
 
       // 记录登出成功
       logger.success('用户已成功登出');

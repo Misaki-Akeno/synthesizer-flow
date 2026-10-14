@@ -215,6 +215,7 @@ remain optional so older project files continue to import with default values.
 - Manages Tone.js initialization lifecycle
 - Provides fade/smooth parameter ramps to avoid audio clicks
 - Handles audio context management and resource disposal
+- After initialization or retry, restores audio inputs from live source-port bindings; removed sources must not be restored. Late initialization cleans up resources without repeating subclass disposal or adding subscriptions to completed ports.
 
 ### Creating a New Module
 
@@ -336,6 +337,8 @@ npx vitest run src/path/to/file.test.ts
 
 - Manages project list and current project
 - Handles saving/loading from database
+- Project caches carry the current account ID. Caches without an owner (written before ownership existed) and anonymous drafts are claimed by the next signed-in account; the cache is cleared only on explicit logout or when a different account signs in, before canvas restoration. Never clear it because the session reads as unauthenticated: next-auth v4 reports failed session requests that way. Cloud loads check the latest revision before restoring a local draft; divergent drafts remain available for export and require manual merging.
+- Manual and automatic saves share a per-project lock. First cloud saves transfer newer drafts to the returned cloud ID and revision; autosave submits them without waiting for another edit.
 
 **useSettingsStore** (`src/store/settings-store.ts`):
 
@@ -376,7 +379,7 @@ npx vitest run src/path/to/file.test.ts
 - **Agent Skills**: Module guides combine curated usage advice with parameter and port schemas extracted from real module classes
 - **Agent Evals**: Golden Set benchmarks score tool traces, arguments, client operations, approvals, and response constraints
 - **Checkpointer**: Database-backed state persistence for conversations
-- **Anonymous chat**: `chatWithAgent` also serves unauthenticated users. They use only the API key sent with the request (never stored, fixed providers ignore client endpoints), require a UUID `threadId`, and checkpoint under the `anon:<threadId>` namespace; signed-in users keep encrypted server-side settings and `<userId>:<threadId>` keys
+- **Anonymous chat**: `chatWithAgent` also serves unauthenticated users. They use only the API key sent with the request (never stored, fixed providers ignore client endpoints), use UUID thread IDs and the `anon:<threadId>` namespace; custom endpoints and knowledge searches require login. Anonymous checkpoints stay in process memory for at most 30 minutes, with 32 sessions, 128 checkpoints and 1 MB per session; process restarts invalidate them. Signed-in users keep encrypted server-side settings and `<userId>:<threadId>` database keys. Approval actions resume checkpoints with an empty messages array; ordinary chat requires non-empty messages. Every new turn seeds its execution snapshot before the first tool can interrupt.
 
 ### Tool System
 

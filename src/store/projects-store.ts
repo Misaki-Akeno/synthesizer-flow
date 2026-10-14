@@ -22,6 +22,7 @@ import {
 } from './persist-storage';
 import { ensureAudioContextReady } from '@/core/audio/audio-context';
 import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
+import { canvasFingerprint } from '@/core/types/canvasContent';
 
 // 创建项目管理器专用日志记录器
 const logger = createModuleLogger('ProjectManager');
@@ -66,6 +67,8 @@ export type ProjectListErrorCode =
 // ======== 项目管理 Store 接口 ========
 
 export interface ProjectPersistState {
+  projectOwnerId?: string | null;
+  setProjectOwner: (userId: string | null) => Promise<void>;
   // 项目列表
   userProjects: ProjectConfig[];
   builtInProjects: ProjectConfig[];
@@ -153,8 +156,9 @@ const PROJECT_LIST_CACHE_TTL_MS = 60_000;
 const PROJECT_PERSISTENCE_NAME = 'synthesizerflow-projects';
 const PROJECT_DATABASE_MIGRATION_REQUIRED =
   'PROJECT_DATABASE_MIGRATION_REQUIRED';
-const projectSyncLocks = new Map<string, Promise<void>>();
+const projectSyncLocks = new Map<string, Promise<string | void>>();
 let projectLoadGeneration = 0;
+let projectOwnerGeneration = 0;
 let projectCacheWriteQueue: Promise<void> = Promise.resolve();
 
 async function persistProjectCacheSnapshot(
@@ -172,6 +176,7 @@ async function persistProjectCacheSnapshot(
   }
   const value = {
     state: {
+      projectOwnerId: state.projectOwnerId,
       currentProject: state.currentProject,
       localDrafts: state.localDrafts,
       userProjects: state.userProjects,
@@ -181,7 +186,7 @@ async function persistProjectCacheSnapshot(
       })),
       projectsLastFetchedAt: state.projectsLastFetchedAt,
     },
-    version: 4,
+    version: 5,
   };
   // IndexedDB writes are asynchronous. Serialize snapshots so an older project
   // cannot finish after a newer project switch and overwrite the recoverable cache.
@@ -224,6 +229,45 @@ function resolveProjectListError(
 export const useProjectStore = create<ProjectPersistState>()(
   persist(
     (set, get) => ({
+      projectOwnerId: undefined,
+      setProjectOwner: async (userId) => {
+        const previousOwnerId = get().projectOwnerId;
+        if (previousOwnerId === userId) return;
+        // 升级前的缓存没有归属，匿名编辑的草稿在登录后归当前账号，
+        // 两者都直接认领。只有退出登录或换成另一个账号时才清空。
+        if (
+          previousOwnerId === undefined ||
+          (previousOwnerId === null && userId !== null)
+        ) {
+          set({ projectOwnerId: userId });
+          return;
+        }
+        ++projectOwnerGeneration;
+        ++projectLoadGeneration;
+        projectSyncLocks.clear();
+        set({
+          projectOwnerId: userId,
+          currentProject: null,
+          localDrafts: {},
+          userProjects: [],
+          projectsLastFetchedAt: null,
+          isLoading: false,
+          isProjectListLoading: false,
+          syncStatus: 'idle',
+          syncError: null,
+          lastAutosavedAt: null,
+        });
+        useFlowStore.getState().importCanvasFromJson(
+          JSON.stringify({ version: '2.0', nodes: [], edges: [], timestamp: Date.now() }),
+          ''
+        );
+        try {
+          await persistProjectCacheSnapshot(get());
+        } catch (error) {
+          logger.error('清除账号项目缓存失败', error);
+          set({ syncStatus: 'error', syncError: '无法清除本地项目缓存，请检查浏览器存储。' });
+        }
+      },
       userProjects: [],
       // 初始时使用本地硬编码预设作为 fallback，fetchProjects 后会被覆盖
       builtInProjects: [],
@@ -243,6 +287,7 @@ export const useProjectStore = create<ProjectPersistState>()(
       },
 
       saveLocalDraft: async (canvasData) => {
+        const ownerGeneration = projectOwnerGeneration;
         const data = canvasData ?? useFlowStore.getState().exportCanvasToJson();
         const currentProject = get().currentProject;
         const now = new Date().toISOString();
@@ -269,6 +314,7 @@ export const useProjectStore = create<ProjectPersistState>()(
         }
         try {
           await persistProjectCacheSnapshot(get());
+          if (ownerGeneration !== projectOwnerGeneration) return false;
           set({
             syncStatus: 'saved-local',
             syncError: null,
@@ -276,6 +322,7 @@ export const useProjectStore = create<ProjectPersistState>()(
           });
           return true;
         } catch (error) {
+          if (ownerGeneration !== projectOwnerGeneration) return false;
           logger.error('本地草稿保存失败', error);
           set({
             syncStatus: 'error',
@@ -286,12 +333,22 @@ export const useProjectStore = create<ProjectPersistState>()(
       },
 
       syncCurrentProjectDraft: async (projectId) => {
+        const ownerGeneration = projectOwnerGeneration;
         const currentProject = projectId
           ? (get().localDrafts[projectId] ??
             (get().currentProject?.id === projectId
               ? get().currentProject
               : null))
           : get().currentProject;
+        // 首次上云会替换 draft ID；先等手动保存完成，再按新 ID 读取草稿。
+        const pendingSync = currentProject && projectSyncLocks.get(currentProject.id);
+        if (pendingSync && currentProject) {
+          const savedProjectId = await pendingSync;
+          if (ownerGeneration !== projectOwnerGeneration) return false;
+          return get().syncCurrentProjectDraft(
+            savedProjectId || currentProject.id
+          );
+        }
         if (
           !currentProject ||
           currentProject.isBuiltIn ||
@@ -301,17 +358,10 @@ export const useProjectStore = create<ProjectPersistState>()(
         }
 
         const draft = get().localDrafts[currentProject.id];
+        if (!draft) return true;
         const canvasData = draft?.data ?? currentProject.data;
         if (!canvasData) {
           return true;
-        }
-
-        const pendingSync = projectSyncLocks.get(currentProject.id);
-        if (pendingSync) {
-          // 同一个项目的自动保存必须按 revision 串行。前一个请求完成后重新
-          // 读取草稿，确保不会把编辑期间产生的新内容用旧 revision 覆盖。
-          await pendingSync;
-          return get().syncCurrentProjectDraft();
         }
 
         let releaseSync!: () => void;
@@ -340,6 +390,7 @@ export const useProjectStore = create<ProjectPersistState>()(
             expectedRevision: currentProject.revision,
             metadata: currentProject.metadata,
           });
+          if (ownerGeneration !== projectOwnerGeneration) return false;
 
           if (!result.success || !result.projectId) {
             const error = result.error ?? '云端同步失败';
@@ -356,9 +407,15 @@ export const useProjectStore = create<ProjectPersistState>()(
           set((state) => {
             const nextDrafts = { ...state.localDrafts };
             const hasNewerLocalDraft =
-              nextDrafts[currentProject.id]?.data !== canvasData;
+              nextDrafts[currentProject.id] !== undefined &&
+              nextDrafts[currentProject.id].data !== canvasData;
             if (!hasNewerLocalDraft) {
               delete nextDrafts[currentProject.id];
+            } else if (nextDrafts[currentProject.id]) {
+              nextDrafts[currentProject.id] = {
+                ...nextDrafts[currentProject.id],
+                revision: result.revision,
+              };
             }
             const activeProject =
               state.currentProject?.id === currentProject.id
@@ -382,6 +439,7 @@ export const useProjectStore = create<ProjectPersistState>()(
           });
           return true;
         } catch (error) {
+          if (ownerGeneration !== projectOwnerGeneration) return false;
           logger.error('自动同步项目失败', error);
           set({
             syncStatus: 'error',
@@ -389,12 +447,15 @@ export const useProjectStore = create<ProjectPersistState>()(
           });
           return false;
         } finally {
-          projectSyncLocks.delete(currentProject.id);
+          if (ownerGeneration === projectOwnerGeneration) {
+            projectSyncLocks.delete(currentProject.id);
+          }
           releaseSync();
         }
       },
 
       fetchProjects: async (options = {}) => {
+        const ownerGeneration = projectOwnerGeneration;
         const { force = false } = options;
         const { projectsLastFetchedAt, isProjectListLoading } = get();
         const lastFetchedTime = projectsLastFetchedAt
@@ -422,6 +483,7 @@ export const useProjectStore = create<ProjectPersistState>()(
             getUserProjects(),
             getBuiltInPresets(),
           ]);
+          if (ownerGeneration !== projectOwnerGeneration) return;
 
           if (userRes.success && userRes.data) {
             const mappedProjects: ProjectConfig[] = userRes.data.map((p) => ({
@@ -502,16 +564,19 @@ export const useProjectStore = create<ProjectPersistState>()(
               : new Date().toISOString(),
           });
         } catch (error) {
+          if (ownerGeneration !== projectOwnerGeneration) return;
           logger.error('获取项目列表异常', error);
           set({
             projectListError: 'projects-unavailable',
             projectsLastFetchedAt: null,
           });
         } finally {
-          set({
-            isLoading: false,
-            isProjectListLoading: false,
-          });
+          if (ownerGeneration === projectOwnerGeneration) {
+            set({
+              isLoading: false,
+              isProjectListLoading: false,
+            });
+          }
         }
       },
 
@@ -527,13 +592,25 @@ export const useProjectStore = create<ProjectPersistState>()(
       },
 
       saveCurrentCanvas: async (name: string, description?: string) => {
+        const ownerGeneration = projectOwnerGeneration;
+        let releaseSync: ((projectId?: string) => void) | undefined;
+        let lockedProjectId: string | undefined;
+        let savedProjectId: string | undefined;
         try {
           logger.info(`保存项目: "${name}"`);
-          set({
-            isLoading: true,
-            syncStatus: 'syncing-cloud',
-            syncError: null,
-          });
+          set({ isLoading: true });
+
+          // 手动和自动保存共用项目锁，等待后重新读取 revision 和当前画布。
+          const requestedProjectId = get().currentProject?.id;
+          while (get().currentProject) {
+            const pendingSync = projectSyncLocks.get(get().currentProject!.id);
+            if (!pendingSync) break;
+            await pendingSync;
+            if (ownerGeneration !== projectOwnerGeneration) return false;
+            if (get().currentProject?.id !== requestedProjectId) {
+              return false;
+            }
+          }
 
           // 获取当前画布的JSON
           const canvasData = useFlowStore.getState().exportCanvasToJson();
@@ -549,17 +626,27 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           const { currentProject } = get();
           // 手动保存也先落到 IndexedDB；网络错误或并发冲突不应丢失当前编辑。
-          if (!(await get().saveLocalDraft(canvasData))) {
+          const localSave = get().saveLocalDraft(canvasData);
+          const projectIdAtSaveStart = get().currentProject!.id;
+          lockedProjectId = projectIdAtSaveStart;
+          projectSyncLocks.set(
+            lockedProjectId,
+            new Promise<string | void>((resolve) => {
+              releaseSync = resolve;
+            })
+          );
+          if (!(await localSave)) {
             return false;
           }
-          const projectIdAtSaveStart = get().currentProject?.id;
+          if (ownerGeneration !== projectOwnerGeneration) return false;
+          set({ syncStatus: 'syncing-cloud', syncError: null });
           // 当前非预设项目始终按 ID 更新；改名不应隐式创建副本。
           let projectIdToUpdate: string | undefined = undefined;
 
           if (
             currentProject &&
             !currentProject.isBuiltIn &&
-            !isLocalImportedProject(currentProject)
+            !isLocalOnlyProject(currentProject)
           ) {
             projectIdToUpdate = currentProject.id;
           }
@@ -572,13 +659,16 @@ export const useProjectStore = create<ProjectPersistState>()(
               : undefined,
             metadata: currentProject?.metadata,
           });
+          if (ownerGeneration !== projectOwnerGeneration) return false;
 
           if (result.success && result.projectId) {
+            savedProjectId = result.projectId;
             // 保存成功，更新当前项目状态（包括 data，这里保持 string 格式以便本地缓存）
             const now = new Date().toISOString();
 
             // 重新获取列表以确保同步
             await get().fetchProjects({ force: true });
+            if (ownerGeneration !== projectOwnerGeneration) return false;
 
             // 更新 currentProject
             const newProjectConfig: ProjectConfig = {
@@ -597,34 +687,41 @@ export const useProjectStore = create<ProjectPersistState>()(
               isBuiltIn: false,
             };
 
-            // 异步保存期间用户可能已切换项目；不要把旧请求的结果重新
-            // 设为当前画布，但仍保留已成功写入云端的结果。
-            if (get().currentProject?.id !== projectIdAtSaveStart) {
-              set((state) => {
-                const localDrafts = { ...state.localDrafts };
-                if (currentProject) {
-                  delete localDrafts[currentProject.id];
-                }
-                return { localDrafts };
-              });
-              return true;
-            }
-
             set((state) => {
               const nextDrafts = { ...state.localDrafts };
-              if (currentProject) {
-                delete nextDrafts[currentProject.id];
+              const latestDraft = nextDrafts[projectIdAtSaveStart];
+              const hasNewerLocalDraft =
+                latestDraft !== undefined && latestDraft.data !== canvasData;
+              // 首次云端保存会改变 ID；新草稿跟随云端 ID 和 revision，
+              // 不能被请求开始时的旧画布覆盖。
+              const savedProject = hasNewerLocalDraft
+                ? {
+                    ...newProjectConfig,
+                    data: latestDraft.data,
+                    lastModified: latestDraft.lastModified,
+                  }
+                : newProjectConfig;
+              delete nextDrafts[projectIdAtSaveStart];
+              if (hasNewerLocalDraft) {
+                nextDrafts[result.projectId!] = savedProject;
+              } else {
+                delete nextDrafts[result.projectId!];
               }
-              delete nextDrafts[result.projectId!];
+              if (state.currentProject?.id !== projectIdAtSaveStart) {
+                return { localDrafts: nextDrafts };
+              }
               return {
-                currentProject: newProjectConfig,
+                currentProject: savedProject,
                 localDrafts: nextDrafts,
-                syncStatus: 'saved-cloud',
+                syncStatus: hasNewerLocalDraft ? 'saved-local' : 'saved-cloud',
                 syncError: null,
                 lastAutosavedAt: now,
               };
             });
-            useFlowStore.getState().setCurrentProjectId(result.projectId);
+            if (get().currentProject?.id === result.projectId) {
+              useFlowStore.getState().setCurrentProjectId(result.projectId);
+            }
+            await persistProjectCacheSnapshot(get());
             logger.success(`项目"${name}"保存成功`);
             return true;
           } else {
@@ -638,6 +735,7 @@ export const useProjectStore = create<ProjectPersistState>()(
             return false;
           }
         } catch (error) {
+          if (ownerGeneration !== projectOwnerGeneration) return false;
           logger.error('保存画布失败', error);
           set({
             syncStatus: 'error',
@@ -645,7 +743,13 @@ export const useProjectStore = create<ProjectPersistState>()(
           });
           return false;
         } finally {
-          set({ isLoading: false });
+          if (lockedProjectId) {
+            if (ownerGeneration === projectOwnerGeneration) {
+              projectSyncLocks.delete(lockedProjectId);
+            }
+            releaseSync?.(savedProjectId);
+          }
+          if (ownerGeneration === projectOwnerGeneration) set({ isLoading: false });
         }
       },
 
@@ -696,7 +800,10 @@ export const useProjectStore = create<ProjectPersistState>()(
           // 导入画布时 currentProjectId 为空，不能用空画布覆盖它。
           if (
             activeProject &&
-            useFlowStore.getState().currentProjectId === activeProject.id
+            useFlowStore.getState().currentProjectId === activeProject.id &&
+            (!activeProject.data ||
+              canvasFingerprint(activeProject.data) !==
+                canvasFingerprint(useFlowStore.getState().exportCanvasToJson()))
           ) {
             if (!(await get().saveLocalDraft())) {
               return false;
@@ -740,8 +847,8 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           const requestedProjectId =
             typeof projectOrId === 'string' ? projectOrId : projectOrId.id;
-          const localDraft = get().localDrafts[requestedProjectId];
-          if (localDraft) {
+          let localDraft: ProjectConfig | undefined = get().localDrafts[requestedProjectId];
+          if (!projectConfig && localDraft) {
             projectConfig = localDraft;
           }
 
@@ -759,12 +866,16 @@ export const useProjectStore = create<ProjectPersistState>()(
           logger.info(
             `加载项目: "${projectConfig.name}" (ID: ${projectConfig.id})`
           );
+          if (loadGeneration !== projectLoadGeneration) return false;
           set({ isLoading: true });
 
           // 如果没有数据（或者是用户项目，只有元数据），需要从 DB 获取
           let fullData = projectConfig.data;
 
-          if (!fullData) {
+          if (
+            !fullData ||
+            (!projectConfig.isBuiltIn && !isLocalOnlyProject(projectConfig))
+          ) {
             // 从 DB 获取详情
             const result = await getProjectById(projectConfig.id);
             if (result.success && result.data) {
@@ -788,6 +899,35 @@ export const useProjectStore = create<ProjectPersistState>()(
 
           if (loadGeneration !== projectLoadGeneration) {
             return false;
+          }
+
+          localDraft = get().localDrafts[requestedProjectId];
+          if (localDraft?.data) {
+            const sameContent = fullData &&
+              canvasFingerprint(localDraft.data) === canvasFingerprint(fullData);
+            if (
+              !isLocalOnlyProject(projectConfig) &&
+              !projectConfig.isBuiltIn &&
+              localDraft.revision !== projectConfig.revision &&
+              !sameContent
+            ) {
+              set({
+                isLoading: false,
+                syncStatus: 'conflict',
+                syncError: '云端版本已更新；本地草稿已保留，请导出草稿后手动合并。',
+              });
+              return false;
+            }
+            if (sameContent && !isLocalOnlyProject(projectConfig)) {
+              set((state) => {
+                const localDrafts = { ...state.localDrafts };
+                delete localDrafts[requestedProjectId];
+                return { localDrafts };
+              });
+              localDraft = undefined;
+            } else {
+              fullData = localDraft.data;
+            }
           }
 
           if (!fullData) {
@@ -817,7 +957,8 @@ export const useProjectStore = create<ProjectPersistState>()(
             set({
               currentProject: {
                 ...projectConfig,
-                data: jsonData, // 更新为完整数据
+                // 用导入后的规范化内容作基线，兼容旧项目的默认参数迁移。
+                data: useFlowStore.getState().exportCanvasToJson(),
               },
               syncStatus: localDraft ? 'saved-local' : 'idle',
               syncError: null,
@@ -879,8 +1020,9 @@ export const useProjectStore = create<ProjectPersistState>()(
       },
 
       exportProjectToFile: async (projectId: string) => {
-        const { userProjects, builtInProjects, currentProject } = get();
+        const { userProjects, builtInProjects, currentProject, localDrafts } = get();
         const project =
+          localDrafts[projectId] ??
           (currentProject?.id === projectId ? currentProject : undefined) ??
           [...builtInProjects, ...userProjects].find(
             (candidate) => candidate.id === projectId
@@ -981,6 +1123,7 @@ export const useProjectStore = create<ProjectPersistState>()(
       name: 'synthesizerflow-projects',
       // 持久化项目列表和当前项目，实现“本地缓存”
       partialize: (state) => ({
+        projectOwnerId: state.projectOwnerId,
         currentProject: state.currentProject,
         localDrafts: state.localDrafts,
         userProjects: state.userProjects,
@@ -990,7 +1133,7 @@ export const useProjectStore = create<ProjectPersistState>()(
         })),
         projectsLastFetchedAt: state.projectsLastFetchedAt,
       }),
-      version: 4,
+      version: 5,
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== 'object') {
           return persistedState as ProjectPersistState;
@@ -1013,7 +1156,12 @@ export const useProjectStore = create<ProjectPersistState>()(
           getFallbackStorage: () => window.localStorage,
         })
       ),
-      onRehydrateStorage: () => (state) => {
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          logger.error('本地缓存恢复失败', error);
+          // 存储不可用时仍允许认证边界以空缓存启动。
+          queueMicrotask(() => useProjectStore.getState().markProjectsHydrated());
+        }
         if (state) {
           logger.info('本地缓存已恢复');
           state.markProjectsHydrated();

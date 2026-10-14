@@ -4,18 +4,9 @@ import { useEffect, useRef } from 'react';
 import { useFlowStore } from '@/store/canvas-store';
 import { usePersistStore } from '@/store/projects-store';
 import { useSettings } from '@/store/settings-store';
+import { canvasFingerprint } from '@/core/types/canvasContent';
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
-
-function canvasFingerprint(jsonData: string): string | null {
-  try {
-    const parsed = JSON.parse(jsonData) as Record<string, unknown>;
-    delete parsed.timestamp;
-    return JSON.stringify(parsed);
-  } catch {
-    return null;
-  }
-}
 
 function hasCanvasContent(jsonData: string): boolean {
   try {
@@ -36,12 +27,23 @@ function hasCanvasContent(jsonData: string): boolean {
 export function useCanvasAutosave(): void {
   const revision = useFlowStore((state) => state.revision);
   const autoSave = useSettings((state) => state.canvas.autoSave);
+  const currentProjectId = usePersistStore((state) => state.currentProject?.id);
   const saveLocalDraft = usePersistStore((state) => state.saveLocalDraft);
   const syncCurrentProjectDraft = usePersistStore(
     (state) => state.syncCurrentProjectDraft
   );
   const hasObservedRevision = useRef(false);
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!autoSave || !currentProjectId) return;
+    const { currentProject, localDrafts } = usePersistStore.getState();
+    if (currentProject?.isLocalDraft || currentProject?.isBuiltIn) return;
+    // 首次保存到云端改变项目 ID，但没有新的内容 revision；主动提交迁移后的草稿。
+    if (localDrafts[currentProjectId]) {
+      void syncCurrentProjectDraft(currentProjectId);
+    }
+  }, [autoSave, currentProjectId, syncCurrentProjectDraft]);
 
   useEffect(() => {
     if (!autoSave) {
