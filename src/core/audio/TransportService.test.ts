@@ -90,4 +90,14 @@ describe('TransportService', () => {
     expect(transportService.getPositionTicks()).toBe(480);
     expect(getTicksAtTime).toHaveBeenCalledWith(expect.closeTo(9.95, 6));
   });
+
+  it('keeps a BPM changed while stopped and applies it before the next part', () => {
+    transportService.setBpm(80);
+    const tone = createTone();
+    expect(tone.Transport.bpm.value).toBe(120);
+
+    transportService.syncTempo(tone);
+
+    expect(tone.Transport.bpm.value).toBe(80);
+  });
 });

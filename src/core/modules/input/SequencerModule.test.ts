@@ -5,6 +5,7 @@ import {
 } from '@/core/midi/utils';
 import { MidiClip, MidiEvent } from '@/core/midi/types';
 import { SequencerModule } from './SequencerModule';
+import { transportService } from '@/core/audio/TransportService';
 
 type ScheduledMidiFrame = {
   tick: number;
@@ -303,6 +304,8 @@ describe('SequencerModule MIDI clip scheduling', () => {
       await sequencer.retryModuleInitialization().catch(() => undefined);
       const loopListeners = new Set<(time: number) => void>();
       let partCallback: PartCallback = () => {};
+      const transportBpm = { value: 120 };
+      const bpmAtPartCreation: number[] = [];
       (sequencer as unknown as { Tone: unknown }).Tone = {
         immediate: () => 0,
         Frequency: (value: number) => ({ toFrequency: () => value }),
@@ -311,6 +314,7 @@ describe('SequencerModule MIDI clip scheduling', () => {
           loopEnd = 0;
           constructor(callback: PartCallback) {
             partCallback = callback;
+            bpmAtPartCreation.push(transportBpm.value);
           }
           start() {}
           cancel() {}
@@ -319,6 +323,7 @@ describe('SequencerModule MIDI clip scheduling', () => {
         Transport: {
           state: 'stopped',
           position: 0,
+          bpm: transportBpm,
           start: vi.fn(),
           stop: vi.fn(),
           on: (_event: string, listener: (time: number) => void) => loopListeners.add(listener),
@@ -332,7 +337,7 @@ describe('SequencerModule MIDI clip scheduling', () => {
           timeSeconds: 0,
           events: [{ type: 'noteOn', noteId: 'held', midi: 79, velocity: 0.6 }],
         });
-      return { sequencer, loopListeners, noteOn };
+      return { sequencer, loopListeners, noteOn, bpmAtPartCreation };
     }
 
     it('releases notes held across a transport loop at the loop time', async () => {
@@ -349,6 +354,16 @@ describe('SequencerModule MIDI clip scheduling', () => {
       });
       sequencer.dispose();
       expect(loopListeners.size).toBe(0);
+    });
+
+    it('syncs the Transport BPM before converting part times to ticks', async () => {
+      // 停止状态下改过 BPM：Part 必须按新速度换算，否则播放头与声音速度不一致
+      transportService.setBpm(80);
+      const { sequencer, bpmAtPartCreation } = await startPlayback('sequencer-tempo');
+
+      expect(bpmAtPartCreation).toEqual([80]);
+      sequencer.dispose();
+      transportService.reset();
     });
 
     it('stays silent while disabled and releases held notes when disabled', async () => {

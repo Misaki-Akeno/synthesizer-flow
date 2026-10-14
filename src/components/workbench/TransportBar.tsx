@@ -215,6 +215,11 @@ export function TransportBar() {
     });
   }, [addMidiMapping, applyMidiControlChange]);
 
+  // 撤销、导入项目也会改变 BPM，不只经过 setTransportBpm
+  useEffect(() => {
+    audioGraphRuntime.setTransportBpm(transport.bpm);
+  }, [transport.bpm]);
+
   // 循环交给 Tone Transport 在音频时钟上执行，界面帧只负责显示和自动化。
   useEffect(() => {
     const { startTick, endTick } = resolveLoopRange(

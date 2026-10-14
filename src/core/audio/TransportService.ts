@@ -46,6 +46,7 @@ class TransportService {
   private activeClients = new Set<string>();
   private tone: ToneLike | null = null;
   private paused = false;
+  private bpm: number | null = null;
   private loopConfig: LoopConfig = { enabled: false, startTicks: 0, endTicks: 0 };
 
   public start(clientId: string, tone: ToneLike): void {
@@ -98,9 +99,23 @@ class TransportService {
       (Math.max(0, ticks) * this.getTonePpq()) / TRANSPORT_PPQ;
   }
 
+  /**
+   * 记录项目 BPM。停止状态下也要保存：Transport 由片段启动时才可用，
+   * 若只在运行中同步，Tone 会沿用旧速度，播放头随之按旧 BPM 前进。
+   */
   public setBpm(bpm: number): void {
-    if (this.tone?.Transport.bpm) {
-      this.tone.Transport.bpm.value = bpm;
+    if (!Number.isFinite(bpm) || bpm <= 0) return;
+    this.bpm = bpm;
+    if (this.tone) this.syncTempo(this.tone);
+  }
+
+  /**
+   * 在创建 Tone.Part 之前调用。Part 按创建时的 Transport BPM 把秒换算成
+   * tick，速度不一致会让声音和播放头各走各的。
+   */
+  public syncTempo(tone: ToneLike): void {
+    if (this.bpm !== null && tone.Transport.bpm) {
+      tone.Transport.bpm.value = this.bpm;
     }
   }
 
@@ -165,6 +180,7 @@ class TransportService {
 
   public reset(): void {
     this.activeClients.clear();
+    this.bpm = null;
     this.paused = false;
     this.tone = null;
   }

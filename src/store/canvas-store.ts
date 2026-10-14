@@ -463,6 +463,8 @@ export const useFlowStore = create<FlowState>((rawSet, get) => {
     setTransportBpm: (bpm) => {
       const nextBpm = Math.min(320, Math.max(20, Math.round(bpm)));
       if (get().transport.bpm === nextBpm) return;
+      // 先同步 Tone Transport：随后的参数补丁会重建 Part，并按当前速度换算 tick
+      audioGraphRuntime.setTransportBpm(nextBpm);
       recordHistory();
       const nodes = get().nodes.map((node) =>
         node.data.type === 'sequencer'
@@ -484,7 +486,6 @@ export const useFlowStore = create<FlowState>((rawSet, get) => {
         edges: committed.edges,
         transport: { ...get().transport, bpm: nextBpm },
       });
-      audioGraphRuntime.setTransportBpm(nextBpm);
     },
 
     setTransportLoopEnabled: (loopEnabled) => {

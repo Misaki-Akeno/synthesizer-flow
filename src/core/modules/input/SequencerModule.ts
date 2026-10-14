@@ -200,6 +200,7 @@ export class SequencerModule extends AudioModuleBase {
       return;
     }
 
+    transportService.syncTempo(this.Tone);
     this.sequencePart = new this.Tone.Part(
       (time: number, frame: ScheduledMidiFrame) => {
         if (this.isCurrentPlayback(playbackGeneration)) {
