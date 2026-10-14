@@ -1,5 +1,3 @@
-'use client';
-
 import { AudioModuleBase } from '@/core/base/AudioModuleBase';
 import {
   ModuleMetadata,
