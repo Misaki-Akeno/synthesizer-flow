@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const port = 3100;
+const production = process.env.E2E_PRODUCTION === '1';
+const port = production ? 3200 : 3100;
 const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
@@ -21,11 +22,14 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: process.env.E2E_BROWSER_CHANNEL || undefined,
+      },
     },
   ],
   webServer: {
-    command: `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
+    command: `node node_modules/next/dist/bin/next ${production ? 'start' : 'dev'} --hostname 127.0.0.1 --port ${port}`,
     url: `${baseURL}/zh-CN`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
