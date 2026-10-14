@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useRuntimeModule } from '@/core/hooks/useRuntimeModule';
+import {
+  useRuntimeModule,
+  useRuntimeModuleTelemetry,
+} from '@/core/hooks/useRuntimeModule';
 import {
   useNodes,
   ViewportPortal,
@@ -101,11 +104,12 @@ function NodeInfo({
   data,
 }: NodeInfoProps) {
   const runtime = useRuntimeModule(id);
+  const telemetry = useRuntimeModuleTelemetry(id);
   if (!width || !height) {
     return null;
   }
 
-  const formattedData = safeStringify({ document: data, runtime });
+  const formattedData = safeStringify({ document: data, runtime, telemetry });
 
   return (
     <div

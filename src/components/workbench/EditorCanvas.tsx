@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -8,6 +8,7 @@ import {
   BackgroundVariant,
   IsValidConnection,
   useReactFlow,
+  useStoreApi,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import DefaultNode from './DefaultNode';
@@ -20,6 +21,10 @@ import { isValidModuleConnection } from './connectionValidation';
 import { useShallow } from 'zustand/react/shallow';
 import { useCanvasAutosave } from './useCanvasAutosave';
 import { SubpatchOverlay } from './SubpatchOverlay';
+import {
+  useCanvasLodStore,
+  useNodeDetailLevel,
+} from '@/store/canvas-lod-store';
 
 const nodeTypes = {
   default: DefaultNode,
@@ -42,6 +47,22 @@ function isEditableTarget(target: EventTarget | null): boolean {
     tagName === 'textarea' ||
     tagName === 'select'
   );
+}
+
+/**
+ * 把视口缩放同步到 LOD store。直接订阅 React Flow 内部 store，
+ * 缩放过程中不触发任何 React 渲染，只有跨档时节点才会更新。
+ */
+function CanvasLodController() {
+  const store = useStoreApi();
+
+  useEffect(() => {
+    const { setZoom } = useCanvasLodStore.getState();
+    setZoom(store.getState().transform[2]);
+    return store.subscribe((state) => setZoom(state.transform[2]));
+  }, [store]);
+
+  return null;
 }
 
 // 内部Canvas组件，包含实际的ReactFlow
@@ -74,6 +95,19 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
     useFlowContextMenu();
 
   const reactFlowInstance = useReactFlow();
+  const detailLevel = useNodeDetailLevel();
+
+  // 低档位下连线关闭动画；极简档位改用直线，减少路径计算与重绘。
+  const displayEdges = useMemo(() => {
+    if (detailLevel === 'full') return edges;
+    return edges.map((edge) => ({
+      ...edge,
+      animated: false,
+      ...(detailLevel === 'minimal' && (!edge.type || edge.type === 'default')
+        ? { type: 'straight' }
+        : {}),
+    }));
+  }, [detailLevel, edges]);
 
   useCanvasAutosave();
 
@@ -216,7 +250,7 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
   return (
     <ReactFlow
       nodes={nodes}
-      edges={edges}
+      edges={displayEdges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
@@ -227,7 +261,11 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
       isValidConnection={isValidConnection}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
+      // React Flow 默认 minZoom 为 0.5，放宽后才能缩小到极简档位查看大项目全局
+      minZoom={0.1}
+      data-detail-level={detailLevel}
     >
+      <CanvasLodController />
       <Controls />
       <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
       <SubpatchOverlay />

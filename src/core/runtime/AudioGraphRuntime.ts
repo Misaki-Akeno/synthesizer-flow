@@ -15,6 +15,7 @@ import type {
   RuntimeCommitResult,
   RuntimeCustomUI,
   RuntimeModuleSnapshot,
+  RuntimeModuleTelemetry,
 } from '@/core/graph/types';
 import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
 import { transportService } from '@/core/audio/TransportService';
@@ -82,6 +83,33 @@ function sanitizeProps(
   return value;
 }
 
+function isSameJson(a: unknown, b: unknown): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * 逐键复用内容未变的旧值，让 memo 组件能靠引用判断跳过重渲染。
+ * 所有键都未变化时直接返回旧对象。
+ */
+function reuseStableRecord<T>(
+  previous: Record<string, T> | undefined,
+  next: Record<string, T>
+): Record<string, T> {
+  if (!previous) return next;
+  const nextKeys = Object.keys(next);
+  let unchanged = nextKeys.length === Object.keys(previous).length;
+  const merged = Object.fromEntries(
+    nextKeys.map((key) => {
+      if (key in previous && isSameJson(previous[key], next[key])) {
+        return [key, previous[key]];
+      }
+      unchanged = false;
+      return [key, next[key]];
+    })
+  );
+  return unchanged ? previous : merged;
+}
+
 /**
  * 音频运行时是 ModuleBase/Tone 实例的唯一所有者。
  * 对 UI 只发布可序列化快照与显式动作入口。
@@ -91,6 +119,9 @@ export class AudioGraphRuntime {
   private subscriptions = new Map<string, Subscription[]>();
   private listeners = new Map<string, Set<RuntimeListener>>();
   private actions = new Map<string, Map<string, RuntimeAction>>();
+  private telemetry = new Map<string, RuntimeModuleTelemetry>();
+  private dirtyTelemetry = new Set<string>();
+  private telemetryListeners = new Map<string, Set<RuntimeListener>>();
 
   /** 返回音频调度器的权威播放位置，不向 UI 暴露 Tone 对象。 */
   getTransportPositionTicks(): number | undefined {
@@ -129,18 +160,31 @@ export class AudioGraphRuntime {
     return Array.from(this.snapshots.values());
   }
 
+  /** 订阅结构快照：参数、启用状态、端口类型与自定义 UI。端口值变化不会触发。 */
   subscribeModule(moduleId: string, listener: RuntimeListener): () => void {
-    const listeners =
-      this.listeners.get(moduleId) ?? new Set<RuntimeListener>();
-    listeners.add(listener);
-    this.listeners.set(moduleId, listeners);
+    return addListener(this.listeners, moduleId, listener);
+  }
 
-    return () => {
-      listeners.delete(listener);
-      if (listeners.size === 0) {
-        this.listeners.delete(moduleId);
+  /**
+   * 端口值按需读取：端口事件只标记脏位，真正读取时才序列化，
+   * 没有订阅者的模块不会产生任何遥测开销。
+   */
+  getModuleTelemetry(moduleId: string): RuntimeModuleTelemetry | undefined {
+    if (this.dirtyTelemetry.has(moduleId) || !this.telemetry.has(moduleId)) {
+      const moduleInstance = moduleManager.getModule(moduleId);
+      if (moduleInstance && !moduleInstance.isDisposed()) {
+        this.captureTelemetry(moduleInstance);
       }
-    };
+    }
+    return this.telemetry.get(moduleId);
+  }
+
+  /** 订阅端口遥测，通知按 TELEMETRY_THROTTLE_MS 节流。 */
+  subscribeModuleTelemetry(
+    moduleId: string,
+    listener: RuntimeListener
+  ): () => void {
+    return addListener(this.telemetryListeners, moduleId, listener);
   }
 
   /**
@@ -224,7 +268,12 @@ export class AudioGraphRuntime {
     transportService.reset();
     this.snapshots.clear();
     this.actions.clear();
+    this.telemetry.clear();
+    this.dirtyTelemetry.clear();
     this.listeners.forEach((listeners) => {
+      listeners.forEach((listener) => listener());
+    });
+    this.telemetryListeners.forEach((listeners) => {
       listeners.forEach((listener) => listener());
     });
   }
@@ -284,6 +333,7 @@ export class AudioGraphRuntime {
     }
 
     this.captureSnapshot(moduleInstance);
+    this.dirtyTelemetry.add(moduleInstance.id);
     this.subscribeToModule(moduleInstance);
   }
 
@@ -292,7 +342,10 @@ export class AudioGraphRuntime {
     moduleManager.disposeModule(moduleId);
     this.snapshots.delete(moduleId);
     this.actions.delete(moduleId);
+    this.telemetry.delete(moduleId);
+    this.dirtyTelemetry.delete(moduleId);
     this.emit(moduleId);
+    this.emitTelemetry(moduleId);
   }
 
   private subscribeToModule(moduleInstance: ModuleBase): void {
@@ -306,7 +359,10 @@ export class AudioGraphRuntime {
       );
     });
 
-    Object.values(moduleInstance.inputPorts).forEach((subject) => {
+    [
+      ...Object.values(moduleInstance.inputPorts),
+      ...Object.values(moduleInstance.outputPorts),
+    ].forEach((subject) => {
       subscriptions.push(
         subject
           .pipe(
@@ -316,22 +372,7 @@ export class AudioGraphRuntime {
             })
           )
           .subscribe(() => {
-            this.refreshSnapshot(moduleInstance.id);
-          })
-      );
-    });
-
-    Object.values(moduleInstance.outputPorts).forEach((subject) => {
-      subscriptions.push(
-        subject
-          .pipe(
-            throttleTime(TELEMETRY_THROTTLE_MS, undefined, {
-              leading: true,
-              trailing: true,
-            })
-          )
-          .subscribe(() => {
-            this.refreshSnapshot(moduleInstance.id);
+            this.handlePortActivity(moduleInstance);
           })
       );
     });
@@ -354,6 +395,20 @@ export class AudioGraphRuntime {
     this.subscriptions.delete(moduleId);
   }
 
+  private handlePortActivity(moduleInstance: ModuleBase): void {
+    if (moduleInstance.isDisposed()) return;
+    this.dirtyTelemetry.add(moduleInstance.id);
+    this.emitTelemetry(moduleInstance.id);
+
+    // 少数自定义 UI 的 props 由端口事件驱动（例如钢琴键盘的按下状态），
+    // 只有其内容确实变化时才刷新结构快照，避免整张卡片跟着端口值重渲染。
+    const current = this.snapshots.get(moduleInstance.id)?.customUI;
+    const { customUI } = this.buildCustomUI(moduleInstance);
+    if (!isSameJson(current, customUI)) {
+      this.refreshSnapshot(moduleInstance.id);
+    }
+  }
+
   private refreshSnapshot(moduleId: string): void {
     const moduleInstance = moduleManager.getModule(moduleId);
     if (!moduleInstance || moduleInstance.isDisposed()) {
@@ -364,11 +419,15 @@ export class AudioGraphRuntime {
   }
 
   private captureSnapshot(moduleInstance: ModuleBase): void {
-    const parameterMeta = Object.fromEntries(
-      Object.keys(moduleInstance.parameters).map((key) => [
-        key,
-        moduleInstance.getParameterMeta(key),
-      ])
+    const previous = this.snapshots.get(moduleInstance.id);
+    const parameterMeta = reuseStableRecord(
+      previous?.parameterMeta,
+      Object.fromEntries(
+        Object.keys(moduleInstance.parameters).map((key) => [
+          key,
+          moduleInstance.getParameterMeta(key),
+        ])
+      )
     );
     const parameters = Object.fromEntries(
       Object.entries(moduleInstance.parameters).map(([key, subject]) => [
@@ -376,36 +435,8 @@ export class AudioGraphRuntime {
         subject.getValue(),
       ])
     );
-    const inputValues = Object.fromEntries(
-      Object.entries(moduleInstance.inputPorts).map(([key, subject]) => [
-        key,
-        toSerializableValue(
-          subject.getValue(),
-          moduleInstance.inputPortTypes[key]
-        ),
-      ])
-    );
-    const outputValues = Object.fromEntries(
-      Object.entries(moduleInstance.outputPorts).map(([key, subject]) => [
-        key,
-        toSerializableValue(
-          subject.getValue(),
-          moduleInstance.outputPortTypes[key]
-        ),
-      ])
-    );
 
-    const actionMap = new Map<string, RuntimeAction>();
-    const customUI = moduleInstance.getCustomUI();
-    const sanitizedCustomUI: RuntimeCustomUI | undefined = customUI
-      ? {
-          type: customUI.type,
-          props: (sanitizeProps(customUI.props ?? {}, actionMap) ??
-            {}) as Record<string, unknown>,
-          actions: Array.from(actionMap.keys()),
-        }
-      : undefined;
-
+    const { customUI, actionMap } = this.buildCustomUI(moduleInstance);
     this.actions.set(moduleInstance.id, actionMap);
     const snapshot: RuntimeModuleSnapshot = {
       id: moduleInstance.id,
@@ -418,19 +449,87 @@ export class AudioGraphRuntime {
       canEnable: moduleInstance instanceof AudioModuleBase,
       parameters,
       parameterMeta,
-      inputPortTypes: { ...moduleInstance.inputPortTypes },
-      outputPortTypes: { ...moduleInstance.outputPortTypes },
-      inputValues,
-      outputValues,
-      customUI: sanitizedCustomUI,
+      inputPortTypes: reuseStableRecord(previous?.inputPortTypes, {
+        ...moduleInstance.inputPortTypes,
+      }),
+      outputPortTypes: reuseStableRecord(previous?.outputPortTypes, {
+        ...moduleInstance.outputPortTypes,
+      }),
+      customUI: isSameJson(previous?.customUI, customUI)
+        ? previous?.customUI
+        : customUI,
     };
     this.snapshots.set(moduleInstance.id, snapshot);
     moduleDefinitionRegistry.registerSnapshot(snapshot);
   }
 
+  private buildCustomUI(moduleInstance: ModuleBase): {
+    customUI: RuntimeCustomUI | undefined;
+    actionMap: Map<string, RuntimeAction>;
+  } {
+    const actionMap = new Map<string, RuntimeAction>();
+    const customUI = moduleInstance.getCustomUI();
+    return {
+      actionMap,
+      customUI: customUI
+        ? {
+            type: customUI.type,
+            props: (sanitizeProps(customUI.props ?? {}, actionMap) ??
+              {}) as Record<string, unknown>,
+            actions: Array.from(actionMap.keys()),
+          }
+        : undefined,
+    };
+  }
+
+  private captureTelemetry(moduleInstance: ModuleBase): void {
+    const readValues = (
+      ports: Record<string, { getValue: () => ModuleInterface }>,
+      types: Record<string, PortType>
+    ) =>
+      Object.fromEntries(
+        Object.entries(ports).map(([key, subject]) => [
+          key,
+          toSerializableValue(subject.getValue(), types[key]),
+        ])
+      );
+    this.telemetry.set(moduleInstance.id, {
+      inputValues: readValues(
+        moduleInstance.inputPorts,
+        moduleInstance.inputPortTypes
+      ),
+      outputValues: readValues(
+        moduleInstance.outputPorts,
+        moduleInstance.outputPortTypes
+      ),
+    });
+    this.dirtyTelemetry.delete(moduleInstance.id);
+  }
+
   private emit(moduleId: string): void {
     this.listeners.get(moduleId)?.forEach((listener) => listener());
   }
+
+  private emitTelemetry(moduleId: string): void {
+    this.telemetryListeners.get(moduleId)?.forEach((listener) => listener());
+  }
+}
+
+function addListener(
+  registry: Map<string, Set<RuntimeListener>>,
+  moduleId: string,
+  listener: RuntimeListener
+): () => void {
+  const listeners = registry.get(moduleId) ?? new Set<RuntimeListener>();
+  listeners.add(listener);
+  registry.set(moduleId, listeners);
+
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      registry.delete(moduleId);
+    }
+  };
 }
 
 export const audioGraphRuntime = new AudioGraphRuntime();

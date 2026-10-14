@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { memo, useState, useCallback, useRef } from 'react';
 import { Slider } from '@/components/ui/shadcn/slider';
 import { Switch } from '@/components/ui/shadcn/switch';
 import { Input } from '@/components/ui/shadcn/input';
@@ -12,7 +12,6 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
 import { ParameterType } from '@/core/base/ModuleBase';
@@ -32,17 +31,16 @@ export const ParamLabel = ({
     return <span>{label}:</span>;
   }
 
+  // shadcn 的 Tooltip 已自带 Provider，无需每个标签再包一层
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span>{label}:</span>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p className="max-w-xs text-xs">{description}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span>{label}:</span>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="max-w-xs text-xs">{description}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 };
 
@@ -329,7 +327,7 @@ export const StringParameterControl = ({
 };
 
 // 参数控制组件
-export const ParameterControl = ({
+const ParameterControlComponent = ({
   moduleId,
   paramKey,
   paramType,
@@ -424,3 +422,10 @@ export const ParameterControl = ({
       return <div key={paramKey}>未知参数类型</div>;
   }
 };
+
+/**
+ * 节点卡片中按参数逐个 memo：调用方需保证 meta 与回调引用稳定，
+ * 这样一个参数变化只会重渲染对应的控件。
+ */
+export const ParameterControl = memo(ParameterControlComponent);
+ParameterControl.displayName = 'ParameterControl';

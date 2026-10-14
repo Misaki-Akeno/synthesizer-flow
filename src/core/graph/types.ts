@@ -68,9 +68,16 @@ export interface RuntimeModuleSnapshot {
   parameterMeta: Record<string, RuntimeParameterMeta>;
   inputPortTypes: Record<string, PortType>;
   outputPortTypes: Record<string, PortType>;
+  customUI?: RuntimeCustomUI;
+}
+
+/**
+ * 端口遥测与结构快照分开发布：端口值变化频繁，只有显示端口值的
+ * 组件（选中节点的端口标签、示波器、调试面板）才需要订阅它。
+ */
+export interface RuntimeModuleTelemetry {
   inputValues: Record<string, ModuleInterface>;
   outputValues: Record<string, ModuleInterface>;
-  customUI?: RuntimeCustomUI;
 }
 
 export type GraphPatch =

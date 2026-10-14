@@ -25,6 +25,16 @@
         "label": "自动保存",
         "description": "自动保存画布状态的更改"
       },
+      "nodeDetail": {
+        "label": "节点细节",
+        "description": "缩小画布时省略卡片细节以提升大项目的渲染性能",
+        "options": {
+          "auto": "按缩放自动",
+          "full": "始终完整",
+          "compact": "始终精简",
+          "minimal": "始终极简"
+        }
+      },
       "snapToGrid": {
         "label": "网格对齐",
         "description": "将模块对齐到网格"

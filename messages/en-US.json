@@ -25,6 +25,16 @@
         "label": "Auto Save",
         "description": "Automatically save canvas state"
       },
+      "nodeDetail": {
+        "label": "Node Detail",
+        "description": "Hide card details when zoomed out to keep large projects responsive",
+        "options": {
+          "auto": "Auto (by zoom)",
+          "full": "Always full",
+          "compact": "Always compact",
+          "minimal": "Always minimal"
+        }
+      },
       "snapToGrid": {
         "label": "Snap to Grid",
         "description": "Snap modules to the grid"

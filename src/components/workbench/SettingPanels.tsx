@@ -24,6 +24,8 @@ import {
 import {
   CanvasSettings,
   AISettings,
+  NODE_DETAIL_MODES,
+  type NodeDetailMode,
   useCanvasSettings,
   useAISettings,
   useUpdateSettings,
@@ -35,6 +37,7 @@ import {
   Save,
   Grid3X3,
   Globe,
+  Layers,
   CheckCircle2,
   CircleDashed,
   ExternalLink,
@@ -166,6 +169,39 @@ const CanvasSettingsPanel = memo(
             checked={settings.autoSave}
             onCheckedChange={(checked) => handleChange('autoSave', checked)}
           />
+        </div>
+
+        {/* 节点细节档位 */}
+        <div className="flex flex-row items-center justify-between gap-4">
+          <div className="space-y-0.5">
+            <label className="text-sm font-medium leading-none">
+              <Layers className="h-4 w-4 inline-block mr-1" />
+              {t('nodeDetail.label')}
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {t('nodeDetail.description')}
+            </p>
+          </div>
+          <Select
+            value={settings.nodeDetailMode}
+            onValueChange={(value) =>
+              handleChange('nodeDetailMode', value as NodeDetailMode)
+            }
+          >
+            <SelectTrigger
+              className="w-[160px]"
+              aria-label={t('nodeDetail.label')}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {NODE_DETAIL_MODES.map((mode) => (
+                <SelectItem key={mode} value={mode}>
+                  {t(`nodeDetail.options.${mode}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* 网格对齐开关 */}
