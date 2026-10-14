@@ -1,9 +1,13 @@
 export interface ChatMessage {
+  /** 客户端生成的稳定消息 ID，用于避免重试或恢复时重复写入图状态。 */
+  id?: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   toolCalls?: ToolCall[];
   approval?: {
     status: 'pending' | 'approved' | 'rejected';
+    projectId?: string;
+    canvasRevision?: number;
   };
 }
 
@@ -82,6 +86,16 @@ export interface GraphStateSnapshotEdge {
 export interface GraphStateSnapshot {
   nodes: GraphStateSnapshotNode[];
   edges: GraphStateSnapshotEdge[];
+}
+
+/**
+ * 会被 LangGraph checkpoint 序列化的工具运行时。它只保存可 JSON 化的
+ * 影子画布与待客户端落地的操作，不能保存 ToolExecutor 或模块实例本身。
+ */
+export interface AgentExecutionContext {
+  shadowState: GraphStateSnapshot;
+  pendingOperations: ClientOperation[];
+  loadedSkillIds: string[];
 }
 
 export interface ChatResponse {

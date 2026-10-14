@@ -146,7 +146,30 @@ export class ToolExecutor {
   }
 
   public getOperations(): ClientOperation[] {
-    return this.operations;
+    return [...this.operations];
+  }
+
+  /** 返回可持久化的影子画布，供审批中断后的新请求继续执行。 */
+  public getShadowState(): GraphStateSnapshot {
+    return {
+      nodes: this.nodes.map((node) => ({
+        id: node.id,
+        type: node.type,
+        position: { ...node.position },
+        selected: node.selected,
+        data: {
+          type: node.data.type || node.type || 'default',
+          label: node.data.label,
+          parameters: readRuntimeParameters(
+            node.data.module?.parameters,
+            node.data.parameters || {}
+          ) as GraphStateSnapshot['nodes'][number]['data']['parameters'],
+          ports: this.getNodePorts(node),
+          module: undefined,
+        },
+      })),
+      edges: this.edges.map((edge) => ({ ...edge })),
+    };
   }
 
   /**

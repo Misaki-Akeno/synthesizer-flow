@@ -12,9 +12,9 @@ import { AgentSkillSession } from '@/agent/skills';
  * Graph 从注册表读取审批策略，避免在工作流中重复维护危险工具名单。
  */
 export function createAgentToolRegistry(
-  executor: ToolExecutor
+  executor: ToolExecutor,
+  skillSession = new AgentSkillSession()
 ): AgentToolRegistry {
-  const skillSession = new AgentSkillSession();
   const groups = [
     createInspectionToolGroup(executor),
     createModuleToolGroup(executor, skillSession),

@@ -47,6 +47,10 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { getDisconnectEdgeChanges } from './clientOperations';
+import {
+  applyClientOperationsAtomically,
+  isCanvasResponseCurrent,
+} from './operationBatch';
 import { graphStateToSerializedCanvas } from './checkpointRestore';
 import {
   createSerializableCanvasSnapshot,
@@ -60,12 +64,28 @@ function getCurrentCanvasSnapshot() {
   return createSerializableCanvasSnapshot(state.nodes, state.edges);
 }
 
+type CanvasRequestBinding = {
+  projectId: string;
+  revision: number;
+};
+
+function getCanvasRequestBinding(): CanvasRequestBinding {
+  const state = useFlowStore.getState();
+  return { projectId: state.currentProjectId, revision: state.revision };
+}
+
+function isCurrentCanvasBinding(binding: CanvasRequestBinding): boolean {
+  return isCanvasResponseCurrent(binding, getCanvasRequestBinding());
+}
+
 export function ChatInterface() {
   const t = useTranslations('Workbench.chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // checkpoint 恢复到全新的服务端 thread 后，仅首次请求补种已恢复的历史。
+  const historySeedRef = useRef<ChatMessage[] | null>(null);
 
   // 获取AI设置
   const aiSettings = useAISettings();
@@ -79,6 +99,9 @@ export function ChatInterface() {
     updateModuleParameter,
     onConnect,
     onEdgesChange,
+    beginHistoryTransaction,
+    commitHistoryTransaction,
+    cancelHistoryTransaction,
     importCanvasFromJson,
   } = useFlowStore(
     useShallow((s) => ({
@@ -87,6 +110,9 @@ export function ChatInterface() {
       updateModuleParameter: s.updateModuleParameter,
       onConnect: s.onConnect,
       onEdgesChange: s.onEdgesChange,
+      beginHistoryTransaction: s.beginHistoryTransaction,
+      commitHistoryTransaction: s.commitHistoryTransaction,
+      cancelHistoryTransaction: s.cancelHistoryTransaction,
       importCanvasFromJson: s.importCanvasFromJson,
     }))
   );
@@ -132,51 +158,84 @@ export function ChatInterface() {
   }, []);
 
   const executeClientOperations = (operations: ClientOperation[]) => {
-    operations.forEach((op) => {
-      switch (op.type) {
-        case 'ADD_MODULE':
-          addNode(op.data.type, op.data.label, op.data.position, op.data.id);
-          break;
-        case 'DELETE_MODULE':
-          deleteNode(op.data.id);
-          break;
-        case 'UPDATE_MODULE_PARAM':
-          updateModuleParameter(
-            op.data.id,
-            op.data.key,
-            op.data.value as string | number | boolean
-          );
-          break;
-        case 'CONNECT_MODULES':
-          onConnect({
-            source: op.data.source,
-            target: op.data.target,
-            sourceHandle: op.data.sourceHandle || null,
-            targetHandle: op.data.targetHandle || null,
-          });
-          break;
-        case 'DISCONNECT_MODULES': {
-          const edgeChanges = getDisconnectEdgeChanges(
-            useFlowStore.getState().edges,
-            op.data
-          );
-          if (edgeChanges.length > 0) {
-            onEdgesChange(edgeChanges);
-          }
-          break;
-        }
-      }
+    const matchesConnection = (
+      edge: ReturnType<typeof useFlowStore.getState>['edges'][number],
+      operation: Extract<
+        ClientOperation,
+        { type: 'CONNECT_MODULES' | 'DISCONNECT_MODULES' }
+      >
+    ) =>
+      edge.source === operation.data.source &&
+      edge.target === operation.data.target &&
+      (edge.sourceHandle || 'output') ===
+        (operation.data.sourceHandle || 'output') &&
+      (edge.targetHandle || 'input') ===
+        (operation.data.targetHandle || 'input');
+
+    applyClientOperationsAtomically(operations, {
+      begin: beginHistoryTransaction,
+      commit: commitHistoryTransaction,
+      cancel: cancelHistoryTransaction,
+      hasNode: (id) =>
+        useFlowStore.getState().nodes.some((node) => node.id === id),
+      getNodeType: (id) =>
+        useFlowStore.getState().nodes.find((node) => node.id === id)?.data.type,
+      add: (operation) =>
+        addNode(
+          operation.data.type,
+          operation.data.label,
+          operation.data.position,
+          operation.data.id
+        ),
+      delete: (operation) => deleteNode(operation.data.id),
+      update: (operation) =>
+        updateModuleParameter(
+          operation.data.id,
+          operation.data.key,
+          operation.data.value as string | number | boolean
+        ),
+      readParameter: (id, key) =>
+        useFlowStore
+          .getState()
+          .nodes.find((node) => node.id === id)
+          ?.data.module?.parameters[key]?.getValue(),
+      hasConnection: (operation) =>
+        useFlowStore
+          .getState()
+          .edges.some((edge) => matchesConnection(edge, operation)),
+      connect: (operation) =>
+        onConnect({
+          source: operation.data.source,
+          target: operation.data.target,
+          sourceHandle: operation.data.sourceHandle || null,
+          targetHandle: operation.data.targetHandle || null,
+        }),
+      disconnect: (operation) => {
+        const edgeChanges = getDisconnectEdgeChanges(
+          useFlowStore.getState().edges,
+          operation.data
+        );
+        if (edgeChanges.length > 0) onEdgesChange(edgeChanges);
+      },
     });
   };
 
   const handleFinalResponse = (
     response: ChatResponse,
-    currentAssistantMessage: string
+    currentAssistantMessage: string,
+    requestBinding: CanvasRequestBinding
   ) => {
     let toolCalls = response.hasToolUse ? response.toolCalls : undefined;
 
     // 执行客户端操作后，再增强工具结果，确保写入消息 state 的是最新画布状态
-    if (response.clientOperations && response.clientOperations.length > 0) {
+    if (
+      !response.approvalRequired &&
+      response.clientOperations &&
+      response.clientOperations.length > 0
+    ) {
+      if (!isCurrentCanvasBinding(requestBinding)) {
+        throw new Error('画布已在请求期间变更，已拒绝应用过期操作');
+      }
       executeClientOperations(response.clientOperations);
 
       if (toolCalls && toolCalls.length > 0) {
@@ -196,7 +255,11 @@ export function ChatInterface() {
             currentAssistantMessage ||
             t('requiresApproval'),
           toolCalls,
-          approval: { status: 'pending' },
+          approval: {
+            status: 'pending',
+            projectId: requestBinding.projectId,
+            canvasRevision: requestBinding.revision,
+          },
         };
         return newMessages;
       });
@@ -223,12 +286,31 @@ export function ChatInterface() {
     // If normal send, we need input.
     if (!action && (!input.trim() || isLoading || !isAIConfigured)) return;
 
+    if (action === 'approve' && typeof targetMessageIndex === 'number') {
+      const approval = messages[targetMessageIndex]?.approval;
+      if (
+        approval?.projectId !== undefined &&
+        approval.canvasRevision !== undefined &&
+        !isCurrentCanvasBinding({
+          projectId: approval.projectId,
+          revision: approval.canvasRevision,
+        })
+      ) {
+        toast.error('画布已变更，已拒绝过期的审批操作');
+        await sendMessage('reject', targetMessageIndex);
+        return;
+      }
+    }
+
+    let submittedUserMessage: ChatMessage | undefined;
     if (!action) {
       // Normal message
       const userMessage: ChatMessage = {
+        id: createThreadId(window.crypto),
         role: 'user',
         content: input,
       };
+      submittedUserMessage = userMessage;
       setMessages((prev) => [...prev, userMessage]);
       setInput('');
     } else if (typeof targetMessageIndex === 'number') {
@@ -259,11 +341,13 @@ export function ChatInterface() {
     try {
       // 捕获当前状态快照 (sanitize to remove non-serializable data)
       const graphSnapshot = getCurrentCanvasSnapshot();
+      const requestBinding = getCanvasRequestBinding();
 
-      // Pass Thread ID and Action
+      // 持久化 Graph 是对话历史的权威来源：日常请求仅提交新用户消息。
+      // 从业务 checkpoint 恢复后，新 thread 的第一轮补种历史以保留上下文。
       const history: ChatMessage[] = action
-        ? messages
-        : [...messages, { role: 'user', content: input } as ChatMessage];
+        ? []
+        : [...(historySeedRef.current ?? []), submittedUserMessage!];
       const stream = await chatWithAgent(
         history,
         aiSettings,
@@ -325,7 +409,12 @@ export function ChatInterface() {
             if (action === 'reject') {
               setThreadId(createThreadId(window.crypto));
             } else {
-              handleFinalResponse(part.response, currentAssistantMessage);
+              handleFinalResponse(
+                part.response,
+                currentAssistantMessage,
+                requestBinding
+              );
+              historySeedRef.current = null;
             }
           }
         }
@@ -336,10 +425,11 @@ export function ChatInterface() {
           | ChatResponse;
         // In case it's a direct ChatResponse or wrapped in {type:'done'}
         if ('type' in response && response.type === 'done') {
-          handleFinalResponse(response.response, '');
+          handleFinalResponse(response.response, '', requestBinding);
         } else {
-          handleFinalResponse(response as ChatResponse, '');
+          handleFinalResponse(response as ChatResponse, '', requestBinding);
         }
+        historySeedRef.current = null;
       }
     } catch (error) {
       console.error('聊天请求失败:', error);
@@ -549,6 +639,7 @@ export function ChatInterface() {
     setInput('');
     setIsLoading(false);
     setThreadId(createThreadId(window.crypto));
+    historySeedRef.current = null;
   };
 
   // 检查是否已设置API密钥
@@ -617,7 +708,13 @@ export function ChatInterface() {
         return;
       }
 
-      setMessages(restoredMessages);
+      const normalizedHistory = restoredMessages.map((message) => ({
+        ...message,
+        id: message.id || createThreadId(window.crypto),
+      }));
+      setMessages(normalizedHistory);
+      historySeedRef.current = normalizedHistory;
+      setThreadId(createThreadId(window.crypto));
       toast.success(t('checkpointLoaded'));
       setIsHistoryOpen(false);
     } catch (e) {
