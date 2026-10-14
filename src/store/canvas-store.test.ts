@@ -11,6 +11,7 @@ function resetCanvasStore(): void {
     nodes: [],
     edges: [],
     currentProjectId: '',
+    revision: 0,
     canUndo: false,
     canRedo: false,
     history: {
@@ -330,6 +331,115 @@ describe('canvas store connections', () => {
 describe('canvas store history', () => {
   beforeEach(() => {
     resetCanvasStore();
+  });
+
+  it('preserves runtime modules and connections when undoing layout and parameter edits', () => {
+    const store = useFlowStore.getState();
+    store.addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    store.addNode('calculator', 'Calculator', { x: 200, y: 0 }, 'calculator');
+    store.onConnect({
+      source: 'number',
+      target: 'calculator',
+      sourceHandle: 'output',
+      targetHandle: 'a',
+    });
+    const source = moduleManager.getModule('number')!;
+    const target = moduleManager.getModule('calculator')!;
+    const dispose = vi.spyOn(source, 'dispose');
+    const bind = vi.spyOn(moduleManager, 'bindModules');
+    store.onNodesChange([
+      { type: 'position', id: 'number', position: { x: 80, y: 90 } },
+    ]);
+    store.undo();
+    expect(
+      useFlowStore.getState().nodes.find((node) => node.id === 'number')
+        ?.position
+    ).toEqual({ x: 0, y: 0 });
+    store.renameNode('number', 'Renamed');
+    store.undo();
+    expect(source.name).toBe('Number');
+    store.updateModuleParameter('number', 'value', 42);
+    store.undo();
+    expect(source.getParameterValue('value')).toBe(120);
+    expect(target.getInputValue('a')).toBe(120);
+    expect(moduleManager.getModule('number')).toBe(source);
+    expect(moduleManager.getModule('calculator')).toBe(target);
+    expect(dispose).not.toHaveBeenCalled();
+    expect(bind).not.toHaveBeenCalled();
+  });
+
+  it('rolls back a failed transaction without replacing unaffected module instances or history', () => {
+    const store = useFlowStore.getState();
+    store.addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    const source = moduleManager.getModule('number');
+    const history = useFlowStore.getState().history;
+    store.beginHistoryTransaction();
+    store.updateModuleParameter('number', 'value', 42);
+    store.addNode('calculator', 'Temporary', { x: 100, y: 0 }, 'temporary');
+    store.cancelHistoryTransaction();
+    expect(moduleManager.getModule('number')).toBe(source);
+    expect(source?.getParameterValue('value')).toBe(120);
+    expect(moduleManager.getModule('temporary')).toBeUndefined();
+    expect(useFlowStore.getState().history).toBe(history);
+  });
+
+  it('publishes content revisions after parameter mutations and ignores selection', () => {
+    const store = useFlowStore.getState();
+    store.addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    const before = useFlowStore.getState().revision;
+    store.onNodesChange([{ type: 'select', id: 'number', selected: true }]);
+    expect(useFlowStore.getState().revision).toBe(before);
+    const captured: number[] = [];
+    const unsubscribe = useFlowStore.subscribe((state, previous) => {
+      if (state.revision !== previous.revision) {
+        captured.push(
+          moduleManager
+            .getModule('number')!
+            .getParameterValue('value') as number
+        );
+      }
+    });
+    store.updateModuleParameter('number', 'value', 42);
+    expect(captured).toEqual([42]);
+    expect(useFlowStore.getState().revision).toBe(before + 1);
+    store.undo();
+    expect(captured).toEqual([42, 120]);
+    unsubscribe();
+  });
+
+  it('rejects duplicate node IDs without disposing the original module', () => {
+    const store = useFlowStore.getState();
+    store.addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    const original = moduleManager.getModule('number')!;
+    const dispose = vi.spyOn(original, 'dispose');
+    expect(() =>
+      store.addNode('calculator', 'Duplicate', { x: 0, y: 0 }, 'number')
+    ).toThrow();
+    expect(moduleManager.getModule('number')).toBe(original);
+    expect(dispose).not.toHaveBeenCalled();
+    expect(useFlowStore.getState().nodes).toHaveLength(1);
+  });
+
+  it('cleans runtime bindings on React Flow keyboard deletion and restores them with undo', () => {
+    const store = useFlowStore.getState();
+    store.addNode('numberinput', 'Number', { x: 0, y: 0 }, 'number');
+    store.addNode('calculator', 'Calculator', { x: 200, y: 0 }, 'calculator');
+    store.onConnect({
+      source: 'number',
+      target: 'calculator',
+      sourceHandle: 'output',
+      targetHandle: 'a',
+    });
+    const target = moduleManager.getModule('calculator');
+    store.onNodesChange([{ type: 'remove', id: 'number' }]);
+    expect(moduleManager.getModule('number')).toBeUndefined();
+    expect(useFlowStore.getState().edges).toHaveLength(0);
+    store.undo();
+    expect(moduleManager.getModule('calculator')).toBe(target);
+    expect(useFlowStore.getState().edges).toHaveLength(1);
+    expect(
+      moduleManager.getModule('number')?.getOutputConnections('output')
+    ).toHaveLength(1);
   });
 
   it('undoes and redoes node creation', () => {
