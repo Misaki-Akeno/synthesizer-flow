@@ -71,7 +71,7 @@ export default function EdgeModuleLogger() {
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {' '}
-                  ({node.type || node.data?.module?.type || '未知类型'})
+                  ({node.data.type || '未知类型'})
                 </span>
               </div>
             ))}

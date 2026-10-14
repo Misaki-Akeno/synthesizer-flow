@@ -45,6 +45,7 @@ export const MODULE_GUIDES: Record<string, ModuleGuideContent> = {
       '选择输入设备和监听通道',
       '普通键盘使用 standard；MPE 控制器使用 mpe 并检查成员通道范围',
       '优先将 midi 端口连接到支持 MIDI 的音源',
+      '延音踏板使用 CC64；参数 MIDI Learn 会监听下一条 CC 消息',
     ],
     cautions: ['浏览器需要用户授权 MIDI 设备；服务端 Agent 无法代替用户授权'],
     tags: ['input', 'midi', 'mpe', 'performance'],
@@ -64,6 +65,7 @@ export const MODULE_GUIDES: Record<string, ModuleGuideContent> = {
       '使用界面中的 MIDI Clip 编辑器维护 clip 数据',
       '设置 BPM 与全局转置，再将 midi 输出连接到音源',
       '通过 playing 参数控制播放状态',
+      '录制前启用 recordArmed，并用 quantizeStrength 保留或修正演奏律动',
     ],
     cautions: ['clipData 是结构化 JSON，不要在不了解格式时直接覆写'],
     tags: ['input', 'sequencer', 'midi', 'clip'],
@@ -102,6 +104,63 @@ export const MODULE_GUIDES: Record<string, ModuleGuideContent> = {
     setup: ['将 AUDIO 信号接入 input', '先降低 wet 试听，再调整 bits 强度'],
     cautions: ['高 wet 与激进位深会产生尖锐高频，注意监听音量'],
     tags: ['effect', 'lofi', 'distortion', 'audio'],
+  },
+  vca: {
+    useWhen: ['用包络控制音量', '制作震音或自动淡入淡出'],
+    setup: [
+      '将音频连接到 input',
+      '将包络或 LFO 连接到 cv',
+      '用 gain 和 cvAmount 设置基础电平与调制深度',
+    ],
+    cautions: ['CV 会与基础增益相乘；没有 CV 时保持默认值 1'],
+    tags: ['audio', 'amplifier', 'vca', 'modulation'],
+  },
+  filter: {
+    useWhen: ['进行减法合成音色塑形', '制作扫频、哇音或共振效果'],
+    setup: [
+      '将音频接入 input 并选择滤波模式',
+      '设置 cutoff 与 resonance',
+      '可将 LFO 或包络接到 cutoffMod',
+    ],
+    cautions: ['高共振可能显著提高峰值，后级建议接主限幅器'],
+    tags: ['audio', 'filter', 'subtractive', 'modulation'],
+  },
+  mixer: {
+    useWhen: ['合并多个音源或并行效果返回', '统一控制主输出电平'],
+    setup: [
+      '将最多四路 AUDIO 信号接到 input1..input4',
+      '分别设置通道电平，再调整 master',
+    ],
+    cautions: ['多路高电平相加容易削波，保留主输出余量'],
+    tags: ['audio', 'mixer', 'routing', 'gain'],
+  },
+  noise: {
+    useWhen: ['制作鼓噪声、风声、气息和纹理', '为减法合成提供宽频信号源'],
+    setup: [
+      '选择 white、pink 或 brown',
+      '先降低 level，再接入滤波器、VCA 或效果器',
+    ],
+    cautions: ['白噪声高频能量强，首次监听保持较低电平'],
+    tags: ['audio', 'noise', 'source', 'texture'],
+  },
+  masterlimiter: {
+    useWhen: ['在 Speaker 前保护最终输出', '控制复杂混音的瞬时峰值'],
+    setup: [
+      '将最终混音接到 input',
+      '设置输入增益与 ceiling，再把 output 接到 Speaker',
+    ],
+    cautions: ['限幅器是安全网，不应依赖它修复长期过载的通道增益'],
+    tags: ['audio', 'output', 'limiter', 'mastering'],
+  },
+  masterrecorder: {
+    useWhen: ['导出主总线演奏或编曲', '快速生成可分享的 WAV 文件'],
+    setup: [
+      '将最终混音接到 input，并把 output 继续接到主限幅器或 Speaker',
+      '设置文件名后点击开始录音',
+      '演奏完成后点击停止并导出',
+    ],
+    cautions: ['录音数据只存在于运行时，停止后请保存浏览器下载的 WAV 文件'],
+    tags: ['audio', 'output', 'recorder', 'wav', 'export'],
   },
   speaker: {
     useWhen: ['把最终音频送到系统输出', '作为音频链的终点'],

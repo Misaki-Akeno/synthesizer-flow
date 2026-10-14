@@ -13,6 +13,12 @@ import { SequencerModule } from './input/SequencerModule';
 import { NumberInputModule } from './logic/NumberInputModule';
 import { CalculatorModule } from './logic/CalculatorModule';
 import { OscilloscopeModule } from './logic/OscilloscopeModule';
+import { VCAModule } from './audio/VCAModule';
+import { FilterModule } from './audio/FilterModule';
+import { MixerModule } from './audio/MixerModule';
+import { NoiseModule } from './audio/NoiseModule';
+import { MasterLimiterModule } from './audio/MasterLimiterModule';
+import { MasterRecorderModule } from './audio/MasterRecorderModule';
 import { ModuleBase, ModuleMetadata } from '../base/ModuleBase';
 
 // 导出所有模块类
@@ -32,12 +38,18 @@ export {
   NumberInputModule,
   CalculatorModule,
   OscilloscopeModule,
+  VCAModule,
+  FilterModule,
+  MixerModule,
+  NoiseModule,
+  MasterLimiterModule,
+  MasterRecorderModule,
 };
 
 // 定义一个映射表，将模块类型名与对应的模块类关联
 export const moduleClassMap: Record<
   string,
-  { new(...args: string[]): ModuleBase } & { metadata: ModuleMetadata }
+  { new (...args: string[]): ModuleBase } & { metadata: ModuleMetadata }
 > = {
   simpleoscillator: SimpleOscillatorModule,
   advancedoscillator: AdvancedOscillatorModule,
@@ -54,6 +66,12 @@ export const moduleClassMap: Record<
   numberinput: NumberInputModule,
   calculator: CalculatorModule,
   oscilloscope: OscilloscopeModule,
+  vca: VCAModule,
+  filter: FilterModule,
+  mixer: MixerModule,
+  noise: NoiseModule,
+  masterlimiter: MasterLimiterModule,
+  masterrecorder: MasterRecorderModule,
 };
 
 // 获取所有模块类的元数据

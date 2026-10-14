@@ -3,13 +3,19 @@
 import React, { useMemo } from 'react';
 import { Button } from '@/components/ui/shadcn/button';
 import { Input } from '@/components/ui/shadcn/input';
-import { ModuleBase } from '@/core/base/ModuleBase';
-import { getClipLengthTicks, midiToNoteName, parseMidiClipJson } from '@/core/midi/utils';
-import { Play, Square, PanelBottomOpen, Music2 } from 'lucide-react';
+import {
+  getClipLengthTicks,
+  midiToNoteName,
+  parseMidiClipJson,
+} from '@/core/midi/utils';
+import { Pause, Play, PanelBottomOpen, Music2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useFlowStore } from '@/store/canvas-store';
+import { useTransportRuntimeStore } from '@/store/transport-runtime-store';
+import { audioGraphRuntime } from '@/core/runtime/AudioGraphRuntime';
 
 interface SequenceEditorProps {
-  module?: ModuleBase;
+  moduleId?: string;
   paramValues: Record<string, number | boolean | string>;
   onParamChange: (paramKey: string, value: number | boolean | string) => void;
   clipParam?: string;
@@ -18,9 +24,8 @@ interface SequenceEditorProps {
 }
 
 const SequenceEditor: React.FC<SequenceEditorProps> = ({
-  module,
+  moduleId,
   paramValues,
-  onParamChange,
   clipParam = 'clip',
   bpmParam,
   runningParam,
@@ -28,8 +33,22 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const serializedClip = paramValues[clipParam] as string;
-  const clip = useMemo(() => parseMidiClipJson(serializedClip || ''), [serializedClip]);
-  const isRunning = runningParam ? (paramValues[runningParam] as boolean) : false;
+  const clip = useMemo(
+    () => parseMidiClipJson(serializedClip || ''),
+    [serializedClip]
+  );
+  const transport = useFlowStore((state) => state.transport);
+  const setTransportBpm = useFlowStore((state) => state.setTransportBpm);
+  const setSequencersRunning = useFlowStore(
+    (state) => state.setSequencersRunning
+  );
+  const isRunning = useTransportRuntimeStore((state) => state.isPlaying);
+  const positionTicks = useTransportRuntimeStore(
+    (state) => state.positionTicks
+  );
+  const clipLengthTicks = Math.max(1, getClipLengthTicks(clip));
+  const playheadPercent =
+    ((positionTicks % clipLengthTicks) / clipLengthTicks) * 100;
 
   const pitchRange = useMemo(() => {
     if (clip.notes.length === 0) {
@@ -47,15 +66,21 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
   const openEditor = () => {
     const params = new URLSearchParams(searchParams);
     params.set('bottomPanel', 'midi-editor');
-    if (module?.id) {
-      params.set('moduleId', module.id);
+    if (moduleId) {
+      params.set('moduleId', moduleId);
     }
     router.replace(`?${params.toString()}`, { scroll: false });
   };
 
   const toggleRunning = () => {
-    if (runningParam) {
-      onParamChange(runningParam, !isRunning);
+    const runtime = useTransportRuntimeStore.getState();
+    if (runtime.isPlaying) {
+      runtime.pause();
+      audioGraphRuntime.pauseTransport();
+    } else {
+      runtime.play();
+      if (runtime.hasStarted) audioGraphRuntime.resumeTransport();
+      else setSequencersRunning(true);
     }
   };
 
@@ -77,10 +102,20 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
               onClick={toggleRunning}
               aria-label={isRunning ? 'Stop MIDI clip' : 'Play MIDI clip'}
             >
-              {isRunning ? <Square size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
+              {isRunning ? (
+                <Pause size={12} fill="currentColor" />
+              ) : (
+                <Play size={12} fill="currentColor" />
+              )}
             </Button>
           )}
-          <Button size="icon" variant="outline" className="h-6 w-6" onClick={openEditor} aria-label="Open MIDI editor">
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-6 w-6"
+            onClick={openEditor}
+            aria-label="Open MIDI editor"
+          >
             <PanelBottomOpen size={13} />
           </Button>
         </div>
@@ -88,26 +123,42 @@ const SequenceEditor: React.FC<SequenceEditorProps> = ({
 
       {bpmParam && (
         <div className="flex items-center gap-2 border-b px-2 py-1.5">
-          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">BPM</span>
+          <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+            BPM
+          </span>
           <Input
+            key={transport.bpm}
             type="number"
             className="h-6 w-16 px-2 text-xs"
-            value={(paramValues[bpmParam] as number) ?? ''}
-            onChange={(event) => onParamChange(bpmParam, Number.parseFloat(event.target.value))}
+            defaultValue={transport.bpm}
+            onBlur={(event) =>
+              setTransportBpm(Number.parseFloat(event.target.value))
+            }
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur();
+            }}
           />
           <span className="ml-auto text-[10px] text-muted-foreground">
-            {clip.bars} bar{clip.bars === 1 ? '' : 's'} / {clip.notes.length} notes
+            {clip.bars} bar{clip.bars === 1 ? '' : 's'} / {clip.notes.length}{' '}
+            notes
           </span>
         </div>
       )}
 
       <div className="relative h-20 bg-[linear-gradient(90deg,color-mix(in_oklab,var(--chart-5)_18%,transparent)_1px,transparent_1px),linear-gradient(0deg,color-mix(in_oklab,var(--border)_70%,transparent)_1px,transparent_1px)] bg-[length:25%_100%,100%_20%]">
+        <div
+          className={`pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)] ${isRunning ? 'opacity-100' : 'opacity-30'}`}
+          style={{ left: `${playheadPercent}%` }}
+        />
         {clip.notes.map((note) => {
-          const lengthTicks = Math.max(1, getClipLengthTicks(clip));
+          const lengthTicks = clipLengthTicks;
           const top =
             pitchRange.max === pitchRange.min
               ? 34
-              : 8 + ((pitchRange.max - note.midi) / (pitchRange.max - pitchRange.min)) * 52;
+              : 8 +
+                ((pitchRange.max - note.midi) /
+                  (pitchRange.max - pitchRange.min)) *
+                  52;
           const left = (note.startTick / lengthTicks) * 100;
           const width = Math.max(4, (note.durationTicks / lengthTicks) * 100);
 

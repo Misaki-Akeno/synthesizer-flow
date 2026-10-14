@@ -1,4 +1,5 @@
-import { FlowNode } from '@/core/services/ModuleManager';
+import type { FlowNode } from '@/core/graph/types';
+import { moduleDefinitionRegistry } from '@/core/graph/ModuleDefinitionRegistry';
 
 interface ConnectionLike {
   source?: string | null;
@@ -17,15 +18,19 @@ export function isValidModuleConnection(
     return false;
   }
 
-  const sourceModule = nodes.find((node) => node.id === source)?.data?.module;
-  const targetModule = nodes.find((node) => node.id === target)?.data?.module;
+  const sourceNode = nodes.find((node) => node.id === source);
+  const targetNode = nodes.find((node) => node.id === target);
 
-  if (!sourceModule || !targetModule) {
+  if (!sourceNode || !targetNode) {
     return false;
   }
 
-  const sourcePortType = sourceModule.outputPortTypes[sourceHandle];
-  const targetPortType = targetModule.inputPortTypes[targetHandle];
+  const sourcePortType = moduleDefinitionRegistry.get(sourceNode.data.type)
+    ?.outputPortTypes[sourceHandle];
+  const targetPortType = moduleDefinitionRegistry.get(targetNode.data.type)
+    ?.inputPortTypes[targetHandle];
 
-  return Boolean(sourcePortType && targetPortType && sourcePortType === targetPortType);
+  return Boolean(
+    sourcePortType && targetPortType && sourcePortType === targetPortType
+  );
 }

@@ -24,6 +24,8 @@ export function getSystemPrompt(): string {
 ### 2. Inspection：确认“现在是什么”
 - 调用 \`canvas_inspect\` 获取画布摘要和真实模块 ID。
 - 调用 \`canvas_inspect({ moduleId })\` 获取指定模块的当前参数、端口和连接。
+- 用户询问“为什么没声音”、输出安全或整体健康度时，调用 \`canvas_diagnose\`。它只读声明图并返回可复现的发现与修复 ID。
+- 只有用户明确要求修复时，才把诊断返回的完整 fix.id 传给 \`canvas_apply_diagnostic_fix\`；该工具必须等待审批，禁止自行拼接 ID。
 - 涉及已有模块的修改、删除或连接时，必须先检查相关状态。
 
 ### 3. Modules：编辑模块

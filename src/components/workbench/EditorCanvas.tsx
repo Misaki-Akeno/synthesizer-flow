@@ -19,6 +19,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { isValidModuleConnection } from './connectionValidation';
 import { useShallow } from 'zustand/react/shallow';
 import { useCanvasAutosave } from './useCanvasAutosave';
+import { SubpatchOverlay } from './SubpatchOverlay';
 
 const nodeTypes = {
   default: DefaultNode,
@@ -135,7 +136,7 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
   }, [currentProject, router, pathname, searchParams]);
 
   useEffect(() => {
-    const handleUndoRedoShortcut = (event: KeyboardEvent) => {
+    const handleCanvasShortcut = (event: KeyboardEvent) => {
       if (event.repeat || isEditableTarget(event.target)) {
         return;
       }
@@ -150,23 +151,33 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
       const shouldRedo =
         (key === 'z' && event.shiftKey) || (key === 'y' && !event.shiftKey);
 
-      if (!shouldUndo && !shouldRedo) {
-        return;
-      }
-
-      event.preventDefault();
-      const { undo, redo } = useFlowStore.getState();
+      const store = useFlowStore.getState();
 
       if (shouldRedo) {
-        redo();
+        event.preventDefault();
+        store.redo();
+      } else if (shouldUndo) {
+        event.preventDefault();
+        store.undo();
+      } else if (key === 'g' && !event.shiftKey) {
+        const created = store.createSubpatchFromSelection();
+        if (created) event.preventDefault();
+      } else if (key === 'd' && !event.shiftKey) {
+        const duplicated = store.duplicateSelection();
+        if (duplicated.length > 0) event.preventDefault();
+      } else if (key === 'c' && !event.shiftKey) {
+        if (store.copySelection()) event.preventDefault();
+      } else if (key === 'v' && !event.shiftKey) {
+        const pasted = store.pasteSelection();
+        if (pasted.length > 0) event.preventDefault();
       } else {
-        undo();
+        return;
       }
     };
 
-    window.addEventListener('keydown', handleUndoRedoShortcut);
+    window.addEventListener('keydown', handleCanvasShortcut);
     return () => {
-      window.removeEventListener('keydown', handleUndoRedoShortcut);
+      window.removeEventListener('keydown', handleCanvasShortcut);
     };
   }, []);
 
@@ -219,6 +230,7 @@ const CanvasInner = ({ projectId, onAutoLoad }: CanvasProps) => {
     >
       <Controls />
       <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+      <SubpatchOverlay />
       <ContextMenu />
     </ReactFlow>
   );

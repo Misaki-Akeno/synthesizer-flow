@@ -15,8 +15,8 @@ test('音序器在动画帧暂停时仍能发声、释音，并在停止后保�
     AudioNode.prototype.connect = function (
       this: AudioNode,
       destination: AudioNode | AudioParam,
-      output = 0,
-      input = 0
+      output: number = 0,
+      input: number = 0
     ) {
       if (destination instanceof AudioDestinationNode) {
         const analyser = this.context.createAnalyser();

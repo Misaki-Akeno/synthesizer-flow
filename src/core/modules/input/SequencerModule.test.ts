@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parseMidiClipJson } from '@/core/midi/utils';
+import {
+  getLegacyMidiScheduledTime,
+  parseMidiClipJson,
+} from '@/core/midi/utils';
 import { MidiClip, MidiEvent } from '@/core/midi/types';
 import { SequencerModule } from './SequencerModule';
 
@@ -10,9 +13,17 @@ type ScheduledMidiFrame = {
 };
 
 describe('SequencerModule MIDI clip scheduling', () => {
+  it('exposes loop as a declarative transport parameter', () => {
+    const sequencer = new SequencerModule('sequencer-loop-test');
+
+    expect(sequencer.getParameterValue('loop')).toBe(true);
+  });
+
   it('wraps loop-boundary noteOff into the next loop start frame', () => {
     const sequencer = new SequencerModule('sequencer-test');
-    const clip = parseMidiClipJson(sequencer.getParameterValue('clip') as string);
+    const clip = parseMidiClipJson(
+      sequencer.getParameterValue('clip') as string
+    );
     const scheduledFrames = (
       sequencer as unknown as {
         buildScheduledEvents: (clip: MidiClip) => ScheduledMidiFrame[];
@@ -35,7 +46,10 @@ describe('SequencerModule MIDI clip scheduling', () => {
       tick: 0,
     });
     expect(firstNoteOn).toMatchObject({ type: 'noteOn', midi: 60, tick: 0 });
-    expect(firstFrame?.events.map((event) => event.type)).toEqual(['noteOff', 'noteOn']);
+    expect(firstFrame?.events.map((event) => event.type)).toEqual([
+      'noteOff',
+      'noteOn',
+    ]);
   });
 
   it('batches noteOff and noteOn when events share the same tick', () => {
@@ -46,8 +60,20 @@ describe('SequencerModule MIDI clip scheduling', () => {
         bars: 1,
         timeSignature: [4, 4],
         notes: [
-          { id: 'first', midi: 60, startTick: 0, durationTicks: 480, velocity: 0.8 },
-          { id: 'second', midi: 64, startTick: 480, durationTicks: 480, velocity: 0.8 },
+          {
+            id: 'first',
+            midi: 60,
+            startTick: 0,
+            durationTicks: 480,
+            velocity: 0.8,
+          },
+          {
+            id: 'second',
+            midi: 64,
+            startTick: 480,
+            durationTicks: 480,
+            velocity: 0.8,
+          },
         ],
         events: [],
       })
@@ -57,23 +83,35 @@ describe('SequencerModule MIDI clip scheduling', () => {
         buildScheduledEvents: (clip: MidiClip) => ScheduledMidiFrame[];
       }
     ).buildScheduledEvents(clip);
-    const frameAtSecondBeat = scheduledFrames.find((frame) => frame.tick === 480);
+    const frameAtSecondBeat = scheduledFrames.find(
+      (frame) => frame.tick === 480
+    );
 
-    expect(frameAtSecondBeat?.events.map((event) => event.type)).toEqual(['noteOff', 'noteOn']);
+    expect(frameAtSecondBeat?.events.map((event) => event.type)).toEqual([
+      'noteOff',
+      'noteOn',
+    ]);
   });
 
   it('keeps legacy activeNotes monophonic across contiguous default clip loops', () => {
     const sequencer = new SequencerModule('sequencer-active-notes-test');
     (
       sequencer as unknown as {
-        Tone: { Frequency: (value: number, unit: string) => { toFrequency: () => number } };
+        Tone: {
+          Frequency: (
+            value: number,
+            unit: string
+          ) => { toFrequency: () => number };
+        };
       }
     ).Tone = {
       Frequency: (value: number) => ({
         toFrequency: () => value,
       }),
     };
-    const clip = parseMidiClipJson(sequencer.getParameterValue('clip') as string);
+    const clip = parseMidiClipJson(
+      sequencer.getParameterValue('clip') as string
+    );
     const scheduledFrames = (
       sequencer as unknown as {
         buildScheduledEvents: (clip: MidiClip) => ScheduledMidiFrame[];
@@ -85,10 +123,12 @@ describe('SequencerModule MIDI clip scheduling', () => {
       }
     ).applyMidiEvents.bind(sequencer);
 
-    const activeNotesByFrame = [...scheduledFrames, ...scheduledFrames].map((frame) => {
-      applyMidiEvents(frame.events);
-      return sequencer.outputPorts['activeNotes'].getValue();
-    });
+    const activeNotesByFrame = [...scheduledFrames, ...scheduledFrames].map(
+      (frame) => {
+        applyMidiEvents(frame.events);
+        return sequencer.outputPorts['activeNotes'].getValue();
+      }
+    );
 
     expect(activeNotesByFrame).toEqual([
       [60],
@@ -102,7 +142,7 @@ describe('SequencerModule MIDI clip scheduling', () => {
     ]);
   });
 
-  it('emits timestamped MIDI from the Part callback before deferring legacy ports to Draw', () => {
+  it('emits timestamped MIDI and legacy ports directly from the Part callback', () => {
     const sequencer = new SequencerModule('sequencer-clock-test');
     const drawSchedule = vi.fn();
     (
@@ -136,8 +176,11 @@ describe('SequencerModule MIDI clip scheduling', () => {
       activeNotes: [{ id: 'clock-note', midi: 69 }],
       events: [{ type: 'noteOn', noteId: 'clock-note' }],
     });
-    expect(sequencer.outputPorts['activeNotes'].getValue()).toEqual([]);
-    expect(drawSchedule).toHaveBeenCalledWith(expect.any(Function), 12.345);
+    const legacyNotes = sequencer.outputPorts['activeNotes'].getValue();
+    expect(legacyNotes).toEqual([69]);
+    expect(getLegacyMidiScheduledTime(legacyNotes)).toBe(12.345);
+    // Draw 只适合 DOM 工作，经由它转发 MIDI 会引入抖动并在停止后残留回调。
+    expect(drawSchedule).not.toHaveBeenCalled();
   });
 
   it('cancels scheduled playback and emits allNotesOff when disposed', () => {

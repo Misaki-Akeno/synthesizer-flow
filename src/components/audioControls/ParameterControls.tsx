@@ -16,6 +16,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/shadcn/tooltip';
 import { ParameterType } from '@/core/base/ModuleBase';
+import { Radio } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useMidiLearnStore } from '@/store/midi-learn-store';
 
 // 带描述提示的参数名称组件
 export const ParamLabel = ({
@@ -45,6 +48,7 @@ export const ParamLabel = ({
 
 // 数值参数控制组件
 export const NumberParameterControl = ({
+  moduleId,
   paramKey,
   value,
   min,
@@ -56,6 +60,7 @@ export const NumberParameterControl = ({
   onEditStart,
   onEditEnd,
 }: {
+  moduleId?: string;
   paramKey: string;
   value: number;
   min: number;
@@ -67,6 +72,11 @@ export const NumberParameterControl = ({
   onEditStart?: () => void;
   onEditEnd?: () => void;
 }) => {
+  const learnTarget = useMidiLearnStore((state) => state.target);
+  const startMidiLearn = useMidiLearnStore((state) => state.start);
+  const isLearning =
+    learnTarget?.moduleId === moduleId &&
+    learnTarget?.parameterKey === paramKey;
   const isEditingRef = useRef(false);
   // 使用useEffect来确保inputValue总是跟随value的变化而更新
   const [inputValue, setInputValue] = useState<string>(
@@ -132,7 +142,31 @@ export const NumberParameterControl = ({
   return (
     <div className="mb-3">
       <div className="flex justify-between items-center text-xs mb-1">
-        {labelComponent}
+        <div className="flex items-center gap-1">
+          {labelComponent}
+          {moduleId && (
+            <button
+              type="button"
+              className={cn(
+                'nodrag grid size-5 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
+                isLearning && 'bg-amber-400/20 text-amber-600'
+              )}
+              title={isLearning ? '移动一个 MIDI CC 控件…' : 'MIDI Learn'}
+              aria-label={`${label} MIDI Learn`}
+              onClick={() =>
+                startMidiLearn({
+                  moduleId,
+                  parameterKey: paramKey,
+                  min,
+                  max,
+                  label,
+                })
+              }
+            >
+              <Radio className={cn('size-3', isLearning && 'animate-pulse')} />
+            </button>
+          )}
+        </div>
         <div className="w-16">
           <Input
             type="text"
@@ -296,6 +330,7 @@ export const StringParameterControl = ({
 
 // 参数控制组件
 export const ParameterControl = ({
+  moduleId,
   paramKey,
   paramType,
   value,
@@ -307,6 +342,7 @@ export const ParameterControl = ({
   onEditStart,
   onEditEnd,
 }: {
+  moduleId?: string;
   paramKey: string;
   paramType: ParameterType;
   value: number | boolean | string;
@@ -327,6 +363,7 @@ export const ParameterControl = ({
     case ParameterType.NUMBER:
       return (
         <NumberParameterControl
+          moduleId={moduleId}
           key={paramKey}
           paramKey={paramKey}
           value={typeof value === 'number' ? value : 0}

@@ -9,6 +9,10 @@ import { isAdmin } from '@/lib/auth/rbac';
 import { withAuth } from '@/lib/auth/withAuth';
 import { auth } from '@/lib/auth/auth';
 import { validateSerializedCanvas } from '@/core/types/SerializationValidator';
+import {
+  BUILT_IN_PRESETS,
+  getBuiltInPresetById,
+} from '@/data/built-in-presets.mjs';
 
 const PROJECT_WRITE_ROLES = new Set(['owner', 'editor']);
 const PROJECT_DELETE_ROLES = new Set(['owner']);
@@ -19,6 +23,7 @@ const MAX_PROJECT_METADATA_BYTES = 100_000;
 const PROJECT_SCHEMA_VERSION = 1;
 const PROJECT_DATABASE_MIGRATION_REQUIRED =
   'PROJECT_DATABASE_MIGRATION_REQUIRED';
+const BUNDLED_PRESET_DATE = new Date(Date.UTC(2026, 6, 15));
 
 interface SaveProjectOptions {
   projectId?: string;
@@ -28,8 +33,42 @@ interface SaveProjectOptions {
   metadata?: Record<string, unknown>;
 }
 
+interface PresetListItem {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  isPreset: boolean;
+  metadata: unknown;
+  schemaVersion: number;
+  revision: number;
+}
+
+type BuiltInPresetsResult =
+  | { success: true; data: PresetListItem[]; warning?: string }
+  | { success: false; error: string };
+
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function toBundledPresetProject(
+  preset: (typeof BUILT_IN_PRESETS)[number],
+  includeData = false
+) {
+  return {
+    id: preset.id,
+    name: preset.name,
+    description: preset.description,
+    ...(includeData ? { data: preset.data } : {}),
+    isPreset: true,
+    metadata: preset.metadata,
+    schemaVersion: 1,
+    revision: 1,
+    createdAt: BUNDLED_PRESET_DATE,
+    updatedAt: BUNDLED_PRESET_DATE,
+  };
 }
 
 /**
@@ -94,7 +133,7 @@ export const getUserProjects = withAuth(async (session) => {
 /**
  * 获取单个项目的完整详情
  */
-export const getProjectById = withAuth(async (session, projectId: string) => {
+export async function getProjectById(projectId: string) {
   if (typeof projectId !== 'string') {
     return { success: false, error: 'Project not found' };
   }
@@ -103,17 +142,28 @@ export const getProjectById = withAuth(async (session, projectId: string) => {
     return { success: false, error: 'Project not found' };
   }
 
+  const bundledPreset = getBuiltInPresetById(trimmedProjectId);
+  if (bundledPreset) {
+    return {
+      success: true,
+      data: toBundledPresetProject(bundledPreset, true),
+    };
+  }
+
   try {
-    const link = await db
-      .select()
-      .from(usersToProjects)
-      .where(
-        and(
-          eq(usersToProjects.userId, session.user.id),
-          eq(usersToProjects.projectId, trimmedProjectId)
-        )
-      )
-      .limit(1);
+    const session = await auth();
+    const link = session?.user?.id
+      ? await db
+          .select()
+          .from(usersToProjects)
+          .where(
+            and(
+              eq(usersToProjects.userId, session.user.id),
+              eq(usersToProjects.projectId, trimmedProjectId)
+            )
+          )
+          .limit(1)
+      : [];
 
     const [project] = await db
       .select({
@@ -150,12 +200,12 @@ export const getProjectById = withAuth(async (session, projectId: string) => {
       error: getProjectDatabaseError(error, 'Failed to fetch project'),
     };
   }
-});
+}
 
 /**
  * 获取系统内置预设项目
  */
-export async function getBuiltInPresets() {
+export async function getBuiltInPresets(): Promise<BuiltInPresetsResult> {
   try {
     const presets = await db
       .select({
@@ -173,12 +223,20 @@ export async function getBuiltInPresets() {
       .where(and(eq(projects.isPreset, true), isNull(projects.archivedAt)))
       .orderBy(desc(projects.updatedAt));
 
-    return { success: true, data: presets };
+    const remoteIds = new Set(presets.map((preset) => preset.id));
+    const bundledFallbacks = BUILT_IN_PRESETS.filter(
+      (preset) => !remoteIds.has(preset.id)
+    ).map((preset) => toBundledPresetProject(preset));
+    return { success: true, data: [...presets, ...bundledFallbacks] };
   } catch (error) {
     console.error('Failed to fetch presets:', error);
+    const bundledFallbacks = BUILT_IN_PRESETS.map((preset) =>
+      toBundledPresetProject(preset)
+    );
     return {
-      success: false,
-      error: getProjectDatabaseError(error, 'Failed to fetch presets'),
+      success: true,
+      data: bundledFallbacks,
+      warning: getProjectDatabaseError(error, 'Failed to fetch presets'),
     };
   }
 }

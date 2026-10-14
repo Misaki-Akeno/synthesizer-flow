@@ -64,6 +64,7 @@ import { Button } from '@/components/ui/shadcn/button';
 import { useFlowStore } from '@/store/canvas-store';
 import { useTranslations } from 'next-intl';
 import { useShallow } from 'zustand/react/shallow';
+import { TransportBar } from '@/components/workbench/TransportBar';
 
 interface HeaderProps {
   className?: string;
@@ -467,14 +468,15 @@ export function Header({ className }: HeaderProps) {
         </div>
       </div>
 
-      {/* 中间区域：搜索栏 */}
-      <div className="flex justify-center px-4 max-w-md w-full">
-        <SearchBar className="w-full" />
+      {/* 中间区域：全局 Transport */}
+      <div className="flex min-w-0 flex-[1.35] justify-center px-3">
+        <TransportBar />
       </div>
 
       {/* 右侧区域：按钮 */}
       <div className="flex justify-end items-center gap-2 flex-1">
         <ProjectSaveStatus />
+        <SearchBar className="hidden w-44 xl:flex 2xl:w-56" />
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>

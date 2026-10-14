@@ -71,7 +71,6 @@ export function ProjectManager({ onClose }: ProjectManagerProps) {
     deleteProject,
     exportProjectToFile,
     importProjectFromJson,
-    isLoading,
     isProjectListLoading,
     hasHydratedProjects,
     projectsLastFetchedAt,

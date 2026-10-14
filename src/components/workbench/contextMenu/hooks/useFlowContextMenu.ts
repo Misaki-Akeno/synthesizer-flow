@@ -24,7 +24,7 @@ export const useFlowContextMenu = () => {
         nativeEvent: event,
         isDefaultPrevented: () => false,
         isPropagationStopped: () => false,
-        persist: () => { },
+        persist: () => {},
       } as unknown as React.MouseEvent<Element, MouseEvent>;
     }
   };
@@ -33,12 +33,6 @@ export const useFlowContextMenu = () => {
   const onPaneContextMenu = useCallback(
     (event: MouseEvent | React.MouseEvent<Element, MouseEvent>) => {
       event.preventDefault();
-
-      // 读取 event 的 clientX 与 clientY 均可
-      const clientX =
-        'nativeEvent' in event ? event.nativeEvent.clientX : event.clientX;
-      const clientY =
-        'nativeEvent' in event ? event.nativeEvent.clientY : event.clientY;
 
       const paneMenuItems: MenuItem[] = [
         {
@@ -55,11 +49,7 @@ export const useFlowContextMenu = () => {
           id: 'paste-node',
           label: '粘贴节点',
           onClick: () => {
-            const position = reactFlowInstance.screenToFlowPosition({
-              x: clientX,
-              y: clientY,
-            });
-            console.info('粘贴节点在位置', position);
+            useFlowStore.getState().pasteSelection();
           },
         },
         {
@@ -96,12 +86,22 @@ export const useFlowContextMenu = () => {
             useFlowStore.getState().deleteNode(node.id);
           },
         },
-        { id: 'divider', divider: true, onClick: () => { } },
+        { id: 'divider', divider: true, onClick: () => {} },
         {
           id: 'duplicate-node',
           label: '复制节点',
           onClick: () => {
-            console.info('复制节点', node.id);
+            const store = useFlowStore.getState();
+            if (!store.nodes.find((item) => item.id === node.id)?.selected) {
+              store.onNodesChange(
+                store.nodes.map((item) => ({
+                  type: 'select' as const,
+                  id: item.id,
+                  selected: item.id === node.id,
+                }))
+              );
+            }
+            useFlowStore.getState().duplicateSelection();
           },
         },
       ];

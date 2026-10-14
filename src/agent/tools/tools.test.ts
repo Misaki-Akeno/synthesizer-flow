@@ -103,7 +103,7 @@ describe('ToolExecutor', () => {
       expect(result.error).toContain('未找到模块');
     });
 
-    it('should prefer runtime module parameter values when available', () => {
+    it('should use the serializable graph snapshot as its only state', () => {
       const runtimeExecutor = new ToolExecutor({
         nodes: [
           {
@@ -113,12 +113,9 @@ describe('ToolExecutor', () => {
               type: 'numberinput',
               label: 'Runtime Number',
               parameters: { value: 440 },
-              module: {
-                parameters: {
-                  value: { getValue: () => 880 },
-                },
-                inputPortTypes: {},
-                outputPortTypes: { output: 'number' },
+              ports: {
+                inputs: {},
+                outputs: { output: 'number' },
               },
             },
             position: { x: 0, y: 0 },
@@ -130,7 +127,7 @@ describe('ToolExecutor', () => {
       const result = runtimeExecutor.getModuleDetails('runtime-node');
 
       expect(result.success).toBe(true);
-      expect(result.data?.module.parameters).toEqual({ value: 880 });
+      expect(result.data?.module.parameters).toEqual({ value: 440 });
       expect(result.data?.module.ports.outputs).toEqual({ output: 'number' });
     });
   });
@@ -153,7 +150,7 @@ describe('ToolExecutor', () => {
     });
 
     it('should reject unknown module types', () => {
-      const result = executor.addModule('filter', 'Filter 1', {
+      const result = executor.addModule('missing-module', 'Missing module', {
         x: 100,
         y: 100,
       });
@@ -206,6 +203,29 @@ describe('ToolExecutor', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('参数类型不匹配');
       expect(executor.getOperations()).toHaveLength(0);
+    });
+
+    it('should clamp and snap numeric parameters before updating shadow state', () => {
+      const clamped = executor.updateModuleParameter(
+        'node-1',
+        'value',
+        100000
+      );
+      const snapped = executor.updateModuleParameter('node-1', 'value', 440.6);
+
+      expect(clamped.success).toBe(true);
+      expect(snapped.success).toBe(true);
+      expect(executor.getModuleDetails('node-1').data?.module.parameters.value).toBe(
+        441
+      );
+      expect(executor.getOperations()).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({ value: 999 }),
+        }),
+        expect.objectContaining({
+          data: expect.objectContaining({ value: 441 }),
+        }),
+      ]);
     });
   });
 
@@ -525,10 +545,12 @@ describe('Tool Definitions', () => {
 
   it('should create all tools', () => {
     const tools = createTools(executor);
-    expect(tools).toHaveLength(9);
+    expect(tools).toHaveLength(11);
 
     const toolNames = tools.map((t) => t.name);
     expect(toolNames).toContain('canvas_inspect');
+    expect(toolNames).toContain('canvas_diagnose');
+    expect(toolNames).toContain('canvas_apply_diagnostic_fix');
     expect(toolNames).toContain('module_add');
     expect(toolNames).toContain('knowledge_search');
     expect(toolNames).toContain('skill_list');
@@ -546,8 +568,59 @@ describe('Tool Definitions', () => {
       'skills',
     ]);
     expect(registry.approvalRequiredToolNames).toEqual([
+      'canvas_apply_diagnostic_fix',
       'module_delete',
       'connection_disconnect',
+    ]);
+  });
+
+  it('diagnoses and applies an approved deterministic output fix', async () => {
+    const audioExecutor = new ToolExecutor({
+      nodes: [
+        {
+          id: 'osc',
+          type: 'default',
+          position: { x: 0, y: 0 },
+          data: {
+            type: 'simpleoscillator',
+            label: 'Oscillator',
+            parameters: {},
+            ports: {
+              inputs: { frequency: 'number' },
+              outputs: { audioOut: 'audio' },
+            },
+          },
+        },
+      ],
+      edges: [],
+    });
+    const tools = createTools(audioExecutor);
+    const diagnose = tools.find((tool) => tool.name === 'canvas_diagnose');
+    const applyFix = tools.find(
+      (tool) => tool.name === 'canvas_apply_diagnostic_fix'
+    );
+    expect(diagnose).toBeDefined();
+    expect(applyFix).toBeDefined();
+    if (!diagnose || !applyFix) return;
+
+    const report = JSON.parse(await diagnose.call({}));
+    const fixId = report.data.findings[0].fix.id;
+    const result = JSON.parse(await applyFix.call({ fixId }));
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({ operationsAdded: 5 }),
+      })
+    );
+    expect(
+      audioExecutor.getOperations().map((operation) => operation.type)
+    ).toEqual([
+      'ADD_MODULE',
+      'ADD_MODULE',
+      'CONNECT_MODULES',
+      'CONNECT_MODULES',
+      'CONNECT_MODULES',
     ]);
   });
 

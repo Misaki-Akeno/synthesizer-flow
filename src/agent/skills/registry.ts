@@ -1,5 +1,8 @@
-import { moduleClassMap, moduleMetadataMap } from '@/core/modules';
-import type { ModuleBase } from '@/core/base/ModuleBase';
+import { moduleMetadataMap } from '@/core/modules';
+import {
+  moduleDefinitionRegistry,
+  type ModuleDefinition,
+} from '@/core/graph/ModuleDefinitionRegistry';
 import { getModuleGuide } from './module-guides';
 import type {
   AgentSkill,
@@ -60,12 +63,15 @@ export function listAgentSkills(
     );
 }
 
-function readModuleSkill(type: string, instance: ModuleBase): ModuleSkill {
+function readModuleSkill(
+  type: string,
+  definition: ModuleDefinition
+): ModuleSkill {
   const summary = createModuleSkillSummary(type);
   const guide = getModuleGuide(type);
-  const parameters = Object.entries(instance.parameters).map(
-    ([key, subject]) => {
-      const meta = instance.getParameterMeta(key);
+  const parameters = Object.entries(definition.defaultParameters).map(
+    ([key, defaultValue]) => {
+      const meta = definition.parameterMeta[key];
       const uiOptions = meta.uiOptions ?? {};
       return {
         key,
@@ -75,7 +81,7 @@ function readModuleSkill(type: string, instance: ModuleBase): ModuleSkill {
             ? uiOptions.describe
             : undefined,
         type: meta.type,
-        defaultValue: subject.getValue(),
+        defaultValue,
         min: meta.min,
         max: meta.max,
         step: meta.step,
@@ -97,13 +103,13 @@ function readModuleSkill(type: string, instance: ModuleBase): ModuleSkill {
     },
     parameters,
     ports: {
-      inputs: Object.entries(instance.inputPortTypes).map(
+      inputs: Object.entries(definition.inputPortTypes).map(
         ([key, portType]) => ({
           key,
           type: portType,
         })
       ),
-      outputs: Object.entries(instance.outputPortTypes).map(
+      outputs: Object.entries(definition.outputPortTypes).map(
         ([key, portType]) => ({ key, type: portType })
       ),
     },
@@ -117,16 +123,10 @@ export function loadAgentSkill(skillId: string): AgentSkill | null {
   }
 
   const type = normalizedId.slice(MODULE_SKILL_PREFIX.length);
-  const ModuleClass = moduleClassMap[type];
   const metadata = moduleMetadataMap[type];
-  if (!ModuleClass || !metadata) {
+  const definition = moduleDefinitionRegistry.resolve(type);
+  if (!definition || !metadata) {
     return null;
   }
-
-  const instance = new ModuleClass(`skill-preview-${type}`, metadata.label);
-  try {
-    return readModuleSkill(type, instance);
-  } finally {
-    instance.dispose();
-  }
+  return readModuleSkill(type, definition);
 }

@@ -63,30 +63,30 @@ export function AuxiliarySidebar({ className }: AuxiliarySidebarProps) {
 
   return (
     <WorkbenchPanel className={cn('border-l', className)}>
-      <WorkbenchPanelHeader
-        title={
-          activePanel === 'properties'
-            ? t('panels.properties')
-            : t('panels.chat')
-        }
-        actions={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            onClick={closePanel}
-            aria-label={t('panels.close')}
-          >
-            <X size={15} />
-          </Button>
-        }
-      />
-      <WorkbenchPanelBody className="overflow-auto p-4">
-        {activePanel === 'properties' && (
-          <ModulePropertiesPanel onRequestClose={closePanel} />
-        )}
-        {activePanel === 'llm_chat' && <ChatInterface />}
-      </WorkbenchPanelBody>
+      {activePanel === 'properties' && (
+        <>
+          <WorkbenchPanelHeader
+            title={t('panels.properties')}
+            actions={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={closePanel}
+                aria-label={t('panels.close')}
+              >
+                <X size={15} />
+              </Button>
+            }
+          />
+          <WorkbenchPanelBody className="overflow-auto p-4">
+            <ModulePropertiesPanel onRequestClose={closePanel} />
+          </WorkbenchPanelBody>
+        </>
+      )}
+      {activePanel === 'llm_chat' && (
+        <ChatInterface onRequestClose={closePanel} />
+      )}
     </WorkbenchPanel>
   );
 }

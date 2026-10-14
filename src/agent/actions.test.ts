@@ -64,10 +64,22 @@ const graphState: GraphStateSnapshot = {
   edges: [],
 };
 
-async function collect<T>(stream: AsyncIterable<T>): Promise<T[]> {
+async function collectRaw<T>(stream: AsyncIterable<T>): Promise<T[]> {
   const parts: T[] = [];
   for await (const part of stream) {
     parts.push(part);
+  }
+  return parts;
+}
+
+/** 与客户端一致：error 事件会中断流并抛出其 message。 */
+async function collect<T>(stream: AsyncIterable<T>): Promise<T[]> {
+  const parts = await collectRaw(stream);
+  const failure = parts.find(
+    (part) => (part as { type?: string }).type === 'error'
+  ) as { message: string } | undefined;
+  if (failure) {
+    throw new Error(failure.message);
   }
   return parts;
 }
@@ -91,13 +103,81 @@ describe('chatWithAgent', () => {
     mockStreamMessage.mockReturnValue(createAgentStream());
   });
 
-  it('rejects unauthenticated users before resolving settings', async () => {
-    mockAuth.mockResolvedValue(null);
+  describe('anonymous users', () => {
+    const anonThreadId = '123e4567-e89b-42d3-a456-426614174000';
 
-    await expect(
-      collect(chatWithAgent(messages, settings, graphState))
-    ).rejects.toThrow('Unauthorized');
-    expect(mockResolveAISettingsForUser).not.toHaveBeenCalled();
+    beforeEach(() => {
+      mockAuth.mockResolvedValue(null);
+    });
+
+    it('uses the request API key without reading stored settings', async () => {
+      await collect(chatWithAgent(messages, settings, graphState));
+
+      expect(mockResolveAISettingsForUser).not.toHaveBeenCalled();
+      expect(mockStreamMessage).toHaveBeenCalledWith(
+        messages,
+        expect.objectContaining({
+          providerId: 'custom',
+          apiKey: 'sk-test',
+          apiEndpoint: 'https://example.com/v1',
+          hasServerApiKey: false,
+        }),
+        graphState,
+        undefined,
+        undefined,
+        undefined
+      );
+    });
+
+    it('ignores client endpoints for fixed providers', async () => {
+      await collect(
+        chatWithAgent(
+          messages,
+          {
+            ...settings,
+            providerId: 'openrouter',
+            apiEndpoint: 'http://169.254.169.254/',
+          },
+          graphState
+        )
+      );
+
+      const resolved = mockStreamMessage.mock.calls[0][1];
+      expect(resolved.apiEndpoint).not.toContain('169.254.169.254');
+    });
+
+    it('rejects non-http custom endpoints', async () => {
+      await expect(
+        collect(
+          chatWithAgent(
+            messages,
+            { ...settings, apiEndpoint: 'file:///etc/passwd' },
+            graphState
+          )
+        )
+      ).rejects.toThrow(/http or https/);
+    });
+
+    it('scopes checkpoints to an anon namespace with UUID thread ids', async () => {
+      await collect(
+        chatWithAgent(messages, settings, graphState, anonThreadId)
+      );
+
+      expect(mockStreamMessage).toHaveBeenCalledWith(
+        messages,
+        expect.anything(),
+        graphState,
+        anonThreadId,
+        undefined,
+        `anon:${anonThreadId}`
+      );
+    });
+
+    it('rejects guessable thread ids', async () => {
+      await expect(
+        collect(chatWithAgent(messages, settings, graphState, 'thread_abc'))
+      ).rejects.toThrow('threadId has an invalid format');
+    });
   });
 
   it('rejects malformed messages before creating the agent', async () => {
@@ -361,5 +441,95 @@ describe('chatWithAgent', () => {
       undefined,
       'user-2:thread-1'
     );
+  });
+});
+
+describe('chatWithAgent error events', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth.mockResolvedValue(session);
+    mockResolveAISettingsForUser.mockResolvedValue(settings);
+  });
+
+  it('returns validation failures as invalid_request events', async () => {
+    const parts = await collectRaw(
+      chatWithAgent(
+        [{ role: 'tool', content: 'bad' }] as unknown as ChatMessage[],
+        settings,
+        graphState
+      )
+    );
+
+    expect(parts).toEqual([
+      {
+        type: 'error',
+        code: 'invalid_request',
+        message: expect.stringMatching(/messages\[0\]\.role/),
+      },
+    ]);
+  });
+
+  it('asks for an API key before creating the agent', async () => {
+    mockResolveAISettingsForUser.mockResolvedValue({
+      ...settings,
+      apiKey: '',
+    });
+
+    const parts = await collectRaw(
+      chatWithAgent(messages, settings, graphState)
+    );
+
+    expect(parts).toEqual([
+      expect.objectContaining({ type: 'error', code: 'invalid_request' }),
+    ]);
+    expect(mockStreamMessage).not.toHaveBeenCalled();
+  });
+
+  it('surfaces provider HTTP errors with the API key redacted', async () => {
+    mockStreamMessage.mockImplementation(async function* () {
+      throw Object.assign(new Error('401 bad key sk-test / sk-abcdefgh12345'), {
+        status: 401,
+      });
+    });
+
+    const parts = await collectRaw(
+      chatWithAgent(messages, settings, graphState)
+    );
+
+    expect(parts).toEqual([
+      {
+        type: 'error',
+        code: 'provider',
+        message: '(401) 401 bad key [redacted] / [redacted]',
+      },
+    ]);
+  });
+
+  it('hides internal error details from the client', async () => {
+    mockStreamMessage.mockImplementation(async function* () {
+      yield { type: 'chunk', content: 'partial' };
+      throw new Error('Failed query: select * from langgraph_checkpoints');
+    });
+
+    const parts = await collectRaw(
+      chatWithAgent(messages, settings, graphState)
+    );
+
+    expect(parts).toEqual([
+      { type: 'chunk', content: 'partial' },
+      { type: 'error', code: 'internal', message: '' },
+    ]);
+  });
+
+  it('hides unexpected failures while resolving stored settings', async () => {
+    mockResolveAISettingsForUser.mockRejectedValue(
+      new Error('connect ECONNREFUSED 10.0.0.5:5432')
+    );
+
+    const parts = await collectRaw(
+      chatWithAgent(messages, settings, graphState)
+    );
+
+    expect(parts).toEqual([{ type: 'error', code: 'internal', message: '' }]);
   });
 });
