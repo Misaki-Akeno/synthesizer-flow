@@ -36,6 +36,7 @@ export class SequencerModule extends AudioModuleBase {
   private sequencePart: any = null;
   // Invalidates callbacks that Tone's look-ahead scheduler already handed to us.
   private playbackGeneration = 0;
+  private legacyTimers = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(id: string, name: string = 'MIDI Clip') {
     const moduleType = 'sequencer';
@@ -345,6 +346,8 @@ export class SequencerModule extends AudioModuleBase {
   }
 
   private allNotesOff(): void {
+    this.legacyTimers.forEach((timer) => clearTimeout(timer));
+    this.legacyTimers.clear();
     this.activeNotes.clear();
     this.updateOutputPorts([{ type: 'allNotesOff' }]);
   }
@@ -357,9 +360,28 @@ export class SequencerModule extends AudioModuleBase {
     );
     this.setOutputValueAtTime('midi', frame, scheduledTime);
 
-    // Legacy array values retain their original number[] shape and gain a private
-    // timestamp sideband. Compatible receivers can schedule at the same audio time.
-    this.updateLegacyOutputPorts(frame);
+    // MIDI 消费者可使用音频时间戳提前调度。旧版 NUMBER/ARRAY 消费者可能
+    // 忽略时间戳，因此必须到实际播放时间再发布旧端口值。
+    if (scheduledTime === undefined) {
+      this.updateLegacyOutputPorts(frame);
+      return;
+    }
+    const generation = this.playbackGeneration;
+    const publish = () => {
+      if (generation !== this.playbackGeneration || this.isDisposed()) return;
+      const now = this.Tone.immediate?.() ?? this.Tone.now?.() ?? 0;
+      const remaining = scheduledTime - now;
+      if (remaining <= 0) {
+        this.updateLegacyOutputPorts(frame);
+        return;
+      }
+      const timer = setTimeout(() => {
+        this.legacyTimers.delete(timer);
+        publish();
+      }, Math.max(1, Math.ceil(remaining * 1000)));
+      this.legacyTimers.add(timer);
+    };
+    publish();
   }
 
   private updateLegacyOutputPorts(frame: ReturnType<typeof createMidiFrame>): void {
@@ -413,6 +435,8 @@ export class SequencerModule extends AudioModuleBase {
 
   protected cleanupFailedAudioInitialization(): void {
     this.playbackGeneration += 1;
+    this.legacyTimers.forEach((timer) => clearTimeout(timer));
+    this.legacyTimers.clear();
     this.sequencePart?.cancel?.(0);
     this.sequencePart?.dispose?.();
     this.sequencePart = null;

@@ -7,6 +7,7 @@ import {
 } from '@/core/base/ModuleBase';
 import { MidiActiveNote, MidiFrame } from '@/core/midi/types';
 import { isMidiFrame, legacyArraysToMidiFrame } from '@/core/midi/utils';
+import { cancelPendingAttack } from '@/core/audio/envelope';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -470,7 +471,9 @@ export class TrumpetModule extends AudioModuleBase {
   private releaseAllNotes(scheduledTime?: number): void {
     if (!this.monoSynth) return;
 
-    this.monoSynth.triggerRelease(scheduledTime ?? this.Tone.now());
+    const time = scheduledTime ?? this.Tone.immediate?.() ?? this.Tone.now();
+    cancelPendingAttack(this.monoSynth.envelope, time);
+    this.monoSynth.triggerRelease(time);
     this.currentNote = null;
     this.currentVelocity = 0.8;
   }

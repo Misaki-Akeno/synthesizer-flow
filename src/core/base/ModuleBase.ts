@@ -116,6 +116,10 @@ export abstract class ModuleBase {
 
   // 存储订阅关系以便取消订阅
   private subscriptions: { [key: string]: Subscription } = {};
+  private audioInputBindings = new Map<
+    string,
+    { inputPortName: string; sourceModule: ModuleBase; sourcePortName: string }
+  >();
 
   // 存储输出连接
   private outputConnections: Map<
@@ -551,6 +555,14 @@ export abstract class ModuleBase {
       this.subscriptions[bindingKey].unsubscribe();
     }
 
+    if (isAudioPort) {
+      this.audioInputBindings.set(bindingKey, {
+        inputPortName,
+        sourceModule,
+        sourcePortName,
+      });
+    }
+
     this.subscriptions[bindingKey] = sourceModule.outputPorts[
       sourcePortName
     ].subscribe((value) => {
@@ -625,6 +637,20 @@ export abstract class ModuleBase {
     this.inputPorts[inputPortName].next(audioInput);
   }
 
+  /** 音频节点重建后，从仍有效的源端口恢复所有输入，包含多源及多输入端口。 */
+  protected restoreAudioInputBindings(): void {
+    this.audioInputBindings.forEach(
+      ({ inputPortName, sourceModule, sourcePortName }) => {
+        this.handleAudioInput(
+          inputPortName,
+          sourceModule.getOutputValue(sourcePortName),
+          sourceModule.id,
+          sourcePortName
+        );
+      }
+    );
+  }
+
   /**
    * 解除输入端口的绑定
    * @param inputPortName 要解除绑定的输入端口名称
@@ -683,6 +709,7 @@ export abstract class ModuleBase {
       if (this.subscriptions[bindingKey]) {
         this.subscriptions[bindingKey].unsubscribe();
         delete this.subscriptions[bindingKey];
+        this.audioInputBindings.delete(bindingKey);
 
         if (isAudioPort) {
           // 通知模块音频连接已移除
@@ -710,6 +737,7 @@ export abstract class ModuleBase {
           if (key.startsWith(`input_${inputPortName}_${sourceModuleId}_`)) {
             this.subscriptions[key].unsubscribe();
             delete this.subscriptions[key];
+            this.audioInputBindings.delete(key);
             if (isArrayPort) {
               cleanArrayCache(key);
             }
@@ -742,6 +770,7 @@ export abstract class ModuleBase {
         if (key.startsWith(`input_${inputPortName}_`)) {
           this.subscriptions[key].unsubscribe();
           delete this.subscriptions[key];
+          this.audioInputBindings.delete(key);
           unbound = true;
         }
       });
@@ -958,6 +987,7 @@ export abstract class ModuleBase {
       subscription.unsubscribe();
     });
     this.subscriptions = {};
+    this.audioInputBindings.clear();
 
     // 取消所有内部订阅
     this.clearInternalSubscriptions();

@@ -7,6 +7,7 @@ import {
 } from '@/core/base/ModuleBase';
 import { MidiActiveNote, MidiFrame } from '@/core/midi/types';
 import { isMidiFrame, legacyArraysToMidiFrame } from '@/core/midi/utils';
+import { cancelPendingAttack } from '@/core/audio/envelope';
 
 /**
  * 将MIDI音符数转换为频率
@@ -557,6 +558,10 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
     if (!this.mixer || !this.isEnabled()) return;
     const scheduledTime = this.getScheduledTime(frame);
 
+    if (frame.events.some((event) => event.type === 'allNotesOff')) {
+      this.voices.forEach((_, noteId) => this.releaseVoice(noteId, scheduledTime));
+    }
+
     const activeNoteIds = new Set(frame.activeNotes.map((note) => note.id));
 
     this.voices.forEach((voice, noteId) => {
@@ -754,6 +759,19 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
     // 触发包络
     voice.envelope.triggerAttack(scheduledTime);
+    if (this.sustainFade > 0) {
+      // 使用音频时钟调度延音渐弱；提前 note-off 或重触发会由包络取消旧调度。
+      const fadeStartTime =
+        (scheduledTime ?? this.Tone.now()) +
+        voice.envelope.attack +
+        this.decayTime;
+      const releaseCurve = voice.envelope.releaseCurve;
+      voice.envelope.release = this.sustainFade;
+      voice.envelope.releaseCurve = 'linear';
+      voice.envelope.triggerRelease(fadeStartTime);
+      voice.envelope.release = this.releaseTime;
+      voice.envelope.releaseCurve = releaseCurve;
+    }
   }
 
   private refreshActiveVoicesEnvelope(): void {
@@ -781,7 +799,9 @@ export class AdvancedOscillatorModule extends AudioModuleBase {
 
     // 应用释放渐变
     if (voice.envelope) {
-      voice.envelope.triggerRelease(scheduledTime);
+      const time = scheduledTime ?? this.Tone.immediate?.() ?? this.Tone.now();
+      cancelPendingAttack(voice.envelope, time);
+      voice.envelope.triggerRelease(time);
     } else {
       this.applyParameterRamp(voice.velocityGain.gain, 0, this.releaseTime);
     }

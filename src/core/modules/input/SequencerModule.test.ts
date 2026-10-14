@@ -142,18 +142,22 @@ describe('SequencerModule MIDI clip scheduling', () => {
     ]);
   });
 
-  it('emits timestamped MIDI and legacy ports directly from the Part callback', () => {
+  it('emits MIDI ahead of time but publishes legacy ports at the audio deadline', () => {
+    vi.useFakeTimers();
+    let audioTime = 12.245;
     const sequencer = new SequencerModule('sequencer-clock-test');
     const drawSchedule = vi.fn();
     (
       sequencer as unknown as {
         Tone: {
+          immediate: () => number;
           Draw: { schedule: typeof drawSchedule };
           Frequency: (value: number) => { toFrequency: () => number };
         };
         scheduleFrame: (frame: ScheduledMidiFrame, time: number) => void;
       }
     ).Tone = {
+      immediate: () => audioTime,
       Draw: { schedule: drawSchedule },
       Frequency: (value: number) => ({ toFrequency: () => value }),
     };
@@ -176,11 +180,39 @@ describe('SequencerModule MIDI clip scheduling', () => {
       activeNotes: [{ id: 'clock-note', midi: 69 }],
       events: [{ type: 'noteOn', noteId: 'clock-note' }],
     });
+    expect(sequencer.outputPorts['activeNotes'].getValue()).toEqual([]);
+    audioTime = 12.345;
+    vi.advanceTimersByTime(101);
     const legacyNotes = sequencer.outputPorts['activeNotes'].getValue();
     expect(legacyNotes).toEqual([69]);
     expect(getLegacyMidiScheduledTime(legacyNotes)).toBe(12.345);
     // Draw 只适合 DOM 工作，经由它转发 MIDI 会引入抖动并在停止后残留回调。
     expect(drawSchedule).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('cancels queued legacy noteOn when stopped during look-ahead', () => {
+    vi.useFakeTimers();
+    const sequencer = new SequencerModule('legacy-stop');
+    const internal = sequencer as unknown as {
+      Tone: { immediate: () => number; Frequency: (midi: number) => { toFrequency: () => number } };
+      scheduleFrame: (frame: ScheduledMidiFrame, time: number) => void;
+      allNotesOff: () => void;
+    };
+    let audioTime = 0;
+    internal.Tone = {
+      immediate: () => audioTime,
+      Frequency: (midi) => ({ toFrequency: () => midi }),
+    };
+    internal.scheduleFrame({ tick: 0, timeSeconds: 0, events: [
+      { type: 'noteOn', noteId: 'future', midi: 60, velocity: 1 },
+    ] }, 0.1);
+    internal.allNotesOff();
+    audioTime = 1;
+    vi.advanceTimersByTime(1000);
+    expect(sequencer.outputPorts.activeNotes.getValue()).toEqual([]);
+    expect(sequencer.outputPorts.gate.getValue()).toBe(0);
+    vi.useRealTimers();
   });
 
   it('cancels scheduled playback and emits allNotesOff when disposed', () => {
